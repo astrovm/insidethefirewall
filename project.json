@@ -95,10 +95,7 @@
                             null
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 93,
-                    "y": 2025
+                    "topLevel": true
                 },
                 "bw": {
                     "opcode": "event_broadcastandwait",
@@ -114,9 +111,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "bx": {
                     "opcode": "event_whenkeypressed",
@@ -129,10 +124,7 @@
                             null
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 89,
-                    "y": 1817
+                    "topLevel": true
                 },
                 "by": {
                     "opcode": "event_broadcastandwait",
@@ -148,9 +140,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "bz": {
                     "opcode": "event_whenbroadcastreceived",
@@ -163,10 +153,7 @@
                             "broadcastMsgId-iniciar"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 570,
-                    "y": 93
+                    "topLevel": true
                 },
                 "c": {
                     "opcode": "motion_gotoxy",
@@ -189,9 +176,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "bA": {
                     "opcode": "operator_random",
@@ -213,27 +198,21 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "U": {
                     "opcode": "looks_show",
                     "next": "V",
                     "parent": "c",
                     "inputs": {},
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "V": {
                     "opcode": "motion_ifonedgebounce",
                     "next": "d",
                     "parent": "U",
                     "inputs": {},
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "d": {
                     "opcode": "looks_switchcostumeto",
@@ -245,9 +224,7 @@
                             "bB"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "bB": {
                     "opcode": "looks_costume",
@@ -260,8 +237,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "W": {
                     "opcode": "control_wait",
@@ -276,9 +252,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "X": {
                     "opcode": "control_forever",
@@ -290,9 +264,7 @@
                             "e"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "e": {
                     "opcode": "control_if",
@@ -308,9 +280,7 @@
                             "Z"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "Y": {
                     "opcode": "sensing_touchingobject",
@@ -322,9 +292,7 @@
                             "bC"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "bC": {
                     "opcode": "sensing_touchingobjectmenu",
@@ -337,8 +305,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "Z": {
                     "opcode": "control_wait",
@@ -353,9 +320,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "bD": {
                     "opcode": "data_changevariableby",
@@ -375,9 +340,7 @@
                             "Health",
                             "_sE,G#9jSZk%c5r:g^Q`-Health-"
                         ]
-                    },
-                    "shadow": false,
-                    "topLevel": false
+                    }
                 },
                 "bE": {
                     "opcode": "event_whenkeypressed",
@@ -390,10 +353,7 @@
                             null
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 70,
-                    "y": 1604
+                    "topLevel": true
                 },
                 "bF": {
                     "opcode": "event_broadcastandwait",
@@ -409,9 +369,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "bG": {
                     "opcode": "event_whenkeypressed",
@@ -424,10 +382,7 @@
                             null
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 1679,
-                    "y": 67
+                    "topLevel": true
                 },
                 "bH": {
                     "opcode": "event_broadcast",
@@ -443,9 +398,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "bI": {
                     "opcode": "event_whenkeypressed",
@@ -458,10 +411,7 @@
                             null
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 1342,
-                    "y": 330
+                    "topLevel": true
                 },
                 "bJ": {
                     "opcode": "event_broadcast",
@@ -477,9 +427,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "bK": {
                     "opcode": "event_whenkeypressed",
@@ -492,10 +440,7 @@
                             null
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 1650,
-                    "y": 319
+                    "topLevel": true
                 },
                 "bL": {
                     "opcode": "event_broadcast",
@@ -511,9 +456,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "bM": {
                     "opcode": "event_whenkeypressed",
@@ -526,10 +469,7 @@
                             null
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 1371,
-                    "y": 514
+                    "topLevel": true
                 },
                 "bN": {
                     "opcode": "event_broadcast",
@@ -545,9 +485,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "bO": {
                     "opcode": "event_whenkeypressed",
@@ -560,10 +498,7 @@
                             null
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 1721,
-                    "y": 485
+                    "topLevel": true
                 },
                 "bP": {
                     "opcode": "event_broadcast",
@@ -579,9 +514,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "bQ": {
                     "opcode": "event_whenbroadcastreceived",
@@ -594,10 +527,7 @@
                             "broadcastMsgId-controls"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 1367,
-                    "y": 753
+                    "topLevel": true
                 },
                 "!": {
                     "opcode": "control_forever",
@@ -609,9 +539,7 @@
                             "f"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "f": {
                     "opcode": "control_if",
@@ -627,9 +555,7 @@
                             "#"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "g": {
                     "opcode": "operator_or",
@@ -645,9 +571,7 @@
                             "("
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "%": {
                     "opcode": "sensing_keypressed",
@@ -659,9 +583,7 @@
                             "bR"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "bR": {
                     "opcode": "sensing_keyoptions",
@@ -674,8 +596,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "(": {
                     "opcode": "sensing_keypressed",
@@ -687,9 +608,7 @@
                             "bS"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "bS": {
                     "opcode": "sensing_keyoptions",
@@ -702,8 +621,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "#": {
                     "opcode": "motion_pointindirection",
@@ -718,9 +636,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "bT": {
                     "opcode": "motion_movesteps",
@@ -735,9 +651,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "bU": {
                     "opcode": "event_whenbroadcastreceived",
@@ -750,10 +664,7 @@
                             "broadcastMsgId-controls"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 1372,
-                    "y": 1797
+                    "topLevel": true
                 },
                 ")": {
                     "opcode": "control_forever",
@@ -765,9 +676,7 @@
                             "h"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "h": {
                     "opcode": "control_repeat_until",
@@ -783,9 +692,7 @@
                             "a"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "i": {
                     "opcode": "operator_or",
@@ -801,9 +708,7 @@
                             "k"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "j": {
                     "opcode": "operator_or",
@@ -819,9 +724,7 @@
                             "+"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "*": {
                     "opcode": "sensing_keypressed",
@@ -833,9 +736,7 @@
                             "bV"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "bV": {
                     "opcode": "sensing_keyoptions",
@@ -848,8 +749,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "+": {
                     "opcode": "sensing_keypressed",
@@ -861,9 +761,7 @@
                             "bW"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "bW": {
                     "opcode": "sensing_keyoptions",
@@ -876,8 +774,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "k": {
                     "opcode": "operator_or",
@@ -893,9 +790,7 @@
                             "-"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 ",": {
                     "opcode": "sensing_keypressed",
@@ -907,9 +802,7 @@
                             "bX"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "bX": {
                     "opcode": "sensing_keyoptions",
@@ -922,8 +815,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "-": {
                     "opcode": "sensing_keypressed",
@@ -935,9 +827,7 @@
                             "bY"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "bY": {
                     "opcode": "sensing_keyoptions",
@@ -950,8 +840,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "a": {
                     "opcode": "control_if_else",
@@ -971,9 +860,7 @@
                             "/"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "l": {
                     "opcode": "operator_or",
@@ -989,9 +876,7 @@
                             ";"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 ":": {
                     "opcode": "sensing_keypressed",
@@ -1003,9 +888,7 @@
                             "bZ"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "bZ": {
                     "opcode": "sensing_keyoptions",
@@ -1018,8 +901,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 ";": {
                     "opcode": "sensing_keypressed",
@@ -1031,9 +913,7 @@
                             "b!"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "b!": {
                     "opcode": "sensing_keyoptions",
@@ -1046,8 +926,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 ".": {
                     "opcode": "looks_switchcostumeto",
@@ -1059,9 +938,7 @@
                             "b#"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "b#": {
                     "opcode": "looks_costume",
@@ -1074,8 +951,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "/": {
                     "opcode": "looks_switchcostumeto",
@@ -1087,9 +963,7 @@
                             "b%"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "b%": {
                     "opcode": "looks_costume",
@@ -1102,8 +976,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "b(": {
                     "opcode": "event_whenkeypressed",
@@ -1116,10 +989,7 @@
                             null
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 1328,
-                    "y": 87
+                    "topLevel": true
                 },
                 "b)": {
                     "opcode": "event_broadcast",
@@ -1135,9 +1005,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "b*": {
                     "opcode": "event_whenbroadcastreceived",
@@ -1150,10 +1018,7 @@
                             "broadcastMsgId-controls"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 1368,
-                    "y": 2467
+                    "topLevel": true
                 },
                 "=": {
                     "opcode": "control_forever",
@@ -1165,9 +1030,7 @@
                             "m"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "m": {
                     "opcode": "control_if",
@@ -1183,9 +1046,7 @@
                             "?"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "n": {
                     "opcode": "operator_and",
@@ -1201,9 +1062,7 @@
                             "p"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "o": {
                     "opcode": "operator_or",
@@ -1219,9 +1078,7 @@
                             "["
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "@": {
                     "opcode": "sensing_keypressed",
@@ -1233,9 +1090,7 @@
                             "b+"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "b+": {
                     "opcode": "sensing_keyoptions",
@@ -1248,8 +1103,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "[": {
                     "opcode": "sensing_keypressed",
@@ -1261,9 +1115,7 @@
                             "b,"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "b,": {
                     "opcode": "sensing_keyoptions",
@@ -1276,8 +1128,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "p": {
                     "opcode": "operator_or",
@@ -1293,9 +1144,7 @@
                             "r"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "q": {
                     "opcode": "operator_or",
@@ -1311,9 +1160,7 @@
                             "^"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "]": {
                     "opcode": "sensing_keypressed",
@@ -1325,9 +1172,7 @@
                             "b-"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "b-": {
                     "opcode": "sensing_keyoptions",
@@ -1340,8 +1185,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "^": {
                     "opcode": "sensing_keypressed",
@@ -1353,9 +1197,7 @@
                             "b."
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "b.": {
                     "opcode": "sensing_keyoptions",
@@ -1368,8 +1210,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "r": {
                     "opcode": "operator_or",
@@ -1385,9 +1226,7 @@
                             "`"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "_": {
                     "opcode": "sensing_keypressed",
@@ -1399,9 +1238,7 @@
                             "b/"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "b/": {
                     "opcode": "sensing_keyoptions",
@@ -1414,8 +1251,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "`": {
                     "opcode": "sensing_keypressed",
@@ -1427,9 +1263,7 @@
                             "b:"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "b:": {
                     "opcode": "sensing_keyoptions",
@@ -1442,8 +1276,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "?": {
                     "opcode": "looks_switchcostumeto",
@@ -1455,9 +1288,7 @@
                             "b;"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "b;": {
                     "opcode": "looks_costume",
@@ -1470,8 +1301,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "b=": {
                     "opcode": "event_whenbroadcastreceived",
@@ -1484,10 +1314,7 @@
                             "broadcastMsgId-controls"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 1353,
-                    "y": 1200
+                    "topLevel": true
                 },
                 "{": {
                     "opcode": "control_forever",
@@ -1499,9 +1326,7 @@
                             "s"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "s": {
                     "opcode": "control_if",
@@ -1517,9 +1342,7 @@
                             "|"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "t": {
                     "opcode": "operator_or",
@@ -1535,9 +1358,7 @@
                             "~"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "}": {
                     "opcode": "sensing_keypressed",
@@ -1549,9 +1370,7 @@
                             "b?"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "b?": {
                     "opcode": "sensing_keyoptions",
@@ -1564,8 +1383,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "~": {
                     "opcode": "sensing_keypressed",
@@ -1577,9 +1395,7 @@
                             "b@"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "b@": {
                     "opcode": "sensing_keyoptions",
@@ -1592,8 +1408,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "|": {
                     "opcode": "motion_pointindirection",
@@ -1608,9 +1423,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "b[": {
                     "opcode": "motion_movesteps",
@@ -1625,9 +1438,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "b]": {
                     "opcode": "event_whenbroadcastreceived",
@@ -1640,10 +1451,7 @@
                             "broadcastMsgId-controls"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 1366,
-                    "y": 2799
+                    "topLevel": true
                 },
                 "aa": {
                     "opcode": "control_forever",
@@ -1655,9 +1463,7 @@
                             "u"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "u": {
                     "opcode": "control_repeat_until",
@@ -1673,9 +1479,7 @@
                             "w"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "v": {
                     "opcode": "operator_or",
@@ -1691,9 +1495,7 @@
                             "ac"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "ab": {
                     "opcode": "sensing_keypressed",
@@ -1705,9 +1507,7 @@
                             "b^"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "b^": {
                     "opcode": "sensing_keyoptions",
@@ -1720,8 +1520,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "ac": {
                     "opcode": "sensing_keypressed",
@@ -1733,9 +1532,7 @@
                             "b_"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "b_": {
                     "opcode": "sensing_keyoptions",
@@ -1748,8 +1545,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "w": {
                     "opcode": "control_if",
@@ -1765,9 +1561,7 @@
                             "ad"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "x": {
                     "opcode": "operator_or",
@@ -1783,9 +1577,7 @@
                             "z"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "y": {
                     "opcode": "operator_or",
@@ -1801,9 +1593,7 @@
                             "af"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "ae": {
                     "opcode": "sensing_keypressed",
@@ -1815,9 +1605,7 @@
                             "b`"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "b`": {
                     "opcode": "sensing_keyoptions",
@@ -1830,8 +1618,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "af": {
                     "opcode": "sensing_keypressed",
@@ -1843,9 +1630,7 @@
                             "b{"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "b{": {
                     "opcode": "sensing_keyoptions",
@@ -1858,8 +1643,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "z": {
                     "opcode": "operator_or",
@@ -1875,9 +1659,7 @@
                             "ah"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "ag": {
                     "opcode": "sensing_keypressed",
@@ -1889,9 +1671,7 @@
                             "b|"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "b|": {
                     "opcode": "sensing_keyoptions",
@@ -1904,8 +1684,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "ah": {
                     "opcode": "sensing_keypressed",
@@ -1917,9 +1696,7 @@
                             "b}"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "b}": {
                     "opcode": "sensing_keyoptions",
@@ -1932,8 +1709,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "ad": {
                     "opcode": "looks_switchcostumeto",
@@ -1945,9 +1721,7 @@
                             "b~"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "b~": {
                     "opcode": "looks_costume",
@@ -1960,8 +1734,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "ca": {
                     "opcode": "event_whenbroadcastreceived",
@@ -1974,10 +1747,7 @@
                             "broadcastMsgId-iniciar"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 66,
-                    "y": 83
+                    "topLevel": true
                 },
                 "ai": {
                     "opcode": "control_forever",
@@ -1989,9 +1759,7 @@
                             "A"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "A": {
                     "opcode": "control_if",
@@ -2007,9 +1775,7 @@
                             "aj"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "cb": {
                     "opcode": "operator_lt",
@@ -2036,9 +1802,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "aj": {
                     "opcode": "event_broadcast",
@@ -2054,9 +1818,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "ak": {
                     "opcode": "data_setvariableto",
@@ -2076,9 +1838,7 @@
                             "Health",
                             "_sE,G#9jSZk%c5r:g^Q`-Health-"
                         ]
-                    },
-                    "shadow": false,
-                    "topLevel": false
+                    }
                 },
                 "cc": {
                     "opcode": "control_stop",
@@ -2091,8 +1851,6 @@
                             null
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": false,
                     "mutation": {
                         "tagName": "mutation",
                         "children": [],
@@ -2110,10 +1868,7 @@
                             "broadcastMsgId-perdio"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 103,
-                    "y": 840
+                    "topLevel": true
                 },
                 "al": {
                     "opcode": "motion_pointindirection",
@@ -2128,9 +1883,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "am": {
                     "opcode": "motion_gotoxy",
@@ -2152,9 +1905,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "an": {
                     "opcode": "looks_gotofrontback",
@@ -2166,9 +1917,7 @@
                             "front",
                             null
                         ]
-                    },
-                    "shadow": false,
-                    "topLevel": false
+                    }
                 },
                 "ce": {
                     "opcode": "control_stop",
@@ -2181,8 +1930,6 @@
                             null
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": false,
                     "mutation": {
                         "tagName": "mutation",
                         "children": [],
@@ -2200,10 +1947,7 @@
                             "broadcastMsgId-vida"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 825,
-                    "y": 1166
+                    "topLevel": true
                 },
                 "ao": {
                     "opcode": "looks_switchcostumeto",
@@ -2215,9 +1959,7 @@
                             "cg"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "cg": {
                     "opcode": "looks_costume",
@@ -2230,8 +1972,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "ch": {
                     "opcode": "event_whenbroadcastreceived",
@@ -2244,10 +1985,7 @@
                             "8kzUtN-m7u6?_gERvvpb"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 406,
-                    "y": 1719
+                    "topLevel": true
                 },
                 "B": {
                     "opcode": "control_if",
@@ -2263,9 +2001,7 @@
                             "C"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "ci": {
                     "opcode": "operator_gt",
@@ -2292,9 +2028,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "C": {
                     "opcode": "looks_switchcostumeto",
@@ -2306,9 +2040,7 @@
                             "cj"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "cj": {
                     "opcode": "looks_costume",
@@ -2321,8 +2053,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "D": {
                     "opcode": "motion_glidesecstoxy",
@@ -2352,9 +2083,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "ap": {
                     "opcode": "sensing_of",
@@ -2371,9 +2100,7 @@
                             "x position",
                             null
                         ]
-                    },
-                    "shadow": false,
-                    "topLevel": false
+                    }
                 },
                 "ck": {
                     "opcode": "sensing_of_object_menu",
@@ -2386,8 +2113,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "E": {
                     "opcode": "motion_glidesecstoxy",
@@ -2417,9 +2143,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "ar": {
                     "opcode": "sensing_of",
@@ -2436,9 +2160,7 @@
                             "x position",
                             null
                         ]
-                    },
-                    "shadow": false,
-                    "topLevel": false
+                    }
                 },
                 "cl": {
                     "opcode": "sensing_of_object_menu",
@@ -2451,8 +2173,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "aq": {
                     "opcode": "looks_switchcostumeto",
@@ -2464,9 +2185,7 @@
                             "cm"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "cm": {
                     "opcode": "looks_costume",
@@ -2479,8 +2198,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 }
             },
             "comments": {},
@@ -2570,10 +2288,7 @@
                             "broadcastMsgId-iniciar"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 144,
-                    "y": 730
+                    "topLevel": true
                 },
                 "co": {
                     "opcode": "data_setvariableto",
@@ -2593,9 +2308,7 @@
                             "velocidad",
                             "_sE,G#9jSZk%c5r:g^Q`-velocidad-"
                         ]
-                    },
-                    "shadow": false,
-                    "topLevel": false
+                    }
                 },
                 "cp": {
                     "opcode": "event_whenbroadcastreceived",
@@ -2608,10 +2321,7 @@
                             "broadcastMsgId-iniciar"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 404,
-                    "y": 887
+                    "topLevel": true
                 },
                 "as": {
                     "opcode": "control_forever",
@@ -2623,9 +2333,7 @@
                             "F"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "F": {
                     "opcode": "control_if",
@@ -2641,9 +2349,7 @@
                             "au"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "at": {
                     "opcode": "sensing_touchingobject",
@@ -2655,9 +2361,7 @@
                             "cq"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "cq": {
                     "opcode": "sensing_touchingobjectmenu",
@@ -2669,8 +2373,7 @@
                             "Objeto1"
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "au": {
                     "opcode": "event_broadcastandwait",
@@ -2686,9 +2389,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "av": {
                     "opcode": "motion_gotoxy",
@@ -2710,9 +2411,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "aw": {
                     "opcode": "motion_pointtowards",
@@ -2724,9 +2423,7 @@
                             "cr"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "cr": {
                     "opcode": "motion_pointtowards_menu",
@@ -2738,8 +2435,7 @@
                             "Objeto1"
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "cs": {
                     "opcode": "event_whenbroadcastreceived",
@@ -2752,10 +2448,7 @@
                             "broadcastMsgId-perdio"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 30,
-                    "y": 1219
+                    "topLevel": true
                 },
                 "ct": {
                     "opcode": "looks_gotofrontback",
@@ -2766,9 +2459,7 @@
                         "FRONT_BACK": [
                             "front"
                         ]
-                    },
-                    "shadow": false,
-                    "topLevel": false
+                    }
                 },
                 "cu": {
                     "opcode": "event_whenbroadcastreceived",
@@ -2781,10 +2472,7 @@
                             "broadcastMsgId-iniciar"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 483,
-                    "y": 535
+                    "topLevel": true
                 },
                 "ax": {
                     "opcode": "control_forever",
@@ -2796,9 +2484,7 @@
                             "G"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "G": {
                     "opcode": "control_wait",
@@ -2814,9 +2500,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "cw": {
                     "opcode": "operator_random",
@@ -2838,9 +2522,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "cv": {
                     "opcode": "data_changevariableby",
@@ -2860,9 +2542,7 @@
                             "velocidad",
                             "_sE,G#9jSZk%c5r:g^Q`-velocidad-"
                         ]
-                    },
-                    "shadow": false,
-                    "topLevel": false
+                    }
                 },
                 "cx": {
                     "opcode": "event_whenbroadcastreceived",
@@ -2875,10 +2555,7 @@
                             "broadcastMsgId-iniciar"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 134,
-                    "y": 84
+                    "topLevel": true
                 },
                 "ay": {
                     "opcode": "data_showvariable",
@@ -2890,9 +2567,7 @@
                             "Health",
                             "_sE,G#9jSZk%c5r:g^Q`-Health-"
                         ]
-                    },
-                    "shadow": false,
-                    "topLevel": false
+                    }
                 },
                 "az": {
                     "opcode": "data_showvariable",
@@ -2904,9 +2579,7 @@
                             "Time",
                             "_sE,G#9jSZk%c5r:g^Q`-Time-"
                         ]
-                    },
-                    "shadow": false,
-                    "topLevel": false
+                    }
                 },
                 "aA": {
                     "opcode": "motion_gotoxy",
@@ -2928,9 +2601,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "aB": {
                     "opcode": "control_wait",
@@ -2945,9 +2616,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "H": {
                     "opcode": "motion_pointtowards",
@@ -2959,9 +2628,7 @@
                             "cy"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "cy": {
                     "opcode": "motion_pointtowards_menu",
@@ -2973,8 +2640,7 @@
                             "Objeto1"
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "aC": {
                     "opcode": "control_forever",
@@ -2986,9 +2652,7 @@
                             "cz"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "cz": {
                     "opcode": "motion_movesteps",
@@ -3008,9 +2672,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "cA": {
                     "opcode": "event_whenbroadcastreceived",
@@ -3023,10 +2685,7 @@
                             "broadcastMsgId-iniciar"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 500,
-                    "y": 55
+                    "topLevel": true
                 },
                 "aD": {
                     "opcode": "control_forever",
@@ -3038,9 +2697,7 @@
                             "I"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "I": {
                     "opcode": "control_if",
@@ -3056,9 +2713,7 @@
                             "aF"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "aE": {
                     "opcode": "sensing_touchingobject",
@@ -3070,9 +2725,7 @@
                             "cB"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "cB": {
                     "opcode": "sensing_touchingobjectmenu",
@@ -3084,8 +2737,7 @@
                             "_edge_"
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "aF": {
                     "opcode": "motion_gotoxy",
@@ -3107,9 +2759,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "aG": {
                     "opcode": "motion_pointtowards",
@@ -3121,9 +2771,7 @@
                             "cC"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "cC": {
                     "opcode": "motion_pointtowards_menu",
@@ -3135,8 +2783,7 @@
                             "Objeto1"
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 }
             },
             "comments": {},
@@ -3181,10 +2828,7 @@
                             "broadcastMsgId-iniciar"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 287,
-                    "y": 178
+                    "topLevel": true
                 },
                 "aH": {
                     "opcode": "control_stop",
@@ -3196,8 +2840,6 @@
                             "other scripts in sprite"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": false,
                     "mutation": {
                         "tagName": "mutation",
                         "hasnext": "true",
@@ -3222,9 +2864,7 @@
                             "Time",
                             "_sE,G#9jSZk%c5r:g^Q`-Time-"
                         ]
-                    },
-                    "shadow": false,
-                    "topLevel": false
+                    }
                 },
                 "aJ": {
                     "opcode": "control_forever",
@@ -3236,9 +2876,7 @@
                             "aK"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "aK": {
                     "opcode": "control_wait",
@@ -3253,9 +2891,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "cE": {
                     "opcode": "data_changevariableby",
@@ -3275,9 +2911,7 @@
                             "Time",
                             "_sE,G#9jSZk%c5r:g^Q`-Time-"
                         ]
-                    },
-                    "shadow": false,
-                    "topLevel": false
+                    }
                 },
                 "cF": {
                     "opcode": "event_whenbroadcastreceived",
@@ -3290,10 +2924,7 @@
                             "broadcastMsgId-perdio"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 30,
-                    "y": 497
+                    "topLevel": true
                 },
                 "aL": {
                     "opcode": "motion_pointindirection",
@@ -3308,9 +2939,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "aM": {
                     "opcode": "motion_gotoxy",
@@ -3332,9 +2961,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "aN": {
                     "opcode": "looks_gotofrontback",
@@ -3345,9 +2972,7 @@
                         "FRONT_BACK": [
                             "front"
                         ]
-                    },
-                    "shadow": false,
-                    "topLevel": false
+                    }
                 },
                 "cG": {
                     "opcode": "control_stop",
@@ -3359,8 +2984,6 @@
                             "other scripts in sprite"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": false,
                     "mutation": {
                         "tagName": "mutation",
                         "hasnext": "true",
@@ -3410,28 +3033,21 @@
                             "broadcastMsgId-perdio"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 15,
-                    "y": 22
+                    "topLevel": true
                 },
                 "aO": {
                     "opcode": "sound_stopallsounds",
                     "next": "aP",
                     "parent": "cH",
                     "inputs": {},
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "aP": {
                     "opcode": "looks_show",
                     "next": "J",
                     "parent": "aO",
                     "inputs": {},
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "J": {
                     "opcode": "sound_play",
@@ -3443,9 +3059,7 @@
                             "cI"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "cI": {
                     "opcode": "sound_sounds_menu",
@@ -3458,8 +3072,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "aQ": {
                     "opcode": "control_forever",
@@ -3471,9 +3084,7 @@
                             "aR"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "aR": {
                     "opcode": "control_wait",
@@ -3488,9 +3099,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "aS": {
                     "opcode": "sound_playuntildone",
@@ -3502,9 +3111,7 @@
                             "cJ"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "cJ": {
                     "opcode": "sound_sounds_menu",
@@ -3517,8 +3124,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "cK": {
                     "opcode": "event_whenbroadcastreceived",
@@ -3531,10 +3137,7 @@
                             "broadcastMsgId-iniciar"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 564,
-                    "y": 34
+                    "topLevel": true
                 },
                 "aT": {
                     "opcode": "data_showvariable",
@@ -3546,9 +3149,7 @@
                             "Time",
                             "_sE,G#9jSZk%c5r:g^Q`-Time-"
                         ]
-                    },
-                    "shadow": false,
-                    "topLevel": false
+                    }
                 },
                 "aU": {
                     "opcode": "data_showvariable",
@@ -3560,18 +3161,14 @@
                             "Health",
                             "_sE,G#9jSZk%c5r:g^Q`-Health-"
                         ]
-                    },
-                    "shadow": false,
-                    "topLevel": false
+                    }
                 },
                 "aV": {
                     "opcode": "looks_hide",
                     "next": "cL",
                     "parent": "aU",
                     "inputs": {},
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "cL": {
                     "opcode": "control_stop",
@@ -3584,8 +3181,6 @@
                             null
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": false,
                     "mutation": {
                         "tagName": "mutation",
                         "children": [],
@@ -3598,19 +3193,14 @@
                     "parent": null,
                     "inputs": {},
                     "fields": {},
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 641,
-                    "y": 417
+                    "topLevel": true
                 },
                 "cN": {
                     "opcode": "looks_hide",
                     "next": null,
                     "parent": "cM",
                     "inputs": {},
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "cO": {
                     "opcode": "event_whenbroadcastreceived",
@@ -3623,10 +3213,7 @@
                             "broadcastMsgId-perdio"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 281,
-                    "y": 434
+                    "topLevel": true
                 },
                 "aW": {
                     "opcode": "control_forever",
@@ -3638,9 +3225,7 @@
                             "K"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "K": {
                     "opcode": "control_if",
@@ -3656,9 +3241,7 @@
                             "aY"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "aX": {
                     "opcode": "sensing_keypressed",
@@ -3670,9 +3253,7 @@
                             "cP"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "cP": {
                     "opcode": "sensing_keyoptions",
@@ -3685,8 +3266,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "aY": {
                     "opcode": "data_setvariableto",
@@ -3706,9 +3286,7 @@
                             "Health",
                             "_sE,G#9jSZk%c5r:g^Q`-Health-"
                         ]
-                    },
-                    "shadow": false,
-                    "topLevel": false
+                    }
                 },
                 "cQ": {
                     "opcode": "event_broadcast",
@@ -3724,9 +3302,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 }
             },
             "comments": {},
@@ -3788,10 +3364,7 @@
                             "broadcastMsgId-iniciar"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 165,
-                    "y": 211
+                    "topLevel": true
                 },
                 "aZ": {
                     "opcode": "data_setvariableto",
@@ -3811,9 +3384,7 @@
                             "Health",
                             "_sE,G#9jSZk%c5r:g^Q`-Health-"
                         ]
-                    },
-                    "shadow": false,
-                    "topLevel": false
+                    }
                 },
                 "a!": {
                     "opcode": "motion_sety",
@@ -3828,18 +3399,14 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "a#": {
                     "opcode": "looks_hide",
                     "next": "a%",
                     "parent": "a!",
                     "inputs": {},
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "a%": {
                     "opcode": "control_forever",
@@ -3851,9 +3418,7 @@
                             "a("
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "a(": {
                     "opcode": "control_wait",
@@ -3868,9 +3433,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "a)": {
                     "opcode": "control_repeat",
@@ -3889,9 +3452,7 @@
                             "L"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "L": {
                     "opcode": "motion_setx",
@@ -3907,9 +3468,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "cS": {
                     "opcode": "operator_random",
@@ -3931,27 +3490,21 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "a*": {
                     "opcode": "motion_ifonedgebounce",
                     "next": "a+",
                     "parent": "L",
                     "inputs": {},
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "a+": {
                     "opcode": "looks_show",
                     "next": "a,",
                     "parent": "a*",
                     "inputs": {},
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "a,": {
                     "opcode": "control_wait",
@@ -3966,18 +3519,14 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "cT": {
                     "opcode": "looks_hide",
                     "next": null,
                     "parent": "a,",
                     "inputs": {},
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "cU": {
                     "opcode": "event_whenbroadcastreceived",
@@ -3990,10 +3539,7 @@
                             "broadcastMsgId-iniciar"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 506,
-                    "y": 92
+                    "topLevel": true
                 },
                 "a-": {
                     "opcode": "control_forever",
@@ -4005,9 +3551,7 @@
                             "M"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "M": {
                     "opcode": "control_if",
@@ -4023,9 +3567,7 @@
                             "a/"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "a.": {
                     "opcode": "sensing_touchingobject",
@@ -4037,9 +3579,7 @@
                             "cV"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "cV": {
                     "opcode": "sensing_touchingobjectmenu",
@@ -4052,8 +3592,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "a/": {
                     "opcode": "data_changevariableby",
@@ -4073,18 +3612,14 @@
                             "Health",
                             "_sE,G#9jSZk%c5r:g^Q`-Health-"
                         ]
-                    },
-                    "shadow": false,
-                    "topLevel": false
+                    }
                 },
                 "cW": {
                     "opcode": "looks_hide",
                     "next": null,
                     "parent": "a/",
                     "inputs": {},
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "cX": {
                     "opcode": "event_whenbroadcastreceived",
@@ -4097,19 +3632,14 @@
                             "broadcastMsgId-perdio"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 542,
-                    "y": 887
+                    "topLevel": true
                 },
                 "a:": {
                     "opcode": "looks_show",
                     "next": "a;",
                     "parent": "cX",
                     "inputs": {},
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "a;": {
                     "opcode": "motion_pointindirection",
@@ -4124,9 +3654,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "a=": {
                     "opcode": "motion_gotoxy",
@@ -4148,9 +3676,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "cY": {
                     "opcode": "looks_gotofrontback",
@@ -4162,9 +3688,7 @@
                             "front",
                             null
                         ]
-                    },
-                    "shadow": false,
-                    "topLevel": false
+                    }
                 },
                 "cZ": {
                     "opcode": "event_whenflagclicked",
@@ -4172,19 +3696,14 @@
                     "parent": null,
                     "inputs": {},
                     "fields": {},
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 1179,
-                    "y": 203
+                    "topLevel": true
                 },
                 "c!": {
                     "opcode": "looks_hide",
                     "next": null,
                     "parent": "cZ",
                     "inputs": {},
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 }
             },
             "comments": {},
@@ -4224,10 +3743,7 @@
                     "parent": null,
                     "inputs": {},
                     "fields": {},
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 179,
-                    "y": 570
+                    "topLevel": true
                 },
                 "a?": {
                     "opcode": "looks_gotofrontback",
@@ -4239,18 +3755,14 @@
                             "front",
                             null
                         ]
-                    },
-                    "shadow": false,
-                    "topLevel": false
+                    }
                 },
                 "a@": {
                     "opcode": "sound_stopallsounds",
                     "next": "a[",
                     "parent": "a?",
                     "inputs": {},
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "a[": {
                     "opcode": "sound_setvolumeto",
@@ -4265,9 +3777,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "a]": {
                     "opcode": "data_hidevariable",
@@ -4279,9 +3789,7 @@
                             "Health",
                             "_sE,G#9jSZk%c5r:g^Q`-Health-"
                         ]
-                    },
-                    "shadow": false,
-                    "topLevel": false
+                    }
                 },
                 "a^": {
                     "opcode": "data_hidevariable",
@@ -4293,9 +3801,7 @@
                             "Time",
                             "_sE,G#9jSZk%c5r:g^Q`-Time-"
                         ]
-                    },
-                    "shadow": false,
-                    "topLevel": false
+                    }
                 },
                 "a_": {
                     "opcode": "event_broadcast",
@@ -4311,18 +3817,14 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "c%": {
                     "opcode": "looks_show",
                     "next": null,
                     "parent": "a_",
                     "inputs": {},
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "c(": {
                     "opcode": "event_whenbroadcastreceived",
@@ -4335,10 +3837,7 @@
                             "broadcastMsgId-iniciar"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 153,
-                    "y": 24
+                    "topLevel": true
                 },
                 "a`": {
                     "opcode": "control_stop",
@@ -4351,8 +3850,6 @@
                             null
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": false,
                     "mutation": {
                         "tagName": "mutation",
                         "children": [],
@@ -4364,18 +3861,14 @@
                     "next": "a|",
                     "parent": "a`",
                     "inputs": {},
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "a|": {
                     "opcode": "looks_hide",
                     "next": "a}",
                     "parent": "a{",
                     "inputs": {},
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "a}": {
                     "opcode": "control_forever",
@@ -4387,9 +3880,7 @@
                             "a~"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "a~": {
                     "opcode": "sound_playuntildone",
@@ -4401,9 +3892,7 @@
                             "c)"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "c)": {
                     "opcode": "sound_sounds_menu",
@@ -4416,8 +3905,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "c*": {
                     "opcode": "event_whenbroadcastreceived",
@@ -4430,10 +3918,7 @@
                             "broadcastMsgId-shh"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 890,
-                    "y": 560
+                    "topLevel": true
                 },
                 "ba": {
                     "opcode": "control_stop",
@@ -4446,8 +3931,6 @@
                             null
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": false,
                     "mutation": {
                         "tagName": "mutation",
                         "children": [],
@@ -4465,8 +3948,6 @@
                             null
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": false,
                     "mutation": {
                         "tagName": "mutation",
                         "children": [],
@@ -4484,10 +3965,7 @@
                             "broadcastMsgId-perdio"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 125,
-                    "y": 381
+                    "topLevel": true
                 },
                 "c-": {
                     "opcode": "control_stop",
@@ -4500,8 +3978,6 @@
                             null
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": false,
                     "mutation": {
                         "tagName": "mutation",
                         "children": [],
@@ -4560,10 +4036,7 @@
                             "broadcastMsgId-message1"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 746,
-                    "y": 504
+                    "topLevel": true
                 },
                 "bc": {
                     "opcode": "looks_gotofrontback",
@@ -4574,18 +4047,14 @@
                         "FRONT_BACK": [
                             "front"
                         ]
-                    },
-                    "shadow": false,
-                    "topLevel": false
+                    }
                 },
                 "bd": {
                     "opcode": "looks_show",
                     "next": "be",
                     "parent": "bc",
                     "inputs": {},
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "be": {
                     "opcode": "motion_gotoxy",
@@ -4607,9 +4076,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "bf": {
                     "opcode": "control_forever",
@@ -4621,9 +4088,7 @@
                             "b"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "b": {
                     "opcode": "control_if_else",
@@ -4643,9 +4108,7 @@
                             "bi"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "bg": {
                     "opcode": "sensing_touchingobject",
@@ -4657,9 +4120,7 @@
                             "c/"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "c/": {
                     "opcode": "sensing_touchingobjectmenu",
@@ -4671,8 +4132,7 @@
                             "_mouse_"
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "bh": {
                     "opcode": "looks_switchcostumeto",
@@ -4684,9 +4144,7 @@
                             "c:"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "c:": {
                     "opcode": "looks_costume",
@@ -4698,8 +4156,7 @@
                             "button2-a2"
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "bi": {
                     "opcode": "looks_switchcostumeto",
@@ -4711,9 +4168,7 @@
                             "c;"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "c;": {
                     "opcode": "looks_costume",
@@ -4725,8 +4180,7 @@
                             "button2-a"
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "c=": {
                     "opcode": "event_whenbroadcastreceived",
@@ -4739,19 +4193,14 @@
                             "broadcastMsgId-iniciar"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 209,
-                    "y": 631
+                    "topLevel": true
                 },
                 "c?": {
                     "opcode": "looks_hide",
                     "next": null,
                     "parent": "c=",
                     "inputs": {},
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "c@": {
                     "opcode": "event_whenthisspriteclicked",
@@ -4759,10 +4208,7 @@
                     "parent": null,
                     "inputs": {},
                     "fields": {},
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 188,
-                    "y": 119
+                    "topLevel": true
                 },
                 "c]": {
                     "opcode": "event_whenkeypressed",
@@ -4775,10 +4221,7 @@
                             null
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 561,
-                    "y": -20
+                    "topLevel": true
                 },
                 "N": {
                     "opcode": "control_if",
@@ -4794,9 +4237,7 @@
                             "O"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "bj": {
                     "opcode": "operator_not",
@@ -4808,9 +4249,7 @@
                             "c`"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "c`": {
                     "opcode": "operator_gt",
@@ -4837,9 +4276,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "bb": {
                     "opcode": "data_setvariableto",
@@ -4859,9 +4296,7 @@
                             "Time",
                             "_sE,G#9jSZk%c5r:g^Q`-Time-"
                         ]
-                    },
-                    "shadow": false,
-                    "topLevel": false
+                    }
                 },
                 "bk": {
                     "opcode": "event_broadcastandwait",
@@ -4877,9 +4312,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "P": {
                     "opcode": "sound_playuntildone",
@@ -4891,9 +4324,7 @@
                             "c{"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "c{": {
                     "opcode": "sound_sounds_menu",
@@ -4906,8 +4337,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 },
                 "bl": {
                     "opcode": "data_setvariableto",
@@ -4927,9 +4357,7 @@
                             "Health",
                             "_sE,G#9jSZk%c5r:g^Q`-Health-"
                         ]
-                    },
-                    "shadow": false,
-                    "topLevel": false
+                    }
                 },
                 "c|": {
                     "opcode": "event_broadcast",
@@ -4945,9 +4373,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "c_": {
                     "opcode": "event_whenbroadcastreceived",
@@ -4960,10 +4386,7 @@
                             "p)|[,U.ZpI5k0XC;jlYw"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 1187,
-                    "y": 9
+                    "topLevel": true
                 },
                 "c^": {
                     "opcode": "event_broadcastandwait",
@@ -4979,9 +4402,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "c[": {
                     "opcode": "event_broadcastandwait",
@@ -4997,9 +4418,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "c}": {
                     "opcode": "event_whenkeypressed",
@@ -5012,10 +4431,7 @@
                             null
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 562,
-                    "y": 168
+                    "topLevel": true
                 },
                 "c~": {
                     "opcode": "event_broadcastandwait",
@@ -5031,9 +4447,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "O": {
                     "opcode": "looks_switchcostumeto",
@@ -5045,9 +4459,7 @@
                             "da"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "da": {
                     "opcode": "looks_costume",
@@ -5060,8 +4472,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 }
             },
             "comments": {},
@@ -5125,19 +4536,14 @@
                             "broadcastMsgId-iniciar"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 566,
-                    "y": 367
+                    "topLevel": true
                 },
                 "bm": {
                     "opcode": "looks_hide",
                     "next": "dc",
                     "parent": "db",
                     "inputs": {},
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "dc": {
                     "opcode": "control_stop",
@@ -5149,8 +4555,6 @@
                             "other scripts in sprite"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": false,
                     "mutation": {
                         "tagName": "mutation",
                         "hasnext": "true",
@@ -5168,10 +4572,7 @@
                             "broadcastMsgId-perdio"
                         ]
                     },
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 77,
-                    "y": 136
+                    "topLevel": true
                 },
                 "bn": {
                     "opcode": "looks_gotofrontback",
@@ -5182,9 +4583,7 @@
                         "FRONT_BACK": [
                             "front"
                         ]
-                    },
-                    "shadow": false,
-                    "topLevel": false
+                    }
                 },
                 "bo": {
                     "opcode": "control_wait",
@@ -5199,9 +4598,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "Q": {
                     "opcode": "motion_setx",
@@ -5217,9 +4614,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "de": {
                     "opcode": "operator_random",
@@ -5241,9 +4636,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "S": {
                     "opcode": "motion_sety",
@@ -5259,9 +4652,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "df": {
                     "opcode": "operator_random",
@@ -5283,9 +4674,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "bq": {
                     "opcode": "motion_turnright",
@@ -5300,27 +4689,21 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "br": {
                     "opcode": "motion_ifonedgebounce",
                     "next": "bs",
                     "parent": "bq",
                     "inputs": {},
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "bs": {
                     "opcode": "looks_show",
                     "next": "bt",
                     "parent": "br",
                     "inputs": {},
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "bt": {
                     "opcode": "control_wait",
@@ -5335,18 +4718,14 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "bu": {
                     "opcode": "looks_hide",
                     "next": "dg",
                     "parent": "bt",
                     "inputs": {},
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "bp": {
                     "opcode": "control_forever",
@@ -5358,9 +4737,7 @@
                             "R"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "dh": {
                     "opcode": "control_wait",
@@ -5375,9 +4752,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "R": {
                     "opcode": "control_repeat",
@@ -5396,9 +4771,7 @@
                             "Q"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "dg": {
                     "opcode": "control_wait",
@@ -5413,9 +4786,7 @@
                             ]
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "di": {
                     "opcode": "event_whenthisspriteclicked",
@@ -5423,19 +4794,14 @@
                     "parent": null,
                     "inputs": {},
                     "fields": {},
-                    "shadow": false,
-                    "topLevel": true,
-                    "x": 1191,
-                    "y": 436
+                    "topLevel": true
                 },
                 "dj": {
                     "opcode": "looks_hide",
                     "next": null,
                     "parent": "T",
                     "inputs": {},
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "T": {
                     "opcode": "sound_play",
@@ -5447,9 +4813,7 @@
                             "dk"
                         ]
                     },
-                    "fields": {},
-                    "shadow": false,
-                    "topLevel": false
+                    "fields": {}
                 },
                 "dk": {
                     "opcode": "sound_sounds_menu",
@@ -5462,8 +4826,7 @@
                             null
                         ]
                     },
-                    "shadow": true,
-                    "topLevel": false
+                    "shadow": true
                 }
             },
             "comments": {},
@@ -5577,8 +4940,6 @@
     ],
     "extensions": [],
     "meta": {
-        "semver": "3.0.0",
-        "vm": "0.2.0",
-        "agent": ""
+        "semver": "3.0.0"
     }
 }
