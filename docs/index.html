@@ -110,14 +110,14 @@
       border: 0;
       border-radius: 4px;
     }
-    .control-button:hover {
+    .control-button-highlight:hover {
       background: #ff4c4c26;
     }
-    .control-button.active {
+    .control-button-highlight.active {
       background: #ff4c4c59;
     }
     .fullscreen-button {
-      background: white !important;
+      background: white;
     }
     .standalone-fullscreen-button {
       position: absolute;
@@ -231,7 +231,7 @@
 
       const greenFlagButton = document.createElement('img');
       greenFlagButton.src = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16.63 17.5"><path d="M.75 2a6.44 6.44 0 017.69 0h0a6.44 6.44 0 007.69 0v10.4a6.44 6.44 0 01-7.69 0h0a6.44 6.44 0 00-7.69 0" fill="#4cbf56" stroke="#45993d" stroke-linecap="round" stroke-linejoin="round"/><path stroke-width="1.5" fill="#4cbf56" stroke="#45993d" stroke-linecap="round" stroke-linejoin="round" d="M.75 16.75v-16"/></svg>');
-      greenFlagButton.className = 'control-button green-flag-button';
+      greenFlagButton.className = 'control-button control-button-highlight green-flag-button';
       greenFlagButton.draggable = false;
       greenFlagButton.addEventListener('click', () => {
         scaffolding.greenFlag();
@@ -248,7 +248,7 @@
       });
 
       const pauseButton = document.createElement('img');
-      pauseButton.className = 'control-button pause-button';
+      pauseButton.className = 'control-button control-button-highlight pause-button';
       pauseButton.draggable = false;
       let isPaused = false;
       pauseButton.addEventListener('click', () => {
@@ -271,7 +271,7 @@
 
       const stopAllButton = document.createElement('img');
       stopAllButton.src = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 14 14"><path fill="#ec5959" stroke="#b84848" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" d="M4.3.5h5.4l3.8 3.8v5.4l-3.8 3.8H4.3L.5 9.7V4.3z"/></svg>');
-      stopAllButton.className = 'control-button stop-all-button';
+      stopAllButton.className = 'control-button control-button-highlight stop-all-button';
       stopAllButton.draggable = false;
       stopAllButton.addEventListener('click', () => {
         scaffolding.stopAll();
@@ -341,6 +341,9 @@
         warpTimer: false
       });
       if (vm.renderer.setMaxTextureDimension) vm.renderer.setMaxTextureDimension(2048);
+
+      // enforcePrivacy threat model only makes sense in the editor
+      if (vm.runtime.setEnforcePrivacy) vm.runtime.setEnforcePrivacy(false);
 
       if (typeof ScaffoldingAddons !== 'undefined') {
         ScaffoldingAddons.run(scaffolding, {"gamepad":true,"pointerlock":false,"specialCloudBehaviors":false,"unsafeCloudBehaviors":false,"pause":true});
