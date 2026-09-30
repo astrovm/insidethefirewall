@@ -35,6 +35,12 @@ try:
               typeof scaffolding !== 'undefined' && scaffolding.vm.runtime.targets.length > 1""",
             timeout=60000,
         )
+        # Let the started project execute so delayed runtime exceptions surface.
+        # Require the VM to run frames (not merely load) plus a short real-time window.
+        page.evaluate("() => { window.__smokeFrames = 0; scaffolding.vm.runtime.on('AFTER_EXECUTE', () => window.__smokeFrames++); }")
+        page.wait_for_function("() => window.__smokeFrames >= 30", timeout=15000)
+        page.wait_for_timeout(2000)
+        assert page.locator("#error").is_hidden(), "The game reported a load/runtime error"
         canvas = page.locator("#app canvas").first
         assert canvas.is_visible(), "The game canvas is not visible"
         assert canvas.evaluate("canvas => canvas.width > 0 && canvas.height > 0"), "Empty game canvas"
