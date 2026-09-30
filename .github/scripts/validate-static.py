@@ -19,6 +19,8 @@ class Page(HTMLParser):
         self.references = []
         self.scripts = []
         self.script = None
+        self.open_script = False
+        self.external_scripts = []
         self.doctype = False
         self.title = ""
         self.in_title = False
@@ -34,17 +36,23 @@ class Page(HTMLParser):
                 self.references.append(attributes[key])
         if tag == "title":
             self.in_title = True
-        if tag == "script" and not attributes.get("src"):
+        if tag == "script":
+            self.open_script = True
             script_type = attributes.get("type", "text/javascript")
             if script_type in ("module", "text/javascript", "application/javascript", ""):
-                self.script = (script_type == "module", [])
+                if attributes.get("src"):
+                    self.external_scripts.append((attributes["src"], script_type == "module"))
+                else:
+                    self.script = (script_type == "module", [])
 
     def handle_endtag(self, tag):
         if tag == "title":
             self.in_title = False
-        if tag == "script" and self.script is not None:
-            self.scripts.append(self.script)
-            self.script = None
+        if tag == "script":
+            self.open_script = False
+            if self.script is not None:
+                self.scripts.append(self.script)
+                self.script = None
 
     def handle_data(self, data):
         if self.script is not None:
@@ -56,19 +64,18 @@ class Page(HTMLParser):
 def local_reference(root, source, reference):
     url = urlsplit(reference)
     if url.scheme or url.netloc or not url.path:
-        return
+        return None
     decoded = unquote(url.path)
     destination = (root / decoded.lstrip("/") if decoded.startswith("/") else source.parent / decoded).resolve()
     if not destination.is_relative_to(root):
         raise ValueError(f"{source}: asset escapes site root: {reference}")
     if not destination.exists():
         raise ValueError(f"{source}: missing local asset: {reference}")
+    return destination
 
 
 def check_javascript(code, module=False):
-    command = ["node", "--check"]
-    if module:
-        command.append("--input-type=module")
+    command = ["node", "--check", "--input-type=" + ("module" if module else "commonjs")]
     subprocess.run(command, input=code, text=True, check=True)
 
 
@@ -77,17 +84,27 @@ def validate(root):
     pages = sorted(root.rglob("*.html"))
     if not pages:
         raise ValueError(f"No HTML pages in {root}")
+    checked_external = set()
     for path in pages:
         page = Page()
         page.feed(path.read_text())
+        page.close()
+        if page.open_script:
+            raise ValueError(f"{path}: unterminated script element")
         if not page.doctype or not {"html", "head", "body", "title"} <= page.tags or not page.title.strip():
             raise ValueError(f"{path}: expected HTML document with doctype, head, body and title")
         for reference in page.references:
             local_reference(root, path, reference)
+        for reference, module in page.external_scripts:
+            destination = local_reference(root, path, reference)
+            if destination is not None:
+                check_javascript(destination.read_text(), module)
+                checked_external.add(destination)
         for module, script in page.scripts:
             check_javascript("".join(script), module)
     for path in root.rglob("*.js"):
-        subprocess.run(["node", "--check", str(path)], check=True)
+        if path.resolve() not in checked_external:
+            subprocess.run(["node", "--check", str(path)], check=True)
     for path in root.rglob("*.css"):
         css = re.sub(r"/\*.*?\*/", "", path.read_text(), flags=re.S)
         for reference in re.findall(r"url\(\s*['\"]?([^)'\"]+)['\"]?\s*\)", css):
