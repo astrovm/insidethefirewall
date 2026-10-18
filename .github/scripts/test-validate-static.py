@@ -59,6 +59,16 @@ class StaticValidationTest(unittest.TestCase):
         self.root.joinpath('icon.png').touch()
         validation.validate(self.root)
 
+    def test_scratch_export_assets_in_subfolder(self):
+        self.page('<p>Fixture</p>')
+        assets = self.root / 'classic/assets'
+        assets.mkdir(parents=True)
+        assets.joinpath('project.json').write_text('{"targets":[{"costumes":[{"md5ext":"abc.svg"}],"sounds":[]}]}')
+        with self.assertRaisesRegex(ValueError, 'abc.svg'):
+            validation.validate(self.root)
+        assets.joinpath('abc.svg').touch()
+        validation.validate(self.root)
+
 
 if __name__ == '__main__':
     unittest.main()

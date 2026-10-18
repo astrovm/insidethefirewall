@@ -1,7 +1,7 @@
 """Validate HTML entrypoints, local assets, CSS URLs and JavaScript syntax.
 
 Remote URLs are deliberately not fetched: PR checks must work without production
-services or credentials. Game assets are checked against the exported project.
+services or credentials. Scratch exports are checked against their project.json.
 """
 import argparse
 from html.parser import HTMLParser
@@ -113,8 +113,7 @@ def validate(root):
         manifest = json.loads(path.read_text())
         for icon in manifest.get("icons", []):
             local_reference(root, path, icon["src"])
-    project = root / "assets/project.json"
-    if project.exists():
+    for project in root.rglob("assets/project.json"):
         data = json.loads(project.read_text())
         if not data.get("targets"):
             raise ValueError("Game project contains no targets")
