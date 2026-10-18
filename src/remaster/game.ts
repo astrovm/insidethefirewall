@@ -90,8 +90,24 @@ const POWER_UP_AWAY = 80;
 /** With a jetpack there's no gravity: up and down fly at this speed, reached in 0.1 s, and letting go hovers. */
 export const FLY_SPEED = 300;
 const FLY_ACCELERATION = FLY_SPEED * 10;
-/** The jetpack can't fly the player off the top of the stage. */
+/** The jetpack can't fly the player off the top of the stage, except to escape. */
 export const CEILING_Y = 180 - 58;
+/**
+ * The room on the monitor's screen, in stage pixels: its top left corner and
+ * how big it is. The screen is wider than the room, so it's centered.
+ */
+export const SCREEN_ROOM = { left: -39.5, top: 157.5, scale: 1 / 6 } as const;
+/** The monitor's screen, in stage pixels. */
+export const SCREEN = { left: -50.5, top: 157.5, width: 102, height: 60 } as const;
+/**
+ * Holding up against the ceiling with a jetpack bursts the player out of the
+ * monitor's screen into the real room: they grow from the screen to full size
+ * in this long, ending this far under the ceiling. Once per jetpack.
+ */
+export const ESCAPE_BURST = 0.5;
+const ESCAPE_DROP = 40;
+/** The virus is stuck in the room on the screen this long, then comes out of the monitor. */
+export const ESCAPE_STUCK = 1.5;
 /** A power-up ticks at these seconds left, so the player hears it ending. */
 const TICKS = [3, 2, 1];
 /** Jump can start a new game this long after game over, so a jump held while dying doesn't skip the screen. */
@@ -129,7 +145,11 @@ export type GameEvent =
   | { type: "appear"; thing: Grab }
   | { type: "ending"; kind: PowerUpKind; left: number }
   | { type: "nearMiss" }
+  | { type: "escape"; x: number; y: number }
   | { type: "lost"; time: number };
+
+/** The player's size, in percent, as in 2013. */
+const PLAYER_SIZE = 180.6111234669416;
 
 const pixelArt = (name: string, width: number, height: number): Costume => ({
   name,
@@ -203,7 +223,7 @@ export class Game {
   speed = VIRUS_START_SPEED;
   events: GameEvent[] = [];
 
-  readonly player = sprite("player", costumes.player, 0, GROUND_Y, 180.6111234669416, "left-right");
+  readonly player = sprite("player", costumes.player, 0, GROUND_Y, PLAYER_SIZE, "left-right");
   readonly virus = sprite("virus", costumes.virus, VIRUS_SPAWN.x, VIRUS_SPAWN.y, 222.1289005570158, "left-right");
   readonly monitor = sprite("monitor", costumes.monitor, 0, 110, 150, "don't rotate");
   readonly pickup = sprite("pickup", costumes.pickup, -124, PICKUP_Y, 134.39163793441224, "left-right");
@@ -237,6 +257,15 @@ export class Game {
   replay: ReplayFrame[] = [];
   /** Seconds on the game over screen. */
   overTime = 0;
+  /** Seconds since the player last burst out of the monitor. */
+  escapeTime = Infinity;
+  /** The room the player escaped from, as it was, while the virus is stuck in it. */
+  inside: SpriteShot[] = [];
+  /** The jetpack hasn't been used to escape yet. */
+  private canEscape = false;
+  private escapeFrom = { x: 0, y: 0 };
+  /** Where the player was across the room, which is where they come out. */
+  private escapeX = 0;
   private powerUpTimer = POWER_UP_FIRST;
   private powerUpShown = 0;
   /** The flying virus came close to the player without a hit. */
@@ -310,6 +339,7 @@ export class Game {
     this.closeCall = false;
     this.grabbed = [];
     this.replay = [];
+    this.endEscape();
     for (const s of this.allSprites()) s.visible = false;
 
     const { player, virus, monitor, pickup } = this;
@@ -347,7 +377,7 @@ export class Game {
     }
     this.time += DT;
     this.invincible = Math.max(0, this.invincible - DT);
-    this.movePlayer(input);
+    if (!this.updateEscape()) this.movePlayer(input);
     this.moveVirus();
     this.updatePickup();
     this.updatePowerUps();
@@ -363,7 +393,7 @@ export class Game {
   private record(): void {
     const shown = this.layers.filter((s) => s.visible);
     this.replay.push({
-      sprites: shown.map((s) => ({ costume: s.currentCostume, x: s.x, y: s.y, rotation: s.rotation, flipX: s.flipX, size: s.size })),
+      sprites: shown.map(shot),
       player: shown.indexOf(this.player),
       shield: this.powers.shield > 0,
       jetpack: this.powers.jetpack > 0,
@@ -415,9 +445,11 @@ export class Game {
 
     const x = player.x + this.vx * DT;
     let y = player.y + ((vy + this.vy) / 2) * DT;
+    let escaping = false;
     if (y > CEILING_Y) {
       y = CEILING_Y;
       this.vy = Math.min(this.vy, 0);
+      escaping = jetpack && input.jump && this.canEscape;
     }
     if (!this.onGround && y <= GROUND_Y) {
       y = GROUND_Y;
@@ -432,6 +464,59 @@ export class Game {
     this.walkTime = sideways ? this.walkTime + DT : 0;
     this.hitTime += DT;
     player.setCostume(this.playerCostume(input, sideways));
+    if (escaping) this.escape();
+  }
+
+  /**
+   * Out of the monitor: the room the player was in turns out to be the one on
+   * the monitor's screen, and they burst out of it into the real room. The
+   * virus stays stuck in there for a moment.
+   */
+  private escape(): void {
+    const { player, virus } = this;
+    this.canEscape = false;
+    this.escapeTime = 0;
+    this.inside = this.layers.filter((s) => s.visible && s !== player).map(shot);
+    virus.visible = false;
+    this.closeCall = false;
+    this.escapeFrom = toOuterRoom(player.x, player.y);
+    this.escapeX = player.x;
+    this.vx = 0;
+    this.vy = 0;
+    this.burst(0);
+    this.events.push({ type: "escape", x: player.x, y: player.y });
+  }
+
+  /** The player growing out of the screen, from 0 to 1. */
+  private burst(progress: number): void {
+    const { player } = this;
+    const eased = progress * progress * (3 - 2 * progress);
+    const scale = SCREEN_ROOM.scale + (1 - SCREEN_ROOM.scale) * eased;
+    player.size = PLAYER_SIZE * scale;
+    const { x, y } = this.escapeFrom;
+    player.setXY(x + (this.escapeX - x) * eased, y + (CEILING_Y - ESCAPE_DROP - y) * eased);
+  }
+
+  /** Moves the escape along, and says whether the player is still bursting out. */
+  private updateEscape(): boolean {
+    if (this.escapeTime >= ESCAPE_STUCK) return false;
+    this.escapeTime += DT;
+    if (this.escapeTime >= ESCAPE_STUCK - 1e-9) {
+      // Out of the monitor, the usual way.
+      this.endEscape();
+      this.virus.visible = true;
+      this.respawnVirus();
+      return false;
+    }
+    if (this.escapeTime > ESCAPE_BURST + 1e-9) return false;
+    this.burst(Math.min(1, this.escapeTime / ESCAPE_BURST));
+    return true;
+  }
+
+  private endEscape(): void {
+    this.escapeTime = Infinity;
+    this.inside = [];
+    this.player.size = PLAYER_SIZE;
   }
 
   private playerCostume(input: Input, sideways: boolean): string {
@@ -463,8 +548,8 @@ export class Game {
   }
 
   private moveVirus(): void {
-    // Frozen in place, and harmless until it thaws.
-    if (this.powers.freeze > 0) return;
+    // Frozen in place, and harmless until it thaws. Or stuck in the room on the screen.
+    if (this.powers.freeze > 0 || !this.virus.visible) return;
     const virus = this.virus;
     if (this.warning > 0) {
       if (this.warning > AIM_LOCK + 1e-9) this.target = { x: this.player.x, y: this.player.y };
@@ -532,6 +617,7 @@ export class Game {
       if (powerUp.isTouching(this.player)) {
         const kind = this.powerUpKind;
         this.powers[kind] = POWER_UP_TIME[kind];
+        if (kind === "jetpack") this.canEscape = true;
         this.grabbed.push(kind);
         powerUp.visible = false;
         this.events.push({ type: "powerUp", kind, x: powerUp.x, y: powerUp.y });
@@ -587,6 +673,7 @@ export class Game {
     this.invincible = 0;
     this.powers = { jetpack: 0, shield: 0, freeze: 0 };
     this.flying = false;
+    this.endEscape();
     this.phase = "over";
     this.events.push({ type: "music", playing: false });
     this.events.push({ type: "sound", sound: "death" });
@@ -638,6 +725,16 @@ export class Game {
   private allSprites(): Sprite[] {
     return [this.player, this.virus, this.monitor, this.pickup, this.gameOver, this.hl3, this.powerUp];
   }
+}
+
+function shot(s: Sprite): SpriteShot {
+  return { costume: s.currentCostume, x: s.x, y: s.y, rotation: s.rotation, flipX: s.flipX, size: s.size };
+}
+
+/** Where a point of the room on the monitor's screen is in the real room. */
+export function toOuterRoom(x: number, y: number): { x: number; y: number } {
+  const { left, top, scale } = SCREEN_ROOM;
+  return { x: left + (240 + x) * scale, y: top - (180 - y) * scale };
 }
 
 /** Stage pixels between two boxes, 0 when they overlap. */

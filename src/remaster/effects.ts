@@ -14,6 +14,7 @@ export class Effects {
 
   handle(event: GameEvent): void {
     if (event.type === "shield") this.shake(0.1, 2);
+    if (event.type === "escape") this.shake(0.3, 4);
     if (event.type !== "hit") return;
     this.shake(event.last ? 0.3 : 0.15, event.last ? 4 : 2);
     this.flash = event.last ? 0.6 : 0.3;

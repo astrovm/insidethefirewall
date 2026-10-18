@@ -2,6 +2,7 @@ import { STAGE_HEIGHT, STAGE_WIDTH, type Costume, type Sprite } from "../engine/
 import { interpolate, type CostumeImages } from "../render.ts";
 import type { Effects } from "./effects.ts";
 import {
+  ESCAPE_BURST,
   flameCostumes,
   PICKUP_BLINK,
   POWER_UP_TIME,
@@ -9,7 +10,10 @@ import {
   powerUpCostumes,
   REPLAY_SPEED,
   replayFrame,
+  SCREEN,
+  SCREEN_ROOM,
   type Game,
+  type SpriteShot,
 } from "./game.ts";
 
 export const colors = {
@@ -58,8 +62,42 @@ const TITLE_SIZE = 0.9708737864077678;
 /** The replay on the game over screen: a small window in the top right corner, under Menu. */
 export const REPLAY_BOX = { left: 318, top: 50, scale: 0.3 } as const;
 
+/** After an escape the camera snaps out from the screen to the whole room in this long. */
+export const ESCAPE_ZOOM = 0.35;
+/** The white flash on the screen as the player bursts out of it. */
+const ESCAPE_FLASH = 0.2;
+/** Rooms drawn inside each other on the monitor's screen. */
+const SCREEN_DEPTH = 3;
+
+/**
+ * How much the camera is zoomed in this long after an escape: at first the
+ * screen fills the stage, so the room the player was in stays put, then it
+ * snaps back out to the whole room.
+ */
+export function escapeZoom(seconds: number): number {
+  if (seconds >= ESCAPE_ZOOM) return 1;
+  const t = Math.max(0, seconds / ESCAPE_ZOOM);
+  return (1 / SCREEN_ROOM.scale) ** (1 - t * t * (3 - 2 * t));
+}
+
+/**
+ * The view zoomed in this much toward the room on the screen. It zooms around
+ * the one point that stays put, so at full zoom the room on the screen fills
+ * the stage exactly.
+ */
+export function zoomView(view: View, zoom: number): View {
+  const { left, top, scale } = SCREEN_ROOM;
+  const fixedX = (STAGE_WIDTH / 2 + left) / (1 - scale);
+  const fixedY = (STAGE_HEIGHT / 2 - top) / (1 - scale);
+  return {
+    x: view.x + fixedX * view.scale * (1 - zoom),
+    y: view.y + fixedY * view.scale * (1 - zoom),
+    scale: view.scale * zoom,
+  };
+}
+
 interface Raster {
-  canvas: HTMLCanvasElement;
+  canvas: CanvasImageSource;
   /** Device pixels per costume unit. */
   scale: number;
 }
@@ -67,9 +105,11 @@ interface Raster {
 /** Draws the remastered game on a canvas that fills the window. */
 export class RemasterRenderer {
   private readonly ctx: CanvasRenderingContext2D;
-  /** Each costume at up to two sizes: in the game and in the replay. */
+  /** Each costume at up to four sizes: in the game, in the replay and on the monitor's screen. */
   private readonly rasters = new Map<Costume, Raster[]>();
-  private stageRaster: HTMLCanvasElement | null = null;
+  private stageRasters: HTMLCanvasElement[] = [];
+  /** Draw the SVGs straight, for sizes that change every frame. */
+  private direct = false;
   view: View = { x: 0, y: 0, scale: 1 };
   /** 0 shows the game, 1 is fully black. Used for fades between screens. */
   fade = 0;
@@ -97,26 +137,33 @@ export class RemasterRenderer {
     ctx.imageSmoothingEnabled = true;
     const steady = this.view;
     const [dx, dy] = effects.shakeOffset();
-    this.view = { ...steady, x: steady.x + Math.round(dx * steady.scale), y: steady.y + Math.round(dy * steady.scale) };
+    const shaken = { ...steady, x: steady.x + Math.round(dx * steady.scale), y: steady.y + Math.round(dy * steady.scale) };
+    const playing = game.phase === "playing";
+    const zoom = playing ? escapeZoom(game.escapeTime) : 1;
+    this.view = zoom === 1 ? shaken : zoomView(shaken, zoom);
+    this.direct = zoom !== 1;
     this.drawBackdrop("#000");
+    // Sprites can poke out of the stage a little, as in Scratch. Hide that part.
+    ctx.save();
+    if (playing) {
+      ctx.beginPath();
+      ctx.rect(shaken.x, shaken.y, Math.round(STAGE_WIDTH * shaken.scale), Math.round(STAGE_HEIGHT * shaken.scale));
+      ctx.clip();
+    }
     if (game.phase !== "over") this.drawStage();
     if (game.phase === "title") this.drawTitle();
 
-    // Sprites can poke out of the stage a little, as in Scratch. Hide that part.
-    ctx.save();
-    if (game.phase === "playing") {
-      ctx.beginPath();
-      ctx.rect(this.view.x, this.view.y, Math.round(STAGE_WIDTH * this.view.scale), Math.round(STAGE_HEIGHT * this.view.scale));
-      ctx.clip();
-    }
-    const playing = game.phase === "playing";
-    for (const sprite of game.layers) {
+    // Bursting out of the screen, the player is in front of the monitor.
+    const bursting = playing && game.escapeTime <= ESCAPE_BURST;
+    const layers = bursting ? [...game.layers.filter((s) => s !== game.player), game.player] : game.layers;
+    for (const sprite of layers) {
       if (!sprite.visible) continue;
       let [x, y] = interpolate(sprite, game.previous.get(sprite), between);
       // Power-ups bob up and down, so they read as things to grab.
       if (sprite === game.powerUp) y += Math.sin(game.time * 5) * 3;
+      const grown = sprite.size / sprite.initial.size;
       if (playing && sprite === game.player && game.powers.jetpack > 0) {
-        this.drawJetpack(x, y, sprite.flipX, game.powers.jetpack < 1 ? blink(game.powers.jetpack) : 1, game.flying, game.time);
+        this.drawJetpack(x, y, sprite.flipX, game.powers.jetpack < 1 ? blink(game.powers.jetpack) : 1, game.flying, game.time, grown);
       }
       ctx.globalAlpha = playing ? this.alphaOf(game, sprite) : 1;
       if (playing && sprite === game.virus && game.powers.freeze > 0) ctx.filter = "hue-rotate(160deg) saturate(1.5)";
@@ -124,10 +171,16 @@ export class RemasterRenderer {
       ctx.filter = "none";
       ctx.globalAlpha = 1;
       if (playing && sprite === game.player && game.powers.shield > 0) {
-        this.drawShield(x, y, 0.7 * (game.powers.shield < 1.5 ? blink(game.powers.shield) : 1));
+        this.drawShield(x, y, 0.7 * (game.powers.shield < 1.5 ? blink(game.powers.shield) : 1), grown);
+      }
+      if (playing && sprite === game.monitor && game.inside.length > 0) {
+        this.drawScreenRoom(game.inside, game.monitor.currentCostume, SCREEN_DEPTH);
+        const flash = 0.7 * (1 - game.escapeTime / ESCAPE_FLASH);
+        if (flash > 0) this.fillScreen(`rgba(255, 255, 255, ${flash})`);
       }
     }
     ctx.restore();
+    this.direct = false;
     if (game.phase === "over") this.drawReplay(game);
     this.view = steady;
     if (game.phase === "playing") this.drawHud(game);
@@ -157,28 +210,28 @@ export class RemasterRenderer {
     return 1;
   }
 
-  /** The jetpack on the player's back, with a flame while it pushes. */
-  private drawJetpack(x: number, y: number, flipX: number, alpha: number, flying: boolean, time: number): void {
-    const back = x - flipX * 30;
+  /** The jetpack on the player's back, with a flame while it pushes. `grown` is the player's size, 1 as usual. */
+  private drawJetpack(x: number, y: number, flipX: number, alpha: number, flying: boolean, time: number, grown = 1): void {
+    const back = x - flipX * 30 * grown;
     this.ctx.globalAlpha = alpha;
-    this.drawCostume(powerUpCostumes[0]!, back, y + 4, 0, 3, 3);
+    this.drawCostume(powerUpCostumes[0]!, back, y + 4 * grown, 0, 3 * grown, 3 * grown);
     if (flying) {
       const frame = flameCostumes[Math.floor(time / 0.08) % 2]!;
-      this.drawCostume(frame, back, y - 20, 0, 3, 3);
+      this.drawCostume(frame, back, y - 20 * grown, 0, 3 * grown, 3 * grown);
     }
     this.ctx.globalAlpha = 1;
   }
 
   /** A bubble around the player while the shield is up. */
-  private drawShield(x: number, y: number, alpha: number): void {
+  private drawShield(x: number, y: number, alpha: number, grown = 1): void {
     const ctx = this.ctx;
-    const [cx, cy] = toCanvas(this.view, x, y - 4);
+    const [cx, cy] = toCanvas(this.view, x, y - 4 * grown);
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.strokeStyle = colors.shield;
-    ctx.lineWidth = 3 * this.view.scale;
+    ctx.lineWidth = 3 * grown * this.view.scale;
     ctx.beginPath();
-    ctx.arc(cx, cy, 52 * this.view.scale, 0, Math.PI * 2);
+    ctx.arc(cx, cy, 52 * grown * this.view.scale, 0, Math.PI * 2);
     ctx.stroke();
     ctx.globalAlpha *= 0.25;
     ctx.fillStyle = colors.shield;
@@ -199,18 +252,62 @@ export class RemasterRenderer {
     const { x, y, scale } = this.view;
     const width = Math.round(STAGE_WIDTH * scale);
     const height = Math.round(STAGE_HEIGHT * scale);
-    let stage = this.stageRaster;
-    if (stage?.width !== width || stage.height !== height) {
+    const border = -this.backdrops.stage.x;
+    if (this.direct) {
+      const image = this.images.get(this.backdrops.stage);
+      if (image) this.ctx.drawImage(image, border, border, STAGE_WIDTH, STAGE_HEIGHT, x, y, STAGE_WIDTH * scale, STAGE_HEIGHT * scale);
+      return;
+    }
+    let stage = this.stageRasters.find((r) => r.width === width && r.height === height);
+    if (!stage) {
       const image = this.images.get(this.backdrops.stage);
       if (!image) return;
       stage = document.createElement("canvas");
       stage.width = width;
       stage.height = height;
-      const border = -this.backdrops.stage.x;
       stage.getContext("2d")?.drawImage(image, border, border, STAGE_WIDTH, STAGE_HEIGHT, 0, 0, width, height);
-      this.stageRaster = stage;
+      this.stageRasters = [stage, ...this.stageRasters].slice(0, 4);
     }
     this.ctx.drawImage(stage, x, y);
+  }
+
+  /**
+   * The room the player escaped from, small on the monitor's screen, with its
+   * own monitor showing it again. The screen is wider than the room, so the
+   * room carries on at the sides.
+   */
+  private drawScreenRoom(shots: SpriteShot[], monitor: Costume, depth: number): void {
+    const ctx = this.ctx;
+    const outer = this.view;
+    ctx.save();
+    this.clipScreen();
+    const scale = outer.scale * SCREEN_ROOM.scale;
+    const [x, y] = toCanvas(outer, SCREEN_ROOM.left, SCREEN_ROOM.top);
+    for (const side of [-1, 0, 1]) {
+      this.view = { x: x + side * STAGE_WIDTH * scale, y, scale };
+      this.drawStage();
+    }
+    this.view = { x, y, scale };
+    for (const shot of shots) {
+      const size = shot.size / 100;
+      this.drawCostume(shot.costume, shot.x, shot.y, shot.rotation, size * shot.flipX, size);
+      if (shot.costume === monitor && depth > 1) this.drawScreenRoom(shots, monitor, depth - 1);
+    }
+    ctx.restore();
+    this.view = outer;
+  }
+
+  private clipScreen(): void {
+    const [left, top] = toCanvas(this.view, SCREEN.left, SCREEN.top);
+    this.ctx.beginPath();
+    this.ctx.rect(left, top, SCREEN.width * this.view.scale, SCREEN.height * this.view.scale);
+    this.ctx.clip();
+  }
+
+  private fillScreen(color: string): void {
+    const [left, top] = toCanvas(this.view, SCREEN.left, SCREEN.top);
+    this.ctx.fillStyle = color;
+    this.ctx.fillRect(left, top, SCREEN.width * this.view.scale, SCREEN.height * this.view.scale);
   }
 
   /**
@@ -237,10 +334,11 @@ export class RemasterRenderer {
     this.drawStage();
     frame.sprites.forEach((shot, i) => {
       const player = i === frame.player;
-      if (player && frame.jetpack) this.drawJetpack(shot.x, shot.y, shot.flipX, 1, frame.flying, game.overTime * REPLAY_SPEED);
+      const grown = shot.size / game.player.initial.size;
+      if (player && frame.jetpack) this.drawJetpack(shot.x, shot.y, shot.flipX, 1, frame.flying, game.overTime * REPLAY_SPEED, grown);
       const size = shot.size / 100;
       this.drawCostume(shot.costume, shot.x, shot.y, shot.rotation, size * shot.flipX, size);
-      if (player && frame.shield) this.drawShield(shot.x, shot.y, 0.7);
+      if (player && frame.shield) this.drawShield(shot.x, shot.y, 0.7, grown);
     });
     ctx.restore();
     this.view = outer;
@@ -262,6 +360,7 @@ export class RemasterRenderer {
     const ctx = this.ctx;
     const [px, py] = toCanvas(this.view, x, y);
     ctx.save();
+    if (this.direct) ctx.imageSmoothingEnabled = costume.smooth;
     ctx.translate(Math.round(px), Math.round(py));
     if (rotation) ctx.rotate(rotation);
     ctx.scale(Math.sign(scaleX), 1);
@@ -283,6 +382,10 @@ export class RemasterRenderer {
    */
   private raster(costume: Costume, scaleX: number, scaleY: number): Raster | null {
     const scale = Math.max(scaleX, scaleY);
+    if (this.direct) {
+      const image = this.images.get(costume);
+      return image ? { canvas: image, scale } : null;
+    }
     const sizes = this.rasters.get(costume) ?? [];
     const cached = sizes.find((r) => Math.abs(r.scale - scale) < 1e-6);
     if (cached) return cached;
@@ -296,7 +399,7 @@ export class RemasterRenderer {
     ctx.imageSmoothingEnabled = costume.smooth;
     ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
     const raster = { canvas, scale };
-    this.rasters.set(costume, [raster, ...sizes].slice(0, 2));
+    this.rasters.set(costume, [raster, ...sizes].slice(0, 4));
     return raster;
   }
 

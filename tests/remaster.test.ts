@@ -22,6 +22,8 @@ import {
   VIRUS_FAST,
   VIRUS_SPEEDUP,
   CEILING_Y,
+  ESCAPE_BURST,
+  ESCAPE_STUCK,
   FLY_SPEED,
   POWER_UP_FIRST,
   POWER_UP_SHOWN,
@@ -36,10 +38,13 @@ import {
   RETRY_LOCK,
   gap,
   replayFrame,
+  SCREEN,
+  SCREEN_ROOM,
+  toOuterRoom,
   type GameEvent,
   type Input,
 } from "../src/remaster/game.ts";
-import { fitStage, formatTime, toCanvas, toStage } from "../src/remaster/render.ts";
+import { ESCAPE_ZOOM, escapeZoom, fitStage, formatTime, toCanvas, toStage, zoomView } from "../src/remaster/render.ts";
 import { seeded } from "./support.ts";
 
 const hold = (input: Partial<Input>): Input => ({ ...noInput, ...input });
@@ -1037,6 +1042,7 @@ describe("power-ups", () => {
     die(game);
     expect(game.powers).toEqual({ jetpack: 0, shield: 0, freeze: 0 });
     expect(game.powerUp.visible).toBe(false);
+
     game.start();
     expect([game.powers, game.powerUp.visible, game.flying]).toEqual([{ jetpack: 0, shield: 0, freeze: 0 }, false, false]);
     expect(game.layers.map((s) => s.name)).toEqual(["pickup", "powerUp", "player", "monitor", "virus"]);
@@ -1397,3 +1403,154 @@ describe("the run summary", () => {
   });
 });
 
+describe("escaping the monitor", () => {
+  const PLAYER_SIZE = 180.6111234669416;
+
+  /** A game where the player just grabbed a jetpack at x 100, with the virus waiting in the monitor. */
+  function withJetpack(): Game {
+    const game = started();
+    game.warning = Infinity;
+    game.player.setXY(100, GROUND_Y);
+    giveJetpack(game);
+    return game;
+  }
+
+  function giveJetpack(game: Game): void {
+    game.powerUp.setCostume("jetpack");
+    game.powerUp.setXY(game.player.x, game.player.y);
+    game.powerUp.visible = true;
+    game.update(noInput);
+    game.events.length = 0;
+  }
+
+  /** Flies up until the player escapes, and says how long it took. */
+  function flyOut(game: Game): number {
+    for (let i = 1; i <= 120; i++) {
+      game.update(hold({ jump: true }));
+      if (game.events.some((e) => e.type === "escape")) return i * DT;
+    }
+    throw new Error("didn't escape");
+  }
+
+  test("holding up into the ceiling with a jetpack bursts out of the monitor's screen", () => {
+    const game = withJetpack();
+    const seconds = flyOut(game);
+    expect(seconds).toBeLessThan(1);
+    // Where the player was in the room on the screen, as small as it.
+    const from = toOuterRoom(100, CEILING_Y);
+    expect(game.events).toEqual([{ type: "escape", ...from }]);
+    expect(game.player.x).toBeCloseTo(from.x, 6);
+    expect(game.player.y).toBeCloseTo(from.y, 6);
+    expect(game.player.size).toBeCloseTo(PLAYER_SIZE * SCREEN_ROOM.scale, 6);
+    expect([game.escapeTime, game.virus.visible]).toEqual([0, false]);
+    // The room left behind is on the screen, with the virus but without the player.
+    const costumes = game.inside.map((shot) => shot.costume);
+    expect(costumes).toEqual([game.monitor.currentCostume, game.virus.currentCostume]);
+  });
+
+  test("bursting out takes half a second without control, then the player is full size under the ceiling", () => {
+    const game = withJetpack();
+    flyOut(game);
+    run(game, ESCAPE_BURST, { left: true });
+    expect(game.player.x).toBeCloseTo(100, 6);
+    expect(game.player.y).toBeCloseTo(CEILING_Y - 40, 6);
+    expect(game.player.size).toBe(PLAYER_SIZE);
+    run(game, 0.1, { left: true });
+    expect(game.player.x).toBeLessThan(100);
+    expect(game.flying).toBe(true);
+  });
+
+  test("the player grows the whole time, from the screen to where they were across the room", () => {
+    const game = withJetpack();
+    flyOut(game);
+    let size = game.player.size;
+    let x = game.player.x;
+    for (let i = 1; i < ESCAPE_BURST / DT; i++) {
+      game.update(noInput);
+      expect(game.player.size).toBeGreaterThan(size);
+      expect(game.player.x).toBeGreaterThan(x);
+      [size, x] = [game.player.size, game.player.x];
+    }
+  });
+
+  test("the virus is stuck on the screen for a moment, then comes out of the monitor as usual", () => {
+    const game = withJetpack();
+    game.virus.setXY(-150, 0);
+    flyOut(game);
+    const stuck = Math.round(ESCAPE_STUCK / DT);
+    for (let i = 1; i < stuck; i++) game.update(noInput);
+    expect([game.virus.visible, game.virus.x, game.inside.length]).toEqual([false, -150, 2]);
+    game.update(noInput);
+    expect([game.virus.visible, game.virus.x, game.virus.y]).toEqual([true, VIRUS_SPAWN.x, VIRUS_SPAWN.y]);
+    expect(game.warning).toBeGreaterThan(0);
+    expect([game.escapeTime, game.inside]).toEqual([Infinity, []]);
+  });
+
+  test("a stuck virus can't hit, even right on the player", () => {
+    const game = withJetpack();
+    game.health = 2;
+    flyOut(game);
+    game.warning = 0;
+    run(game, 1, { jump: true });
+    game.virus.setXY(game.player.x, game.player.y);
+    run(game, ESCAPE_STUCK - 1 - 2 * DT);
+    expect(game.health).toBe(2);
+    expect(types(game.events)).not.toContain("hit");
+  });
+
+  test("each jetpack escapes once", () => {
+    const game = withJetpack();
+    flyOut(game);
+    game.events.length = 0;
+    run(game, 2, { jump: true });
+    expect(types(game.events)).not.toContain("escape");
+    expect(game.player.y).toBe(CEILING_Y);
+    giveJetpack(game);
+    expect(flyOut(game)).toBeLessThan(0.1);
+  });
+
+  test("without a jetpack there's no escape", () => {
+    const game = started();
+    game.warning = Infinity;
+    game.player.setXY(100, CEILING_Y);
+    game.onGround = false;
+    run(game, 0.5, { jump: true });
+    expect(types(game.events)).not.toContain("escape");
+    expect(game.escapeTime).toBe(Infinity);
+  });
+
+  test("a new game or a game over ends the escape", () => {
+    const game = withJetpack();
+    flyOut(game);
+    die(game);
+    expect([game.phase, game.escapeTime, game.inside, game.player.size]).toEqual(["over", Infinity, [], PLAYER_SIZE]);
+    const again = withJetpack();
+    flyOut(again);
+    again.start();
+    expect([again.escapeTime, again.inside, again.player.size]).toEqual([Infinity, [], PLAYER_SIZE]);
+  });
+
+  test("the room on the screen fits inside it, centered", () => {
+    const topLeft = toOuterRoom(-240, 180);
+    const bottomRight = toOuterRoom(240, -180);
+    expect(topLeft).toEqual({ x: SCREEN_ROOM.left, y: SCREEN_ROOM.top });
+    expect(bottomRight.x - topLeft.x).toBeCloseTo(80, 9);
+    expect(topLeft.y - bottomRight.y).toBeCloseTo(SCREEN.height, 9);
+    expect(topLeft.x - SCREEN.left).toBeCloseTo(SCREEN.left + SCREEN.width - bottomRight.x, 9);
+  });
+
+  test("the camera starts with the screen filling the stage and snaps out to the room", () => {
+    const view = { x: 30, y: 12, scale: 2 };
+    expect(escapeZoom(0)).toBeCloseTo(1 / SCREEN_ROOM.scale, 9);
+    expect(escapeZoom(ESCAPE_ZOOM)).toBe(1);
+    expect(escapeZoom(Infinity)).toBe(1);
+    for (let t = DT; t < ESCAPE_ZOOM; t += DT) expect(escapeZoom(t)).toBeLessThan(escapeZoom(t - DT));
+    // Fully zoomed in, the room on the screen lands exactly on the stage.
+    const zoomed = zoomView(view, escapeZoom(0));
+    const [x, y] = toCanvas(zoomed, SCREEN_ROOM.left, SCREEN_ROOM.top);
+    expect(x).toBeCloseTo(view.x, 9);
+    expect(y).toBeCloseTo(view.y, 9);
+    expect(zoomed.scale * SCREEN_ROOM.scale).toBeCloseTo(view.scale, 9);
+    expect(zoomView(view, 1)).toEqual(view);
+  });
+});

@@ -191,8 +191,24 @@ try:
         assert page.locator("#status").text_content().startswith("Jetpack")
         page.keyboard.down("ArrowUp")
         page.wait_for_function("() => insideTheFirewall.game.player.y > 20", timeout=3000)
-        page.keyboard.up("ArrowUp")
         print("A jetpack flies")
+
+        # Holding up into the ceiling bursts out of the monitor, and the room
+        # left behind shows on its screen until the virus comes out.
+        page.evaluate("() => { insideTheFirewall.game.health = 5 }")
+        page.wait_for_function("() => insideTheFirewall.game.escapeTime > 0.5 && insideTheFirewall.game.escapeTime < 1", timeout=3000)
+        page.keyboard.up("ArrowUp")
+        # The floor-less middle of the small room, at three spots, in case the virus is on one.
+        on_screen = page.evaluate("""() => {
+          const { x, y, scale } = insideTheFirewall.view;
+          const ctx = document.querySelector('#game').getContext('2d');
+          return [207.17, 240.5, 273.83].map((left) => [...ctx.getImageData(Math.round(x + left * scale), Math.round(y + 52.5 * scale), 1, 1).data]);
+        }""")
+        green = [p for p in on_screen if p[1] > 150 and p[0] < 50]
+        assert len(green) >= 2, f"No room on the monitor's screen: {on_screen}"
+        page.wait_for_function("() => insideTheFirewall.game.virus.visible && insideTheFirewall.game.escapeTime === Infinity", timeout=3000)
+        assert page.evaluate("insideTheFirewall.game.player.size") > 180
+        print("The jetpack escapes the monitor")
 
         # Menu on the game over screen goes to the title, and the game over song stops.
         page.evaluate("() => { insideTheFirewall.game.invincible = 0; insideTheFirewall.game.health = 0 }")

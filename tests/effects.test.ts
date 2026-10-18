@@ -20,6 +20,12 @@ test("a blocked hit only shakes a little, with no flash", () => {
   expect([effects.shakeTime, effects.shakeStrength, effects.flash]).toEqual([0.1, 2, 0]);
 });
 
+test("bursting out of the monitor shakes, with no red flash", () => {
+  const effects = new Effects(seeded(1));
+  effects.handle({ type: "escape", x: 0, y: 0 });
+  expect([effects.shakeTime, effects.shakeStrength, effects.flash]).toEqual([0.3, 4, 0]);
+});
+
 test("only hits shake or flash", () => {
   const effects = new Effects(seeded(5));
   for (const type of ["land", "jump", "launch"] as const) effects.handle({ type, x: 0, y: 0 });

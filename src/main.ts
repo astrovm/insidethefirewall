@@ -326,6 +326,7 @@ async function main(): Promise<void> {
         if (event.full) status.textContent = `Full hearts. Shield for ${PENGUIN_SHIELD} seconds`;
         break;
       case "nearMiss":
+      case "escape":
         audio.synth("whoosh");
         break;
       case "appear":
