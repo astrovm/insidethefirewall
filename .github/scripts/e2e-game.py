@@ -228,6 +228,47 @@ try:
         phone.close()
         print("Touch buttons move the player")
 
+        # Gamepads: Start plays and pauses, the stick and D-pad move, A jumps.
+        pad = context.new_page()
+        watch_errors(pad, errors)
+        pad.goto(base, wait_until="load")
+        pad.wait_for_function("() => document.querySelector('#loading').hidden && window.insideTheFirewall", timeout=60000)
+        pad.evaluate("""() => {
+          const fake = { buttons: Array.from({ length: 17 }, () => ({ pressed: false })), axes: [0, 0, 0, 0] };
+          window.fakePad = fake;
+          navigator.getGamepads = () => [fake];
+        }""")
+
+        def tap_button(index):
+            pad.evaluate(f"() => {{ fakePad.buttons[{index}].pressed = true }}")
+            pad.wait_for_timeout(100)
+            pad.evaluate(f"() => {{ fakePad.buttons[{index}].pressed = false }}")
+            pad.wait_for_timeout(100)
+
+        tap_button(9)
+        pad.wait_for_function("() => insideTheFirewall.game.phase === 'playing'", timeout=5000)
+        pad.evaluate("() => { insideTheFirewall.game.invincible = Infinity }")
+        start_x = pad.evaluate("insideTheFirewall.game.player.x")
+        pad.evaluate("() => { fakePad.axes[0] = 1 }")
+        pad.wait_for_timeout(300)
+        pad.evaluate("() => { fakePad.axes[0] = 0 }")
+        assert pad.evaluate("insideTheFirewall.game.player.x") - start_x > 30, "The stick didn't move the player"
+        start_x = pad.evaluate("insideTheFirewall.game.player.x")
+        pad.evaluate("() => { fakePad.buttons[14].pressed = true }")
+        pad.wait_for_timeout(300)
+        pad.evaluate("() => { fakePad.buttons[14].pressed = false }")
+        assert pad.evaluate("insideTheFirewall.game.player.x") - start_x < -30, "The D-pad didn't move the player"
+        pad.evaluate("() => { fakePad.buttons[0].pressed = true }")
+        pad.wait_for_function("() => !insideTheFirewall.game.onGround", timeout=2000)
+        pad.evaluate("() => { fakePad.buttons[0].pressed = false }")
+        pad.wait_for_timeout(600)
+        tap_button(9)
+        assert visible(pad, "#pause-menu")
+        tap_button(9)
+        assert not visible(pad, "#pause-menu")
+        pad.close()
+        print("Gamepads start, move, jump and pause")
+
         assert not errors, "\n".join(errors)
         browser.close()
 finally:
