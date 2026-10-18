@@ -339,13 +339,14 @@ try:
         day.wait_for_function("() => synths.includes('whoosh')", timeout=2000)
         print("Cues sound when things show up, end, and fly close")
 
-        # The song loops before its fade out, and speeds up on long runs.
-        loop = day.evaluate("[insideTheFirewall.audio.music.loopStart, insideTheFirewall.audio.music.loopEnd]")
-        assert abs(loop[0] - 98.2286) < 1e-3 and loop[1] == 186, loop
-        assert day.evaluate("insideTheFirewall.audio.music.playbackRate.value") == 1
+        # The 2013 song plays first, then fades into the next one, and the music speeds up on long runs.
+        assert day.evaluate("insideTheFirewall.audio.songName") == "music"
+        assert day.evaluate("insideTheFirewall.audio.song.source.playbackRate.value") == 1
+        day.evaluate("() => { const song = insideTheFirewall.audio.song; song.position = song.end - 2.5 }")
+        day.wait_for_function("() => insideTheFirewall.audio.songName === 'how-do-you-do'", timeout=5000)
         day.evaluate("() => { insideTheFirewall.game.time = 300 }")
-        day.wait_for_function("() => Math.abs(insideTheFirewall.audio.music.playbackRate.value - 2 ** (4 / 12)) < 1e-3", timeout=5000)
-        print("The music loops before its fade out and speeds up on long runs")
+        day.wait_for_function("() => Math.abs(insideTheFirewall.audio.song.source.playbackRate.value - 2 ** (4 / 12)) < 1e-3", timeout=5000)
+        print("Songs fade into each other, and the music speeds up on long runs")
 
         day.evaluate("""() => {
           const g = insideTheFirewall.game;
@@ -388,7 +389,9 @@ try:
         # Focus is still on Share, so Space would share again. Up jumps.
         day.keyboard.press("ArrowUp")
         day.wait_for_function("() => insideTheFirewall.game.phase === 'playing'", timeout=5000)
-        print("Jump starts again")
+        day.wait_for_function("() => insideTheFirewall.audio.songName === 'how-do-you-do'", timeout=2000)
+        assert day.evaluate("insideTheFirewall.audio.song.source.playbackRate.value") == 1
+        print("Jump starts again, with the next song")
 
         # Settings: a slower game speed, and a new jump key.
         day.click("#pause-game")
