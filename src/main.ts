@@ -23,7 +23,7 @@ import { formatTime, RemasterRenderer, toStage } from "./remaster/render.ts";
 import { gameSpeed, loadSettings, saveSettings, showTouch, type TouchControls } from "./remaster/settings.ts";
 
 const MAX_UPDATES_PER_FRAME = 8;
-/** The 2013 song and nightcore songs in the same spirit, in a random order each game. */
+/** The 2013 song first, then nightcore songs in the same spirit, in a random order each game. */
 const SONGS = ["music", "how-do-you-do", "bad-boy", "monster"];
 
 /** What the screen reader says when the player grabs a power-up. */
@@ -93,8 +93,8 @@ async function main(): Promise<void> {
     }),
   ]);
 
-  /** The song the last run started with. */
-  let firstSong: string | null = null;
+  /** The song the last run played after the 2013 one. */
+  let secondSong: string | null = null;
 
   const game = new Game();
   const controls = new Controls();
@@ -344,9 +344,10 @@ async function main(): Promise<void> {
         break;
       case "music":
         if (event.playing) {
-          // Each run plays the songs in a new random order.
-          const playlist = shuffled(SONGS, firstSong);
-          firstSong = playlist[0]!;
+          // Each run starts with the 2013 song, then plays the rest in a new random order.
+          const [original, ...rest] = SONGS;
+          const playlist = [original!, ...shuffled(rest, secondSong)];
+          secondSong = playlist[1]!;
           audio.setMusic(playlist);
         } else audio.setMusic(null);
         break;
