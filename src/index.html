@@ -18,54 +18,6 @@
     [hidden] {
       display: none !important;
     }
-    #stage {
-      position: absolute;
-      display: block;
-      touch-action: none;
-    }
-    #controls {
-      position: absolute;
-      top: 0;
-      height: 48px;
-      display: flex;
-      align-items: center;
-      gap: 0;
-    }
-    #controls .spacer {
-      flex: 1;
-    }
-    #controls button {
-      width: 2rem;
-      height: 2rem;
-      padding: 0.375rem;
-      border: 0;
-      border-radius: 4px;
-      background: none;
-      cursor: pointer;
-      display: flex;
-    }
-    #controls button:hover, #controls button:focus-visible {
-      background: #ff4c4c26;
-    }
-    #controls #flag.active {
-      background: #ff4c4c59;
-    }
-    #controls button svg {
-      width: 100%;
-      height: 100%;
-    }
-    #controls #back svg {
-      fill: #575e75;
-    }
-    #controls #fullscreen {
-      background: #fff;
-    }
-    #pause .play, #pause.paused .bars {
-      display: none;
-    }
-    #pause.paused .play {
-      display: block;
-    }
     #game {
       position: absolute;
       inset: 0;
@@ -177,14 +129,7 @@
     #play:hover .hover, #play:focus-visible .hover {
       display: block;
     }
-    #open-classic {
-      left: 50%;
-      transform: translateX(-50%);
-      top: calc(210 * var(--s));
-      font-size: calc(13 * var(--s));
-      height: calc(26 * var(--s));
-    }
-    #ui #pause-menu {
+    #ui #pause-menu, #ui #settings-menu {
       position: fixed;
       background: #000a;
       display: flex;
@@ -193,17 +138,112 @@
       justify-content: center;
       gap: calc(10 * var(--s));
     }
-    #pause-menu[hidden] {
+    #pause-menu[hidden], #settings-menu[hidden] {
       display: none;
     }
-    #pause-menu h2 {
+    #pause-menu h2, #settings-menu h2 {
       font-size: calc(36 * var(--s));
       font-weight: 500;
       margin: 0 0 calc(6 * var(--s));
     }
-    #pause-menu button {
+    #pause-menu button, #settings-menu > button {
       position: static;
       width: calc(140 * var(--s));
+    }
+    #ui #settings-menu {
+      background: #000d;
+      pointer-events: auto;
+    }
+    #settings-menu label, #settings-menu fieldset {
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: calc(12 * var(--s));
+      width: calc(300 * var(--s));
+      min-height: calc(30 * var(--s));
+      margin: 0;
+      padding: 0;
+      border: 0;
+      cursor: pointer;
+    }
+    #settings-menu legend {
+      float: left;
+      padding: 0;
+    }
+    #settings-menu input {
+      accent-color: #fe9501;
+      margin: 0;
+      cursor: pointer;
+    }
+    #settings-menu input[type="range"] {
+      width: calc(150 * var(--s));
+    }
+    #settings-menu input:focus-visible, .choices label:has(input:focus-visible) {
+      outline: calc(3 * var(--s)) solid #fff;
+      outline-offset: calc(2 * var(--s));
+    }
+    .choices {
+      display: flex;
+    }
+    #settings-menu .choices label {
+      width: auto;
+      min-height: 0;
+      height: calc(26 * var(--s));
+      padding: 0 calc(10 * var(--s));
+      border: calc(2 * var(--s)) solid #fe9501;
+      margin-left: calc(-2 * var(--s));
+      font-size: calc(14 * var(--s));
+    }
+    .choices label:first-child {
+      border-radius: calc(13 * var(--s)) 0 0 calc(13 * var(--s));
+    }
+    .choices label:last-child {
+      border-radius: 0 calc(13 * var(--s)) calc(13 * var(--s)) 0;
+    }
+    .choices label:has(input:checked) {
+      background: #fe9501;
+      color: #000;
+    }
+    .choices input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+    #touch button {
+      position: fixed;
+      bottom: 16px;
+      width: 72px;
+      height: 72px;
+      padding: 18px;
+      border: 3px solid #fe950188;
+      border-radius: 50%;
+      background: #0006;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+    }
+    #touch button.held {
+      background: #fe950166;
+    }
+    #touch svg {
+      width: 100%;
+      height: 100%;
+      fill: #fe9501;
+    }
+    #touch [data-move="left"] {
+      left: 16px;
+    }
+    #touch [data-move="right"] {
+      left: 100px;
+    }
+    #touch [data-move="down"] {
+      right: 100px;
+    }
+    #touch [data-move="jump"] {
+      right: 16px;
+      bottom: 40px;
     }
     #repair {
       left: calc(70 * var(--s));
@@ -296,7 +336,6 @@
     <div id="ui">
       <section id="title-menu" hidden>
         <button id="play" type="button" aria-label="Play"><img class="normal" src="assets/costumes/play.svg" alt=""><img class="hover" src="assets/costumes/play-hover.svg" alt=""></button>
-        <button id="open-classic" class="pill dark" type="button">Play the 2013 original</button>
         <p id="title-best" class="stat" hidden></p>
       </section>
       <section id="pause-menu" hidden>
@@ -304,7 +343,22 @@
         <button class="pill" type="button" data-action="resume">Resume</button>
         <button class="pill" type="button" data-action="restart">Restart</button>
         <button class="pill" type="button" data-fullscreen>Full screen</button>
+        <button class="pill" type="button" data-action="settings">Settings</button>
         <button class="pill" type="button" data-action="menu">Menu</button>
+      </section>
+      <section id="settings-menu" role="dialog" aria-labelledby="settings-title" hidden>
+        <h2 id="settings-title">Settings</h2>
+        <label>Music <input id="music-volume" type="range" min="0" max="100" step="5"></label>
+        <label>Sound effects <input id="effects-volume" type="range" min="0" max="100" step="5"></label>
+        <fieldset>
+          <legend>Touch buttons</legend>
+          <span class="choices">
+            <label><input type="radio" name="touch" value="auto">Auto</label>
+            <label><input type="radio" name="touch" value="on">On</label>
+            <label><input type="radio" name="touch" value="off">Off</label>
+          </span>
+        </fieldset>
+        <button class="pill" type="button" data-action="close-settings">Done</button>
       </section>
       <section id="over-menu" hidden>
         <div class="stat">
@@ -317,32 +371,17 @@
       </section>
     </div>
     <div id="corner">
+      <button id="open-settings" class="icon" type="button" title="Settings" aria-label="Settings" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 1h4l.6 2.6 1.6.9 2.5-.9 2 3.4-2 1.8v2.4l2 1.8-2 3.4-2.5-.9-1.6.9L12 19H8l-.6-2.6-1.6-.9-2.5.9-2-3.4 2-1.8V8.8l-2-1.8 2-3.4 2.5.9 1.6-.9zm2 6a3 3 0 100 6 3 3 0 000-6z"/></svg></button>
       <button id="fullscreen-game" class="icon" type="button" data-fullscreen title="Full screen" aria-label="Full screen"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 3h5v2H5v3H3zm9 0h5v5h-2V5h-3zM3 12h2v3h3v2H3zm12 0h2v5h-5v-2h3z"/></svg></button>
       <button id="pause-game" class="icon" type="button" title="Pause" aria-label="Pause" hidden>
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 3h4v14H4zm8 0h4v14h-4z"/></svg>
       </button>
     </div>
-    <div id="classic" hidden>
-      <div id="controls">
-        <button id="back" type="button" title="Back to the remaster" aria-label="Back to the remaster">
-          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.7 3.3a1 1 0 010 1.4L7.4 10l5.3 5.3a1 1 0 01-1.4 1.4l-6-6a1 1 0 010-1.4l6-6a1 1 0 011.4 0z"/></svg>
-        </button>
-        <button id="flag" type="button" title="Restart" aria-label="Restart">
-          <svg viewBox="0 0 16.63 17.5" aria-hidden="true"><path d="M.75 2a6.44 6.44 0 017.69 0h0a6.44 6.44 0 007.69 0v10.4a6.44 6.44 0 01-7.69 0h0a6.44 6.44 0 00-7.69 0" fill="#4cbf56" stroke="#45993d" stroke-linecap="round" stroke-linejoin="round"/><path stroke-width="1.5" fill="#4cbf56" stroke="#45993d" stroke-linecap="round" stroke-linejoin="round" d="M.75 16.75v-16"/></svg>
-        </button>
-        <button id="pause" type="button" title="Pause" aria-label="Pause">
-          <svg class="bars" viewBox="0 0 4.2333332 4.2333335" aria-hidden="true"><path fill="#ffae00" d="M.389.19239126h1.2631972v3.8485508H.389zM2.5810001.19239126h1.2631972v3.8485508H2.5810001z"/></svg>
-          <svg class="play" viewBox="0 0 4.2333332 4.2333335" aria-hidden="true"><path d="m3.95163484 2.02835365-1.66643921.9621191-1.66643913.96211911V.10411543l1.66643922.9621191z" fill="#ffae00"/></svg>
-        </button>
-        <button id="stop" type="button" title="Stop" aria-label="Stop">
-          <svg viewBox="0 0 14 14" aria-hidden="true"><path fill="#ec5959" stroke="#b84848" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" d="M4.3.5h5.4l3.8 3.8v5.4l-3.8 3.8H4.3L.5 9.7V4.3z"/></svg>
-        </button>
-        <span class="spacer"></span>
-        <button id="fullscreen" type="button" title="Full screen" aria-label="Full screen">
-          <svg viewBox="0 0 20 20" aria-hidden="true"><path fill="#575E75" fill-rule="evenodd" d="M16.338 7.35l-.89-.891-3.133 2.374a.815.815 0 01-1.15-.165.819.819 0 010-.986l2.368-3.142-.867-.871a.387.387 0 01.269-.664L16.612 3a.397.397 0 01.388.389V7.08a.387.387 0 01-.662.27M3.662 12.65l.89.89 3.133-2.374a.817.817 0 011.15.166.819.819 0 010 .985l-2.37 3.143.87.871c.248.25.071.664-.27.664L3.388 17A.397.397 0 013 16.611V12.92c0-.342.418-.514.662-.27M3.662 7.35l.89-.891 3.133 2.374a.815.815 0 001.15-.165.819.819 0 000-.986L6.465 4.54l.87-.871a.387.387 0 00-.27-.664L3.388 3A.397.397 0 003 3.389V7.08c0 .341.418.514.662.27M16.338 12.65l-.89.89-3.133-2.374a.817.817 0 00-1.15.166.819.819 0 000 .985l2.368 3.143-.867.871a.387.387 0 00.269.664l3.677.005a.397.397 0 00.388-.389V12.92a.387.387 0 00-.662-.27"/></svg>
-        </button>
-      </div>
-      <canvas id="stage" aria-label="Inside the firewall, 2013 version"></canvas>
+    <div id="touch" hidden>
+      <button type="button" data-move="left" aria-label="Left"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M14 2v16L4 10z"/></svg></button>
+      <button type="button" data-move="right" aria-label="Right"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 2v16l10-8z"/></svg></button>
+      <button type="button" data-move="down" aria-label="Fall faster"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 6h16l-8 10z"/></svg></button>
+      <button type="button" data-move="jump" aria-label="Jump"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 14h16L10 4z"/></svg></button>
     </div>
     <p id="status" class="visually-hidden" aria-live="polite"></p>
 

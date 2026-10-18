@@ -36,8 +36,6 @@ export class Effects {
   shakeStrength = 0;
   /** Red flash on hits, from 1 down to 0. */
   flash = 0;
-  /** Turns off shake and flashes, for players who don't want them. */
-  calm = false;
 
   constructor(private readonly random: () => number = Math.random) {}
 
@@ -46,8 +44,8 @@ export class Effects {
       case "hit":
         this.burst(event.x, event.y, palette.virus, 18, 260);
         this.burst(event.x, event.y, palette.blood, event.last ? 40 : 10, event.last ? 360 : 200);
-        this.shake(event.last ? 0.5 : 0.25, event.last ? 9 : 5);
-        this.flash = event.last ? 1 : 0.6;
+        this.shake(event.last ? 0.3 : 0.15, event.last ? 4 : 2);
+        this.flash = event.last ? 0.6 : 0.3;
         break;
       case "pickup":
         // The penguin is drawn left of its position, a quirk of the 2013 costume.
@@ -61,7 +59,6 @@ export class Effects {
         break;
       case "shatter":
         this.burst(event.x, event.y, palette.window, 26, 240, 900);
-        this.shake(0.12, 3);
         break;
       case "launch":
         this.burst(event.x, event.y, palette.spark, 8, 140);
@@ -99,7 +96,7 @@ export class Effects {
 
   /** Where to draw the stage this frame, in stage pixels. */
   shakeOffset(): [number, number] {
-    if (this.calm || this.shakeTime <= 0) return [0, 0];
+    if (this.shakeTime <= 0) return [0, 0];
     const strength = this.shakeStrength * Math.min(1, this.shakeTime / 0.15);
     return [(this.random() * 2 - 1) * strength, (this.random() * 2 - 1) * strength];
   }

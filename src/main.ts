@@ -1,14 +1,15 @@
 import { buildMask, fetchAll, loadImage } from "./assets.ts";
 import { Audio } from "./audio.ts";
-import { ClassicMode } from "./classic-mode.ts";
 import { costumes, createClassic, sounds } from "./game/classic.ts";
 import { Controls, moveForKey } from "./input.ts";
+import type { Costume } from "./engine/sprite.ts";
 import type { CostumeImages } from "./render.ts";
 import { Effects } from "./remaster/effects.ts";
 import { Fader } from "./remaster/fader.ts";
 import { DT, Game, threatCostumes, type GameEvent } from "./remaster/game.ts";
 import { Best, rankFor } from "./remaster/progress.ts";
 import { formatTime, RemasterRenderer, toStage } from "./remaster/render.ts";
+import { defaults, loadSettings, saveSettings, showTouch, type TouchControls } from "./remaster/settings.ts";
 
 const MAX_UPDATES_PER_FRAME = 8;
 
@@ -28,10 +29,13 @@ async function loadFont(): Promise<void> {
 
 async function main(): Promise<void> {
   const project = createClassic();
+  // The 2013 title, credited to @astrovm instead of the old @astrolince.
+  const title: Costume = { ...costumes.title[0]!, file: "title-remaster.png" };
   const allCostumes = [
     project.stage,
     ...project.sprites.flatMap(({ sprite }) => sprite.costumes),
     ...Object.values(threatCostumes).flat(),
+    title,
   ];
   const soundFiles = Object.keys(sounds).map((name) => `sounds/${name}.${name === "laser" || name === "meow" ? "wav" : "mp3"}`);
   const [files] = await Promise.all([
@@ -60,27 +64,33 @@ async function main(): Promise<void> {
   const fader = new Fader();
   const effects = new Effects();
   const canvas = $<HTMLCanvasElement>("game");
-  const renderer = new RemasterRenderer(canvas, images, { stage: costumes.stage, title: costumes.title[0]! });
+  const renderer = new RemasterRenderer(canvas, images, { stage: costumes.stage, title });
   const ui = $("ui");
   const status = $("status");
-  const menus = { title: $("title-menu"), pause: $("pause-menu"), over: $("over-menu") };
+  const menus = { title: $("title-menu"), pause: $("pause-menu"), over: $("over-menu"), settings: $("settings-menu") };
   const pauseButton = $<HTMLButtonElement>("pause-game");
+  const settingsButton = $<HTMLButtonElement>("open-settings");
+  const touch = $("touch");
+  const touchScreen = window.matchMedia("(pointer: coarse)");
   const best = new Best(storage());
   const showBest = () => {
     $("title-best").hidden = best.value === 0;
     $("title-best").textContent = `Best ${formatTime(best.value)} · ${rankFor(best.value)}`;
   };
   showBest();
-  const corner = $("corner");
   let paused = false;
+  let settingsOpen = false;
 
-  const classic = new ClassicMode(images, audio, () => leaveClassic());
+  const settings = loadSettings(storage());
+  const applySettings = () => {
+    audio.setLevels(settings.music, settings.effects);
+    saveSettings(storage(), settings);
+    showMenus();
+  };
+
   (window as unknown as { insideTheFirewall: unknown }).insideTheFirewall = {
     game,
     audio,
-    get classic() {
-      return classic.world;
-    },
     get view() {
       return renderer.view;
     },
@@ -94,22 +104,66 @@ async function main(): Promise<void> {
     ui.style.left = `${x / ratio}px`;
     ui.style.top = `${y / ratio}px`;
     ui.style.setProperty("--s", `${scale / ratio}px`);
-    classic.layout();
   };
   window.addEventListener("resize", layout);
   layout();
 
   const showMenus = () => {
     const playing = game.phase === "playing";
-    menus.title.hidden = game.phase !== "title" || fader.busy;
-    menus.pause.hidden = !(playing && paused);
+    menus.settings.hidden = !settingsOpen;
+    menus.title.hidden = game.phase !== "title" || fader.busy || settingsOpen;
+    menus.pause.hidden = !(playing && paused) || settingsOpen;
     menus.over.hidden = game.phase !== "over";
     pauseButton.hidden = !playing || paused;
+    settingsButton.hidden = game.phase !== "title" || fader.busy || settingsOpen;
+    touch.hidden = !playing || paused || !showTouch(settings.touch, touchScreen.matches);
   };
+  touchScreen.addEventListener("change", () => showMenus());
+
+  const openSettings = () => {
+    if (game.phase === "over" || fader.busy) return;
+    settingsOpen = true;
+    $<HTMLInputElement>("music-volume").value = String(Math.round(settings.music * 100));
+    $<HTMLInputElement>("effects-volume").value = String(Math.round(settings.effects * 100));
+    for (const radio of document.querySelectorAll<HTMLInputElement>('input[name="touch"]')) {
+      radio.checked = radio.value === settings.touch;
+    }
+    showMenus();
+    $("music-volume").focus();
+  };
+  const closeSettings = () => {
+    if (!settingsOpen) return;
+    settingsOpen = false;
+    showMenus();
+    if (game.phase === "title") settingsButton.focus();
+    else menus.pause.querySelector<HTMLElement>('[data-action="settings"]')?.focus();
+  };
+  $("music-volume").addEventListener("input", (event) => {
+    settings.music = Number((event.target as HTMLInputElement).value) / 100;
+    applySettings();
+  });
+  $("effects-volume").addEventListener("input", (event) => {
+    settings.effects = Number((event.target as HTMLInputElement).value) / 100;
+    applySettings();
+  });
+  // Let the player hear how loud the sound effects are.
+  $("effects-volume").addEventListener("change", () => {
+    audio.unlock();
+    audio.play("laser");
+  });
+  for (const radio of document.querySelectorAll<HTMLInputElement>('input[name="touch"]')) {
+    radio.addEventListener("change", () => {
+      settings.touch = radio.value as TouchControls;
+      applySettings();
+    });
+  }
+  settingsButton.addEventListener("click", openSettings);
+
 
   const setPaused = (value: boolean) => {
     if (value === paused || game.phase !== "playing") return;
     paused = value;
+    settingsOpen = false;
     controls.releaseAll();
     if (paused) {
       audio.pause();
@@ -136,7 +190,7 @@ async function main(): Promise<void> {
     showMenus();
   };
   const play = () => {
-    if (game.phase !== "title" || fader.busy) return;
+    if (game.phase !== "title" || fader.busy || settingsOpen) return;
     audio.unlock();
     audio.play("laser");
     startGame();
@@ -151,26 +205,6 @@ async function main(): Promise<void> {
     });
   };
 
-  const enterClassic = () => {
-    fader.to(() => {
-      game.toTitle();
-      audio.setMusic(null);
-      canvas.hidden = true;
-      ui.hidden = true;
-      corner.hidden = true;
-      classic.enter();
-    });
-  };
-  const leaveClassic = () => {
-    classic.exit();
-    canvas.hidden = false;
-    ui.hidden = false;
-    corner.hidden = false;
-    fader.fadeIn();
-    game.toTitle();
-    showMenus();
-    menus.title.querySelector("button")?.focus();
-  };
 
   const handle = (event: GameEvent) => {
     effects.handle(event);
@@ -200,12 +234,13 @@ async function main(): Promise<void> {
 
   // Buttons.
   $("play").addEventListener("click", play);
-  $("open-classic").addEventListener("click", enterClassic);
   pauseButton.addEventListener("click", () => setPaused(true));
   for (const button of document.querySelectorAll<HTMLButtonElement>("#ui [data-action]")) {
     button.addEventListener("click", () => {
       const action = button.dataset.action;
       if (action === "resume") setPaused(false);
+      else if (action === "settings") openSettings();
+      else if (action === "close-settings") closeSettings();
       else if (action === "restart") startGame();
       else if (action === "menu") toTitle();
     });
@@ -218,13 +253,12 @@ async function main(): Promise<void> {
   window.addEventListener("keydown", (event) => {
     audio.unlock();
     if (event.ctrlKey || event.metaKey || event.altKey) return;
-    if (classic.active) {
-      if (event.key === "Escape") leaveClassic();
-      else classic.keyDown(event);
+    const onButton = event.target instanceof HTMLButtonElement || event.target instanceof HTMLInputElement;
+    const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+    if (settingsOpen) {
+      if (key === "Escape" || key === "p") closeSettings();
       return;
     }
-    const onButton = event.target instanceof HTMLButtonElement;
-    const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
     if (key === "f") return toggleFullscreen();
     if (game.phase === "title") {
       if ((key === " " || key === "Enter") && !onButton) {
@@ -248,17 +282,37 @@ async function main(): Promise<void> {
     controls.press(`key:${event.code}`, move);
   });
   window.addEventListener("keyup", (event) => {
-    if (classic.active) classic.keyUp(event);
     controls.release(`key:${event.code}`);
   });
   window.addEventListener("blur", () => {
     controls.releaseAll();
-    classic.releaseKeys();
     setPaused(true);
   });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) setPaused(true);
   });
+  // Touch buttons. Each finger holds its own button, so two can be held at once.
+  for (const button of touch.querySelectorAll<HTMLButtonElement>("[data-move]")) {
+    const move = button.dataset.move as "left" | "right" | "down" | "jump";
+    const fingers = new Set<number>();
+    const lift = (event: PointerEvent) => {
+      fingers.delete(event.pointerId);
+      controls.release(`touch:${event.pointerId}`);
+      button.classList.toggle("held", fingers.size > 0);
+    };
+    button.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      audio.unlock();
+      fingers.add(event.pointerId);
+      controls.press(`touch:${event.pointerId}`, move);
+      button.classList.add("held");
+    });
+    button.addEventListener("pointerup", lift);
+    button.addEventListener("pointercancel", lift);
+    button.addEventListener("lostpointercapture", lift);
+    button.addEventListener("contextmenu", (event) => event.preventDefault());
+  }
+
   canvas.addEventListener("pointerdown", (event) => {
     audio.unlock();
     const ratio = window.devicePixelRatio || 1;
@@ -300,30 +354,26 @@ async function main(): Promise<void> {
   };
 
   $("loading").hidden = true;
-  showMenus();
+  applySettings();
 
   let last = performance.now();
   let pending = 0;
   const frame = (now: number) => {
     const elapsed = Math.min(250, now - last);
     last = now;
-    if (classic.active) {
-      classic.frame(elapsed);
-    } else {
-      pollGamepads();
-      pending = paused ? 0 : pending + elapsed / 1000;
-      let updates = 0;
-      while (pending >= DT && updates < MAX_UPDATES_PER_FRAME) {
-        game.update(controls.read());
-        for (const event of game.events.splice(0)) handle(event);
-        pending -= DT;
-        updates++;
-      }
-      if (updates === MAX_UPDATES_PER_FRAME) pending = 0;
-      if (!paused) effects.update(elapsed / 1000);
-      renderer.fade = fader.value;
-      renderer.draw(game, paused || game.frozen > 0 ? 1 : Math.min(1, pending / DT), effects);
+    pollGamepads();
+    pending = paused ? 0 : pending + elapsed / 1000;
+    let updates = 0;
+    while (pending >= DT && updates < MAX_UPDATES_PER_FRAME) {
+      game.update(controls.read());
+      for (const event of game.events.splice(0)) handle(event);
+      pending -= DT;
+      updates++;
     }
+    if (updates === MAX_UPDATES_PER_FRAME) pending = 0;
+    if (!paused) effects.update(elapsed / 1000);
+    renderer.fade = fader.value;
+    renderer.draw(game, paused || game.frozen > 0 ? 1 : Math.min(1, pending / DT), effects);
     fader.update(elapsed / 1000);
     requestAnimationFrame(frame);
   };

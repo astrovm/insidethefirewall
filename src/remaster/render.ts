@@ -21,7 +21,7 @@ export interface View {
   scale: number;
 }
 
-/** The biggest stage that fits, centered. The rest of the screen is the firewall around it. */
+/** The biggest stage that fits, centered, with black around it. */
 export function fitStage(width: number, height: number): View {
   const scale = Math.max(0.01, Math.min(width / STAGE_WIDTH, height / STAGE_HEIGHT));
   return {
@@ -41,12 +41,10 @@ export function toStage(view: View, px: number, py: number): [number, number] {
   return [(px - view.x) / view.scale - STAGE_WIDTH / 2, STAGE_HEIGHT / 2 - (py - view.y) / view.scale];
 }
 
-/** Brick rows of the 2013 floor: 14 px apart with 3 px of mortar. */
-const BRICK_ROW = 14;
-const BRICK_WIDTH = 36;
-const MORTAR = 3;
-/** Top of the floor bricks in the stage art. */
-const FLOOR_Y = -116;
+/** Where the 2013 project put the title, and its size. */
+const TITLE_X = -1;
+const TITLE_Y = 1;
+const TITLE_SIZE = 0.9708737864077678;
 
 interface Raster {
   canvas: HTMLCanvasElement;
@@ -58,7 +56,6 @@ interface Raster {
 export class RemasterRenderer {
   private readonly ctx: CanvasRenderingContext2D;
   private readonly rasters = new Map<Costume, Raster>();
-  private wall: CanvasPattern | null = null;
   view: View = { x: 0, y: 0, scale: 1 };
   /** 0 shows the game, 1 is fully black. Used for fades between screens. */
   fade = 0;
@@ -78,7 +75,6 @@ export class RemasterRenderer {
     this.canvas.height = Math.max(1, Math.round(cssHeight * pixelRatio));
     this.view = fitStage(this.canvas.width, this.canvas.height);
     this.rasters.clear();
-    this.wall = null;
   }
 
   draw(game: Game, between: number, effects: Effects): void {
@@ -88,26 +84,25 @@ export class RemasterRenderer {
     const steady = this.view;
     const [dx, dy] = effects.shakeOffset();
     this.view = { ...steady, x: steady.x + Math.round(dx * steady.scale), y: steady.y + Math.round(dy * steady.scale) };
+    this.drawBackdrop("#000");
+    if (game.phase !== "over") this.drawStage();
     if (game.phase === "title") this.drawTitle();
-    else if (game.phase === "over") this.drawBackdrop("#000");
-    else this.drawFirewall();
 
-    // Sprites can poke out of the stage a little, as in Scratch. Hide that
-    // part behind the firewall.
+    // Sprites can poke out of the stage a little, as in Scratch. Hide that part.
     ctx.save();
     if (game.phase === "playing") {
       ctx.beginPath();
-      ctx.rect(this.view.x, 0, Math.round(STAGE_WIDTH * this.view.scale), this.canvas.height);
+      ctx.rect(this.view.x, this.view.y, Math.round(STAGE_WIDTH * this.view.scale), Math.round(STAGE_HEIGHT * this.view.scale));
       ctx.clip();
     }
     if (game.phase === "playing") {
-      if (game.warning > 0) this.drawAim(game.virus, game.target, game.warning, effects.calm);
-      for (const threat of game.threats) if (threat.warning > 0) this.drawWarning(threat, effects.calm);
+      if (game.warning > 0) this.drawAim(game.virus, game.target);
+      for (const threat of game.threats) if (threat.warning > 0) this.drawWarning(threat);
     }
     for (const sprite of game.layers) {
       if (!sprite.visible) continue;
       const [x, y] = interpolate(sprite, game.previous.get(sprite), between);
-      ctx.globalAlpha = game.phase === "playing" ? this.alphaOf(game, sprite, effects.calm) : 1;
+      ctx.globalAlpha = game.phase === "playing" ? this.alphaOf(game, sprite) : 1;
       if (ctx.globalAlpha > 0) this.drawSprite(sprite, x, y);
       ctx.globalAlpha = 1;
     }
@@ -116,9 +111,9 @@ export class RemasterRenderer {
     this.view = steady;
     if (game.phase === "playing") this.drawHud(game);
 
-    if (effects.flash > 0 && !effects.calm) {
+    if (effects.flash > 0) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.fillStyle = `rgba(255, 0, 0, ${0.3 * effects.flash})`;
+      ctx.fillStyle = `rgba(255, 0, 0, ${0.25 * effects.flash})`;
       ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     }
 
@@ -133,20 +128,17 @@ export class RemasterRenderer {
    * Blinking, as a warning: the player while invincible, the penguin before it
    * goes and the virus before it flies. Calm mode dims them instead.
    */
-  private alphaOf(game: Game, sprite: Sprite, calm: boolean): number {
-    const blink = (seconds: number, every: number) => (Math.floor(seconds / every) % 2 === 0 ? 1 : 0.25);
-    if (sprite === game.player && game.invincible > 0) return calm ? 0.6 : blink(game.invincible, 0.08);
-    if (sprite === game.pickup && game.pickupLeft < PICKUP_BLINK) return calm ? 0.6 : blink(game.pickupLeft, 0.1);
-    if (sprite === game.virus && game.warning > 0) return calm ? 1 : blink(game.warning, 0.06);
-    const threat = game.threats.find((t) => t.sprite === sprite);
-    if (threat?.kind === "virus" && threat.warning > 0) return calm ? 1 : blink(threat.warning, 0.06);
+  private alphaOf(game: Game, sprite: Sprite): number {
+    const blink = (seconds: number) => (Math.floor(seconds / 0.15) % 2 === 0 ? 1 : 0.5);
+    if (sprite === game.player && game.invincible > 0) return blink(game.invincible);
+    if (sprite === game.pickup && game.pickupLeft < PICKUP_BLINK) return blink(game.pickupLeft);
     return 1;
   }
 
   /** What's coming: an aim line for viruses, an arrow at the wall for things on the floor, a shadow for popups. */
-  private drawWarning(threat: Threat, calm: boolean): void {
+  private drawWarning(threat: Threat): void {
     if (threat.kind === "virus") {
-      this.drawAim(threat.sprite, threat.target, threat.warning, calm);
+      this.drawAim(threat.sprite, threat.target);
       return;
     }
     const ctx = this.ctx;
@@ -164,7 +156,7 @@ export class RemasterRenderer {
       // A pixel arrow on the side it comes from, pointing in.
       const side = Math.sign(threat.sprite.x);
       const [x, y] = toCanvas(this.view, side * 226, FEET_Y + 14);
-      ctx.globalAlpha = calm ? 0.8 : Math.floor(threat.warning / 0.1) % 2 === 0 ? 1 : 0.3;
+      ctx.globalAlpha = 0.8;
       ctx.fillStyle = colors.red;
       const pixel = 3 * s;
       for (let column = 0; column < 4; column++) {
@@ -177,7 +169,7 @@ export class RemasterRenderer {
   }
 
   /** A dotted line from a virus to where it's about to fly. */
-  private drawAim(from: Sprite, to: { x: number; y: number }, warning: number, calm: boolean): void {
+  private drawAim(from: Sprite, to: { x: number; y: number }): void {
     const ctx = this.ctx;
     const s = this.view.scale;
     const [x1, y1] = toCanvas(this.view, from.x, from.y);
@@ -187,7 +179,7 @@ export class RemasterRenderer {
     const step = 9 * s;
     const dot = Math.max(1, Math.round(3 * s));
     ctx.save();
-    ctx.globalAlpha = calm ? 0.5 : 0.35 + 0.35 * Math.abs(Math.sin(warning * 25));
+    ctx.globalAlpha = 0.5;
     ctx.fillStyle = colors.red;
     for (let d = 20 * s; d < length; d += step) {
       const x = x1 + ((x2 - x1) * d) / length;
@@ -215,60 +207,17 @@ export class RemasterRenderer {
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
   }
 
-  /** The 2013 title art, stretched over the whole stage. */
-  private drawTitle(): void {
-    this.drawBackdrop(colors.title);
-    const title = this.backdrops.title;
-    this.drawCostume(title, 0, 0, 0, STAGE_WIDTH / title.width, STAGE_HEIGHT / title.height);
-  }
-
-  /** The 2013 stage, with brick walls around it so it fills any screen. */
-  private drawFirewall(): void {
-    const ctx = this.ctx;
-    const { x, scale } = this.view;
-    const width = Math.round(STAGE_WIDTH * scale);
-    const [, floor] = toCanvas(this.view, 0, FLOOR_Y);
-    const wall = this.wallPattern();
-    if (typeof wall !== "string") wall.setTransform(new DOMMatrix().translate(x, Math.round(floor)));
-    ctx.fillStyle = wall;
-    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-    ctx.fillStyle = colors.green;
-    ctx.fillRect(x, 0, width, Math.round(floor));
+  /** The 2013 stage. */
+  private drawStage(): void {
+    const { x, y, scale } = this.view;
+    this.ctx.fillStyle = colors.green;
+    this.ctx.fillRect(x, y, Math.round(STAGE_WIDTH * scale), Math.round(STAGE_HEIGHT * scale));
     this.drawCostume(this.backdrops.stage, 0, 0, 0, 1, 1);
-    // Mortar where the side walls meet the room.
-    if (x > 0) {
-      const line = Math.max(1, Math.round(MORTAR * scale));
-      ctx.fillStyle = colors.mortar;
-      ctx.fillRect(x - line, 0, line, Math.round(floor));
-      ctx.fillRect(x + width, 0, line, Math.round(floor));
-    }
   }
 
-  /** A brick pattern in the 2013 floor's colors, with the same slightly wobbly hand-drawn lines. */
-  private wallPattern(): CanvasPattern | string {
-    if (this.wall) return this.wall;
-    const s = this.view.scale;
-    const rows = 4;
-    const tile = document.createElement("canvas");
-    tile.width = Math.max(1, Math.round(BRICK_WIDTH * 2 * s));
-    tile.height = Math.max(1, Math.round(BRICK_ROW * rows * s));
-    const ctx = tile.getContext("2d");
-    if (!ctx) return colors.brick;
-    ctx.fillStyle = colors.brick;
-    ctx.fillRect(0, 0, tile.width, tile.height);
-    ctx.fillStyle = colors.mortar;
-    const wobble = [0, 1, -1, 0.5];
-    for (let row = 0; row < rows; row++) {
-      const top = row * BRICK_ROW;
-      ctx.fillRect(0, Math.round(top * s), tile.width, Math.max(1, Math.round(MORTAR * s)));
-      const offset = row % 2 === 0 ? 0 : BRICK_WIDTH / 2;
-      for (let i = 0; i < 3; i++) {
-        const left = offset + i * BRICK_WIDTH + (wobble[(row + i) % wobble.length] ?? 0);
-        ctx.fillRect(Math.round(left * s), Math.round(top * s), Math.max(1, Math.round(MORTAR * s)), Math.round(BRICK_ROW * s));
-      }
-    }
-    this.wall = this.ctx.createPattern(tile, "repeat");
-    return this.wall ?? colors.brick;
+  /** The 2013 title, a little smaller than the stage so the room shows around it like a frame. */
+  private drawTitle(): void {
+    this.drawCostume(this.backdrops.title, TITLE_X, TITLE_Y, 0, TITLE_SIZE, TITLE_SIZE);
   }
 
   private drawSprite(sprite: Sprite, x: number, y: number): void {

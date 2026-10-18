@@ -4,6 +4,8 @@ import type { SoundEvent } from "./engine/world.ts";
 export class Audio {
   readonly context = new AudioContext();
   private readonly output = this.context.createGain();
+  private readonly musicOutput = this.context.createGain();
+  private readonly effectsOutput = this.context.createGain();
   private readonly buffers = new Map<string, AudioBuffer>();
   private readonly playing = new Map<string, AudioBufferSourceNode>();
   private music: AudioBufferSourceNode | null = null;
@@ -11,6 +13,8 @@ export class Audio {
 
   constructor() {
     this.output.connect(this.context.destination);
+    this.musicOutput.connect(this.output);
+    this.effectsOutput.connect(this.output);
   }
 
   async load(name: string, data: ArrayBuffer): Promise<void> {
@@ -24,6 +28,12 @@ export class Audio {
   set volume(value: number) {
     this.level = Math.min(1, Math.max(0, value));
     this.output.gain.value = this.level;
+  }
+
+  /** The player's own music and sound effect levels, under the overall volume. */
+  setLevels(music: number, effects: number): void {
+    this.musicOutput.gain.value = Math.min(1, Math.max(0, music));
+    this.effectsOutput.gain.value = Math.min(1, Math.max(0, effects));
   }
 
   /** Browsers only allow sound after the player interacts with the page. */
@@ -49,7 +59,7 @@ export class Audio {
     this.music = this.context.createBufferSource();
     this.music.buffer = buffer;
     this.music.loop = true;
-    this.music.connect(this.output);
+    this.music.connect(this.musicOutput);
     this.music.start();
   }
 
@@ -67,7 +77,7 @@ export class Audio {
       this.playing.get(key)?.stop();
       const source = this.context.createBufferSource();
       source.buffer = buffer;
-      source.connect(this.output);
+      source.connect(this.effectsOutput);
       source.onended = () => {
         if (this.playing.get(key) === source) this.playing.delete(key);
       };

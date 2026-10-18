@@ -1,7 +1,7 @@
 """Play the game in Chromium: title, start, pause, get hit, game over, repair.
 
 Also checks the 2013 Scratch export at /classic/ still loads, and that the
-in-game Classic mode looks like it.
+remaster's title screen looks like it.
 """
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -23,7 +23,8 @@ SCRATCH_PICKUP_TOUCHES = [
     [62, 5, False], [50, 20, False], [20, 30, True], [40, 8, False], [48, 12, True],
 ]
 
-DIFF_SCRIPT = """async ([a, b]) => {
+# Share of pixels that differ between two screenshots of the stage, in the top `rows` of its 360.
+DIFF_SCRIPT = """async ([a, b, rows = 360]) => {
   const load = (src) => new Promise((resolve, reject) => {
     const image = new Image(); image.onload = () => resolve(image); image.onerror = reject; image.src = src;
   });
@@ -35,11 +36,11 @@ DIFF_SCRIPT = """async ([a, b]) => {
   };
   const [pa, pb] = await Promise.all([pixels(a), pixels(b)]);
   let different = 0;
-  for (let i = 0; i < pa.length; i += 4) {
+  for (let i = 0; i < 480 * rows * 4; i += 4) {
     const d = Math.max(Math.abs(pa[i] - pb[i]), Math.abs(pa[i + 1] - pb[i + 1]), Math.abs(pa[i + 2] - pb[i + 2]));
     if (d > 48) different++;
   }
-  return different / (480 * 360);
+  return different / (480 * rows);
 }"""
 
 root = Path(__file__).resolve().parents[2] / "docs"
@@ -113,20 +114,18 @@ try:
         assert touches == SCRATCH_PICKUP_TOUCHES, touches
         print("Collision masks match Scratch")
 
-        # Classic mode looks like the 2013 Scratch export.
-        page.click("#open-classic")
-        page.wait_for_function("() => !document.querySelector('#classic').hidden", timeout=5000)
+        # The title screen sits inside the room like the 2013 one. Only the credit changed.
         page.wait_for_timeout(500)
-        title = page.locator("#stage").screenshot()
-        difference = page.evaluate(DIFF_SCRIPT, [as_data_url(title), as_data_url(classic_title)])
-        assert difference < 0.02, f"Classic title screen differs from the original in {difference:.1%} of pixels"
-        print(f"Classic mode matches the original ({difference:.2%} of pixels differ)")
-        page.keyboard.press("Space")
-        page.wait_for_function("() => insideTheFirewall.classic.vars.time >= 0", timeout=5000)
-        page.click("#back")
-        page.wait_for_function("() => document.querySelector('#classic').hidden", timeout=5000)
-        assert visible(page, "#play")
-        print("Classic mode plays and goes back to the remaster")
+        view = page.evaluate("""() => {
+          const { x, y, scale } = insideTheFirewall.view;
+          const ratio = devicePixelRatio;
+          return { x: x / ratio, y: y / ratio, width: 480 * scale / ratio, height: 360 * scale / ratio };
+        }""")
+        title = page.screenshot(clip=view, style="#corner { visibility: hidden }")
+        # The credit starts at row 320. Text edges are smoothed a little differently than in Scratch.
+        difference = page.evaluate(DIFF_SCRIPT, [as_data_url(title), as_data_url(classic_title), 320])
+        assert difference < 0.03, f"Title screen differs from the original in {difference:.1%} of pixels"
+        print(f"Title screen matches the original ({difference:.2%} of pixels differ)")
 
         # xp sets the volume with a message and expects a reply.
         reply = page.evaluate("""() => new Promise((resolve) => {
@@ -167,7 +166,8 @@ try:
         assert state(page)["health"] == 1 and state(page)["time"] < 1
         print("R starts a new game")
 
-        # Arrow keys run and jump.
+        # Arrow keys run and jump. No hits, so the virus can't end the run early.
+        page.evaluate("() => { insideTheFirewall.game.invincible = Infinity }")
         start_x = page.evaluate("insideTheFirewall.game.player.x")
         page.keyboard.down("ArrowLeft" if start_x > 0 else "ArrowRight")
         page.keyboard.press("ArrowUp")
@@ -186,6 +186,47 @@ try:
         assert visible(page, "#play")
         assert page.locator("#title-best").text_content().startswith("Best "), "Best time missing on the title"
         print("Menu goes back to the title, which shows the best time")
+
+        # Settings: the volume and touch choice stick after a reload.
+        page.click("#open-settings")
+        assert visible(page, "#settings-menu") and not visible(page, "#play")
+        page.locator("#music-volume").fill("25")
+        page.get_by_text("On", exact=True).click()
+        page.keyboard.press("Escape")
+        assert not visible(page, "#settings-menu") and visible(page, "#play")
+        page.reload(wait_until="load")
+        page.wait_for_function("() => document.querySelector('#loading').hidden", timeout=60000)
+        page.click("#open-settings")
+        assert page.locator("#music-volume").input_value() == "25"
+        assert page.locator('input[name="touch"][value="on"]').is_checked()
+        page.get_by_role("button", name="Done").click()
+        print("Settings are saved")
+
+        # Touch buttons show on a touch screen and move the player.
+        phone = browser.new_context(viewport={"width": 844, "height": 390}, has_touch=True, is_mobile=True)
+        touch = phone.new_page()
+        watch_errors(touch, errors)
+        touch.goto(base, wait_until="load")
+        touch.wait_for_function("() => document.querySelector('#loading').hidden && window.insideTheFirewall", timeout=60000)
+        assert not visible(touch, "#touch [data-move=\"jump\"]")
+        touch.tap("#play")
+        touch.wait_for_function("() => insideTheFirewall.game.phase === 'playing'", timeout=5000)
+        touch.evaluate("() => { insideTheFirewall.game.invincible = Infinity }")
+        assert visible(touch, "#touch [data-move=\"jump\"]")
+        start_x = touch.evaluate("insideTheFirewall.game.player.x")
+        button = touch.locator('#touch [data-move="right"]').bounding_box()
+        center = (button["x"] + button["width"] / 2, button["y"] + button["height"] / 2)
+        touch.dispatch_event('#touch [data-move="right"]', "pointerdown", {"pointerId": 7, "pointerType": "touch", "isPrimary": True, "clientX": center[0], "clientY": center[1]})
+        touch.wait_for_timeout(300)
+        touch.dispatch_event('#touch [data-move="right"]', "pointerup", {"pointerId": 7, "pointerType": "touch", "isPrimary": True})
+        moved = touch.evaluate("insideTheFirewall.game.player.x") - start_x
+        assert moved > 30, f"Touch only moved the player {moved} px"
+        touch.wait_for_timeout(200)
+        assert touch.evaluate("insideTheFirewall.game.player.x") - start_x - moved < 20, "Player kept running after lifting the finger"
+        touch.click("#pause-game")
+        assert not visible(touch, "#touch [data-move=\"jump\"]")
+        phone.close()
+        print("Touch buttons move the player")
 
         assert not errors, "\n".join(errors)
         browser.close()

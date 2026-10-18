@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { Effects } from "../src/remaster/effects.ts";
 import { seeded } from "./support.ts";
 
-test("hits throw pixels, shake the screen and flash red", () => {
+test("hits throw pixels, and gently shake the screen and flash red", () => {
   const effects = new Effects(seeded(1));
   effects.handle({ type: "hit", x: 10, y: -100, last: false });
   expect(effects.particles).toHaveLength(28);
@@ -10,14 +10,14 @@ test("hits throw pixels, shake the screen and flash red", () => {
   const colors = new Set(effects.particles.map((p) => p.color));
   expect([...colors].every((c) => ["#999900", "#cccc00", "#660000", "#ff0000", "#b51000", "#000008"].includes(c))).toBe(true);
   expect(colors.size).toBeGreaterThan(3);
-  expect([effects.shakeTime, effects.shakeStrength, effects.flash]).toEqual([0.25, 5, 0.6]);
+  expect([effects.shakeTime, effects.shakeStrength, effects.flash]).toEqual([0.15, 2, 0.3]);
 });
 
 test("the last hit is bigger", () => {
   const effects = new Effects(seeded(1));
   effects.handle({ type: "hit", x: 0, y: 0, last: true });
   expect(effects.particles).toHaveLength(58);
-  expect([effects.shakeTime, effects.shakeStrength, effects.flash]).toEqual([0.5, 9, 1]);
+  expect([effects.shakeTime, effects.shakeStrength, effects.flash]).toEqual([0.3, 4, 0.6]);
 });
 
 test("other events make their own bursts, and the rest make none", () => {
@@ -101,10 +101,10 @@ test("a weaker shake doesn't cut a stronger one short", () => {
   expect([effects.shakeTime, effects.shakeStrength]).toEqual([0.5, 9]);
 });
 
-test("calm mode never shakes", () => {
+test("only hits shake the screen", () => {
   const effects = new Effects(seeded(5));
-  effects.calm = true;
-  effects.shake(1, 10);
+  for (const type of ["pickup", "land", "jump", "launch", "shatter"] as const) effects.handle({ type, x: 0, y: 0 });
+  expect([effects.shakeTime, effects.flash]).toEqual([0, 0]);
   expect(effects.shakeOffset()).toEqual([0, 0]);
 });
 
