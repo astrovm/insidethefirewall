@@ -752,7 +752,7 @@ describe("power-ups", () => {
     game.update(noInput);
   }
 
-  test("the first one shows up after 15 s, within a jump of the floor and away from the player", () => {
+  test("the first one shows up after 30 s, within a jump of the floor and away from the player", () => {
     for (let seed = 1; seed <= 30; seed++) {
       const game = started(seed);
       parkVirus(game);
@@ -768,7 +768,7 @@ describe("power-ups", () => {
     }
   });
 
-  test("every kind shows up, then one every 12 to 18 s", () => {
+  test("every kind shows up, one every 30 to 45 s", () => {
     const kinds = new Set<string>();
     const gaps: number[] = [];
     const game = started(3);
@@ -776,7 +776,7 @@ describe("power-ups", () => {
     game.invincible = Infinity;
     game.player.setXY(-230, GROUND_Y);
     let last = -1;
-    for (let i = 0; i < Math.round(300 / DT); i++) {
+    for (let i = 0; i < Math.round(600 / DT); i++) {
       const before = game.powerUp.visible;
       game.update(noInput);
       game.health = 9;
@@ -787,8 +787,8 @@ describe("power-ups", () => {
       }
     }
     expect([...kinds].sort()).toEqual(["freeze", "jetpack", "shield"]);
-    expect(Math.min(...gaps)).toBeGreaterThanOrEqual(12 - 1e-6);
-    expect(Math.max(...gaps)).toBeLessThanOrEqual(18 + 1e-6);
+    expect(Math.min(...gaps)).toBeGreaterThanOrEqual(30 - 1e-6);
+    expect(Math.max(...gaps)).toBeLessThanOrEqual(45 + 1e-6);
   });
 
   test("goes away after 5 s if nobody grabs it", () => {

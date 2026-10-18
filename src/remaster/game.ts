@@ -62,9 +62,9 @@ export type PowerUpKind = "jetpack" | "shield" | "freeze";
 export const POWER_UPS: PowerUpKind[] = ["jetpack", "shield", "freeze"];
 /** Seconds each power-up lasts. A shield also ends when it blocks a hit. */
 export const POWER_UP_TIME: Record<PowerUpKind, number> = { jetpack: 6, shield: 10, freeze: 4 };
-/** The first power-up comes after 15 s, then one every 12 to 18 s, for 5 s each. */
-export const POWER_UP_FIRST = 15;
-const POWER_UP_EVERY = [12, 18] as const;
+/** Power-ups are rare: the first comes after 30 s, then one every 30 to 45 s, for 5 s each. */
+export const POWER_UP_FIRST = 30;
+const POWER_UP_EVERY = [30, 45] as const;
 export const POWER_UP_SHOWN = 5;
 /** Power-ups float within a jump of the floor, and never right on the player. */
 const POWER_UP_LOWEST = GROUND_Y;
