@@ -163,7 +163,8 @@ export class RemasterRenderer {
       if (sprite === game.powerUp) y += Math.sin(game.time * 5) * 3;
       const grown = sprite.size / sprite.initial.size;
       // Wrapping around the sides, the player shows on both at once.
-      const copies = playing && sprite === game.player ? wrapCopies(x) : [x];
+      const wraps = playing && sprite === game.player && game.powers.jetpack > 0;
+      const copies = wraps ? wrapCopies(x, this.playerReach(game)) : [x];
       for (const x of copies) {
         if (playing && sprite === game.player && game.powers.jetpack > 0) {
           this.drawJetpack(x, y, sprite.flipX, game.powers.jetpack < 1 ? blink(game.powers.jetpack) : 1, game.flying, game.time, grown);
@@ -212,6 +213,13 @@ export class RemasterRenderer {
     if (sprite === game.powerUp && game.powerUpLeft < PICKUP_BLINK) return blink(game.powerUpLeft);
     if (sprite === game.virus && game.powers.freeze > 0) return game.powers.freeze < 1 ? blink(game.powers.freeze) : 0.8;
     return 1;
+  }
+
+  /** How far the player with a jetpack reaches each way from its middle, with the shield too if it has one. */
+  private playerReach(game: Game): number {
+    const bounds = game.player.bounds();
+    const grown = game.player.size / game.player.initial.size;
+    return Math.max((bounds.right - bounds.left) / 2, (game.powers.shield > 0 ? 52 : 48) * grown);
   }
 
   /** The jetpack on the player's back, with a flame while it pushes. `grown` is the player's size, 1 as usual. */
@@ -444,13 +452,10 @@ export class RemasterRenderer {
   }
 }
 
-/** How far from its middle the player, with a jetpack and a shield, can reach. */
-const PLAYER_REACH = 60;
-
-/** Where to draw the player: once, or twice while it's partly off a side and wraps around to the other. */
-export function wrapCopies(x: number): number[] {
-  if (x > STAGE_WIDTH / 2 - PLAYER_REACH) return [x, x - STAGE_WIDTH];
-  if (x < PLAYER_REACH - STAGE_WIDTH / 2) return [x, x + STAGE_WIDTH];
+/** Where to draw the player, `reach` wide each way: once, or twice while it's partly off a side and wraps around to the other. */
+export function wrapCopies(x: number, reach: number): number[] {
+  if (x + reach > STAGE_WIDTH / 2) return [x, x - STAGE_WIDTH];
+  if (x - reach < -STAGE_WIDTH / 2) return [x, x + STAGE_WIDTH];
   return [x];
 }
 
