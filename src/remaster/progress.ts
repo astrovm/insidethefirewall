@@ -8,29 +8,6 @@ export function difficulty(seconds: number): number {
   return Math.min(1, Math.max(0, seconds / HARDEST_AT));
 }
 
-export type ThreatKind = "worm" | "virus";
-
-export interface Schedule {
-  /** Seconds survived before the first one comes. */
-  from: number;
-  /** Seconds between them, shortest to longest, at the start and at the hardest. */
-  easiest: [number, number];
-  hardest: [number, number];
-}
-
-/** Worms on the floor, then a second virus out of the monitor. */
-export const THREATS: Record<ThreatKind, Schedule> = {
-  worm: { from: 20, easiest: [7, 10], hardest: [3, 5] },
-  virus: { from: 60, easiest: [9, 12], hardest: [4, 6] },
-};
-
-/** Shortest and longest wait for the next threat of a kind, after this many seconds. */
-export function gapFor(kind: ThreatKind, seconds: number): [number, number] {
-  const { easiest, hardest } = THREATS[kind];
-  const d = difficulty(seconds);
-  return [easiest[0] + (hardest[0] - easiest[0]) * d, easiest[1] + (hardest[1] - easiest[1]) * d];
-}
-
 /** Ranks by seconds survived. */
 export const RANKS = [
   { from: 0, name: "Script kiddie" },

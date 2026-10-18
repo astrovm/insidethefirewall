@@ -4,7 +4,7 @@
 
 import { Sprite, type Costume, type RotationStyle } from "../engine/sprite.ts";
 import { costumes, sounds } from "../game/classic.ts";
-import { difficulty, gapFor, THREATS, type ThreatKind } from "./progress.ts";
+import { difficulty } from "./progress.ts";
 
 export const HZ = 60;
 export const DT = 1 / HZ;
@@ -55,15 +55,6 @@ const PICKUP_Y = -25;
 /** Penguin spots where all of it is on stage. The 2013 game could put half of it off the right edge. */
 const PICKUP_LEFTMOST = -120;
 const PICKUP_RIGHTMOST = 260;
-/** Where the player's feet are, for things that move along the floor. */
-export const FEET_Y = GROUND_Y - 45;
-/** The new threats' pixel art is drawn at 3 stage pixels per pixel. */
-const ART_SIZE = 300;
-/** Threats come in from just past the side walls. */
-const OFFSTAGE_X = 240 + 40;
-export const THREAT_WARNING = 0.7;
-export const WORM_SPEED = 120;
-const WORM_FRAME = 0.15;
 const GLADOS_AFTER = 6;
 const HL3_AFTER = 10;
 
@@ -89,37 +80,6 @@ export type GameEvent =
   | { type: "land"; x: number; y: number }
   | { type: "launch"; x: number; y: number }
   | { type: "lost"; time: number };
-
-const pixelArt = (name: string, file: string, width: number, height: number, center: [number, number]): Costume => ({
-  name,
-  file,
-  x: 0,
-  y: 0,
-  width,
-  height,
-  centerX: center[0],
-  centerY: center[1],
-  smooth: false,
-});
-
-/** Costumes for the remaster's worm. It stands on its bottom edge. */
-export const threatCostumes = {
-  worm: [pixelArt("worm1", "worm1.svg", 24, 8, [12, 8]), pixelArt("worm2", "worm2.svg", 24, 8, [12, 8])],
-};
-
-/** Something besides the main virus that hurts: a worm, or a second virus. */
-export interface Threat {
-  kind: ThreatKind;
-  sprite: Sprite;
-  /** Seconds of warning left before it moves. */
-  warning: number;
-  /** A worm's speed. */
-  vx: number;
-  /** Where a virus will fly to. */
-  target: { x: number; y: number };
-  /** Gone, and about to be removed. */
-  done: boolean;
-}
 
 function sprite(
   name: string,
@@ -180,8 +140,6 @@ export class Game {
   target = { x: 0, y: 0 };
   /** Seconds the game stays frozen after a hit. */
   frozen = 0;
-  threats: Threat[] = [];
-  private spawns: Partial<Record<ThreatKind, number>> = {};
   private dying = 0;
   private jumpCut = false;
   private jumpBuffer = 0;
@@ -219,8 +177,6 @@ export class Game {
     this.time = 0;
     this.health = 1;
     this.speed = VIRUS_START_SPEED;
-    this.threats = [];
-    this.spawns = {};
     this.pickupTimer = new Timer(PICKUP_EVERY);
     this.pickupShown = 0;
     this.vx = 0;
@@ -245,7 +201,7 @@ export class Game {
     virus.visible = true;
     this.respawnVirus();
     pickup.setXY(pickup.x, PICKUP_Y);
-    this.updateLayers();
+    this.layers = [pickup, player, monitor, virus];
     this.events.push({ type: "music", playing: true });
   }
 
@@ -273,8 +229,6 @@ export class Game {
     this.moveVirus();
     this.updatePickup();
     this.updateDifficulty();
-    this.moveThreats();
-    this.updateLayers();
     if (this.health < 1) {
       this.health = 0;
       this.dying = DEATH_PAUSE;
@@ -377,74 +331,9 @@ export class Game {
     return true;
   }
 
-  /** Speeds the virus up little by little, and sends threats when they're due. */
+  /** Speeds the virus up little by little. */
   private updateDifficulty(): void {
     this.speed = VIRUS_START_SPEED + (VIRUS_TOP_SPEED - VIRUS_START_SPEED) * difficulty(this.time);
-    for (const kind of Object.keys(THREATS) as ThreatKind[]) {
-      if (this.time < THREATS[kind].from - 1e-9) continue;
-      const left = (this.spawns[kind] ?? 0) - DT;
-      if (left > 1e-9) {
-        this.spawns[kind] = left;
-        continue;
-      }
-      // The second virus waits until the first one has left the monitor, so they never overlap there.
-      if (kind === "virus" && this.warning > 0) continue;
-      const [low, high] = gapFor(kind, this.time);
-      this.spawns[kind] = low + this.random() * (high - low);
-      this.spawn(kind);
-    }
-  }
-
-  private spawn(kind: ThreatKind): void {
-    if (kind === "virus") {
-      // Another virus out of the monitor, with its own aim line.
-      const s = sprite("virus", costumes.virus, 0, 0, this.virus.size, "left-right");
-      s.visible = true;
-      s.setXY(VIRUS_SPAWN.x, VIRUS_SPAWN.y);
-      this.threats.push({ kind, sprite: s, warning: this.aimWarning(), vx: 0, target: { x: this.player.x, y: this.player.y }, done: false });
-      return;
-    }
-    const side = this.random() < 0.5 ? -1 : 1;
-    const s = sprite(kind, threatCostumes.worm, 0, 0, ART_SIZE, "left-right", side < 0 ? 90 : -90);
-    s.visible = true;
-    // Placed directly: the Scratch fence would pull it onto the stage.
-    s.x = side * OFFSTAGE_X;
-    s.y = FEET_Y;
-    this.threats.push({ kind, sprite: s, warning: THREAT_WARNING, vx: -side * WORM_SPEED, target: { x: 0, y: 0 }, done: false });
-  }
-
-  private moveThreats(): void {
-    for (const threat of this.threats) {
-      const s = threat.sprite;
-      if (threat.warning > 0) {
-        if (threat.kind === "virus" && threat.warning > AIM_LOCK + 1e-9) {
-          threat.target = { x: this.player.x, y: this.player.y };
-        }
-        threat.warning -= DT;
-        if (threat.warning > 1e-9) continue;
-        threat.warning = 0;
-        if (threat.kind === "virus") {
-          s.pointTowards(threat.target.x, threat.target.y);
-          this.events.push({ type: "launch", x: s.x, y: s.y });
-        }
-      }
-      if (threat.kind === "worm") {
-        s.x += threat.vx * DT;
-        s.setCostume(Math.floor(Math.abs(s.x) / (WORM_SPEED * WORM_FRAME)) % 2 === 0 ? "worm1" : "worm2");
-        this.hurts(s);
-        if (Math.abs(s.x) > OFFSTAGE_X + 20) threat.done = true;
-      } else {
-        s.move(this.speed * DT);
-        if (this.hurts(s) || s.isTouchingEdge()) threat.done = true;
-      }
-    }
-    this.threats = this.threats.filter((threat) => !threat.done);
-  }
-
-  /** Back to front: the penguin, worms, the player, the monitor and the viruses. */
-  private updateLayers(): void {
-    const of = (kind: ThreatKind) => this.threats.filter((t) => t.kind === kind).map((t) => t.sprite);
-    this.layers = [this.pickup, ...of("worm"), this.player, this.monitor, this.virus, ...of("virus")];
   }
 
   private updatePickup(): void {
@@ -490,7 +379,6 @@ export class Game {
     pickup.setDirection(90);
     pickup.setXY(-124, -115);
     hl3.visible = false;
-    this.threats = [];
     this.layers = [gameOver, virus, monitor, player, pickup, hl3];
   }
 

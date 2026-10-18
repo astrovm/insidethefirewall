@@ -6,7 +6,7 @@ import type { Costume } from "./engine/sprite.ts";
 import type { CostumeImages } from "./render.ts";
 import { Effects } from "./remaster/effects.ts";
 import { Fader } from "./remaster/fader.ts";
-import { DT, Game, threatCostumes, type GameEvent } from "./remaster/game.ts";
+import { DT, Game, type GameEvent } from "./remaster/game.ts";
 import { Best, rankFor } from "./remaster/progress.ts";
 import { formatTime, RemasterRenderer, toStage } from "./remaster/render.ts";
 import { defaults, loadSettings, saveSettings, showTouch, type TouchControls } from "./remaster/settings.ts";
@@ -34,7 +34,6 @@ async function main(): Promise<void> {
   const allCostumes = [
     project.stage,
     ...project.sprites.flatMap(({ sprite }) => sprite.costumes),
-    ...Object.values(threatCostumes).flat(),
     title,
   ];
   const soundFiles = Object.keys(sounds).map((name) => `sounds/${name}.${name === "laser" || name === "meow" ? "wav" : "mp3"}`);

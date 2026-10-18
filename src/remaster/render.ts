@@ -1,7 +1,7 @@
 import { STAGE_HEIGHT, STAGE_WIDTH, type Costume, type Sprite } from "../engine/sprite.ts";
 import { interpolate, type CostumeImages } from "../render.ts";
 import type { Effects } from "./effects.ts";
-import { FEET_Y, PICKUP_BLINK, type Game, type Threat } from "./game.ts";
+import { PICKUP_BLINK, type Game } from "./game.ts";
 
 export const colors = {
   green: "#00cc44",
@@ -94,10 +94,6 @@ export class RemasterRenderer {
       ctx.rect(this.view.x, this.view.y, Math.round(STAGE_WIDTH * this.view.scale), Math.round(STAGE_HEIGHT * this.view.scale));
       ctx.clip();
     }
-    if (game.phase === "playing") {
-      if (game.warning > 0) this.drawAim(game.virus, game.target);
-      for (const threat of game.threats) if (threat.warning > 0) this.drawWarning(threat);
-    }
     for (const sprite of game.layers) {
       if (!sprite.visible) continue;
       const [x, y] = interpolate(sprite, game.previous.get(sprite), between);
@@ -131,49 +127,6 @@ export class RemasterRenderer {
     if (sprite === game.player && game.invincible > 0) return blink(game.invincible);
     if (sprite === game.pickup && game.pickupLeft < PICKUP_BLINK) return blink(game.pickupLeft);
     return 1;
-  }
-
-  /** What's coming: an aim line for a virus, an arrow at the wall for a worm. */
-  private drawWarning(threat: Threat): void {
-    if (threat.kind === "virus") {
-      this.drawAim(threat.sprite, threat.target);
-      return;
-    }
-    // A pixel arrow on the side it comes from, pointing in.
-    const ctx = this.ctx;
-    const side = Math.sign(threat.sprite.x);
-    const [x, y] = toCanvas(this.view, side * 226, FEET_Y + 14);
-    ctx.save();
-    ctx.globalAlpha = 0.8;
-    ctx.fillStyle = colors.red;
-    const pixel = 3 * this.view.scale;
-    for (let column = 0; column < 4; column++) {
-      const height = 7 - column * 2;
-      const left = x - side * (column - 1.5) * pixel - pixel / 2;
-      ctx.fillRect(Math.round(left), Math.round(y - (height * pixel) / 2), Math.round(pixel), Math.round(height * pixel));
-    }
-    ctx.restore();
-  }
-
-  /** A dotted line from a virus to where it's about to fly. */
-  private drawAim(from: Sprite, to: { x: number; y: number }): void {
-    const ctx = this.ctx;
-    const s = this.view.scale;
-    const [x1, y1] = toCanvas(this.view, from.x, from.y);
-    const [x2, y2] = toCanvas(this.view, to.x, to.y);
-    const length = Math.hypot(x2 - x1, y2 - y1);
-    if (length < 1) return;
-    const step = 9 * s;
-    const dot = Math.max(1, Math.round(3 * s));
-    ctx.save();
-    ctx.globalAlpha = 0.5;
-    ctx.fillStyle = colors.red;
-    for (let d = 20 * s; d < length; d += step) {
-      const x = x1 + ((x2 - x1) * d) / length;
-      const y = y1 + ((y2 - y1) * d) / length;
-      ctx.fillRect(Math.round(x - dot / 2), Math.round(y - dot / 2), dot, dot);
-    }
-    ctx.restore();
   }
 
   private drawBackdrop(color: string): void {
