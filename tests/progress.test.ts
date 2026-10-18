@@ -22,6 +22,16 @@ describe("stages and ranks", () => {
     }
   });
 
+  test("stages have their own names and ranks", () => {
+    expect(STAGES.map((s) => [s.name, s.rank])).toEqual([
+      ["Infected", "Script kiddie"],
+      ["Worms", "Antivirus trial"],
+      ["Popups", "Sysadmin"],
+      ["Trojan horse", "Firewall"],
+      ["Meltdown", "Root"],
+    ]);
+  });
+
   test("the rank is named after the last stage reached", () => {
     expect([0, 19, 20, 50, 80, 300].map(rankFor)).toEqual([
       "Script kiddie",
@@ -107,6 +117,14 @@ describe("pixel art", () => {
     const costumes = [...threatCostumes.worm, ...threatCostumes.popup, ...threatCostumes.trojan];
     const art = [worm[0]!, worm[1]!, popup, trojan];
     costumes.forEach((costume, i) => expect([costume.width, costume.height]).toEqual(size(art[i]!)));
+  });
+
+  test("every palette color is a real color", () => {
+    for (const color of Object.values(palette)) expect(color).toMatch(/^#[0-9a-f]{6}$/);
+  });
+
+  test("the SVG is as wide as the longest row", () => {
+    expect(toSvg(["k", "kkk", "kk"])).toContain('width="3" height="3" viewBox="0 0 3 3"');
   });
 
   test("runs of a color become one rectangle, and empty pixels none", () => {
