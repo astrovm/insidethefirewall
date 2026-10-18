@@ -160,8 +160,11 @@ try:
         assert visible(page, "#new-best"), "The first game should be a new best"
         print("Started the game and got hit")
 
-        # R repairs the computer and starts over.
+        # R repairs the computer and starts over, and the game over song stops.
+        page.evaluate("() => insideTheFirewall.audio.play('glados')")
+        assert "remaster:glados" in page.evaluate("insideTheFirewall.audio.playingSounds")
         page.keyboard.press("r")
+        assert "remaster:glados" not in page.evaluate("insideTheFirewall.audio.playingSounds"), "The game over song kept playing"
         page.wait_for_function("() => insideTheFirewall.game.phase === 'playing'", timeout=5000)
         assert state(page)["health"] == 1 and state(page)["time"] < 1
         print("R starts a new game")
@@ -191,6 +194,17 @@ try:
         page.wait_for_function("() => insideTheFirewall.game.player.y > 20", timeout=3000)
         page.keyboard.up("ArrowUp")
         print("A jetpack flies")
+
+        # Menu on the game over screen goes to the title, and the game over song stops.
+        page.evaluate("() => { insideTheFirewall.game.invincible = 0; insideTheFirewall.game.health = 0 }")
+        page.wait_for_function("() => insideTheFirewall.game.phase === 'over'", timeout=5000)
+        page.evaluate("() => insideTheFirewall.audio.play('glados')")
+        page.locator("#over-menu").get_by_role("button", name="Menu").click()
+        assert "remaster:glados" not in page.evaluate("insideTheFirewall.audio.playingSounds"), "The game over song kept playing"
+        page.wait_for_function("() => insideTheFirewall.game.phase === 'title'", timeout=5000)
+        page.click("#play")
+        page.wait_for_function("() => insideTheFirewall.game.phase === 'playing'", timeout=5000)
+        print("Leaving game over stops its song")
 
         # The pause menu goes back to the title.
         page.click("#pause-game")

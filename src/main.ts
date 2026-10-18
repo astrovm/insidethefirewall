@@ -185,7 +185,13 @@ async function main(): Promise<void> {
     else (document.activeElement as HTMLElement | null)?.blur();
   };
 
+  // The game over song and the death sound stop as soon as the player leaves that screen.
+  const leaveGameOver = () => {
+    if (game.phase === "over") audio.stopEffects();
+  };
+
   const startGame = () => {
+    leaveGameOver();
     (document.activeElement as HTMLElement | null)?.blur();
     paused = false;
     audio.unlock();
@@ -204,6 +210,7 @@ async function main(): Promise<void> {
     startGame();
   };
   const toTitle = () => {
+    leaveGameOver();
     paused = false;
     audio.unlock();
     fader.to(() => {

@@ -63,6 +63,17 @@ export class Audio {
     this.music.start();
   }
 
+  /** Stops every sound but the music, like the game over song when leaving that screen. */
+  stopEffects(): void {
+    for (const source of this.playing.values()) source.stop();
+    this.playing.clear();
+  }
+
+  /** Sounds playing now, by owner and name. */
+  get playingSounds(): string[] {
+    return [...this.playing.keys()];
+  }
+
   handle(events: SoundEvent[]): void {
     for (const event of events) {
       if (event.type === "stopAll") {
