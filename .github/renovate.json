@@ -1,14 +1,4 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended", "group:all"],
-  "pip-compile": {
-    "managerFilePatterns": ["/(^|/)requirements-ci\\.txt$/"]
-  },
-  "packageRules": [
-    {
-      "matchManagers": ["pip_requirements"],
-      "matchFileNames": [".github/requirements-ci.txt"],
-      "enabled": false
-    }
-  ]
+  "extends": ["config:recommended", "group:all"]
 }
