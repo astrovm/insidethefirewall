@@ -910,6 +910,7 @@ describe("threats", () => {
     const second = game.threats[0]!;
     expect([second.sprite.x, second.sprite.y]).toEqual([VIRUS_SPAWN.x, VIRUS_SPAWN.y]);
     expect(second.sprite.size).toBe(game.virus.size);
+    expect([second.sprite.name, second.sprite.rotationStyle]).toEqual(["virus", game.virus.rotationStyle]);
     expect(second.sprite.currentCostume.name).toBe(game.virus.currentCostume.name);
     expect(second.warning).toBe(WARNING_LONGEST);
     expect(second.target).toEqual({ x: game.player.x, y: game.player.y });
