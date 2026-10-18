@@ -372,6 +372,14 @@ try:
         assert replay_border[:3] == [254, 149, 1], f"No replay window on the game over screen: {replay_border}"
         print("Game over shows the run summary and a replay")
 
+        # A blocked clipboard says so.
+        day.evaluate("""() => {
+          window.realWrite = navigator.clipboard.writeText.bind(navigator.clipboard);
+          navigator.clipboard.writeText = () => Promise.reject(new DOMException('Blocked', 'NotAllowedError'));
+        }""")
+        day.click("#share")
+        day.wait_for_function("() => document.querySelector('#share').textContent === \"Couldn't copy\"", timeout=2000)
+        day.evaluate("() => { navigator.clipboard.writeText = realWrite }")
         day.click("#share")
         day.wait_for_function("() => document.querySelector('#share').textContent === 'Copied'", timeout=2000)
         shared = day.evaluate("navigator.clipboard.readText()")
