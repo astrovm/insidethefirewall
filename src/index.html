@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inside the firewall</title>
+  <meta name="theme-color" content="#000000">
+  <link rel="icon" href="icon.png">
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+      color: #fff;
+      font-family: sans-serif;
+    }
+    [hidden] {
+      display: none !important;
+    }
+    #game {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      touch-action: none;
+    }
+    @font-face {
+      font-family: "Noto Sans";
+      font-weight: 500;
+      src: url(assets/fonts/noto-sans-medium.woff2) format("woff2");
+    }
+    #ui {
+      position: absolute;
+      width: calc(480 * var(--s));
+      height: calc(360 * var(--s));
+      font-family: "Noto Sans", sans-serif;
+      font-weight: 500;
+      font-size: calc(16 * var(--s));
+      color: #fe9501;
+      pointer-events: none;
+      user-select: none;
+    }
+    #ui section {
+      position: absolute;
+      inset: 0;
+    }
+    #ui button, #ui .stat {
+      position: absolute;
+      pointer-events: auto;
+      font: inherit;
+      margin: 0;
+    }
+    #ui button {
+      cursor: pointer;
+    }
+    #ui button:focus-visible {
+      outline: calc(3 * var(--s)) solid #fff;
+      outline-offset: calc(2 * var(--s));
+    }
+    .pill {
+      padding: 0 calc(14 * var(--s));
+      height: calc(30 * var(--s));
+      border: calc(3 * var(--s)) solid #fe9501;
+      border-radius: calc(15 * var(--s));
+      background: #00cc44;
+      color: #006321;
+    }
+    .pill:hover {
+      background: #00e04b;
+    }
+    .pill.dark {
+      background: #006321;
+      color: #fe9501;
+    }
+    .pill.dark:hover {
+      background: #00782a;
+    }
+    #corner {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      display: flex;
+      gap: 8px;
+    }
+    .icon {
+      width: 40px;
+      height: 40px;
+      padding: 8px;
+      border: 0;
+      border-radius: 8px;
+      background: #0008;
+      cursor: pointer;
+      display: flex;
+    }
+    .icon[hidden] {
+      display: none;
+    }
+    .icon:hover {
+      background: #000c;
+    }
+    .icon:focus-visible {
+      outline: 3px solid #fff;
+    }
+    .icon svg {
+      width: 100%;
+      height: 100%;
+      fill: #fe9501;
+    }
+    #play {
+      left: calc(127.9 * var(--s));
+      top: calc(104.7 * var(--s));
+      width: calc(217.8 * var(--s));
+      height: calc(97.7 * var(--s));
+      padding: 0;
+      border: 0;
+      border-radius: calc(48 * var(--s));
+      background: none;
+    }
+    #play img {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    #play .hover, #play:hover .normal, #play:focus-visible .normal {
+      display: none;
+    }
+    #play:hover .hover, #play:focus-visible .hover {
+      display: block;
+    }
+    #ui #pause-menu, #ui #settings-menu {
+      position: fixed;
+      background: #000a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: calc(10 * var(--s));
+    }
+    #pause-menu[hidden], #settings-menu[hidden] {
+      display: none;
+    }
+    #pause-menu h2, #settings-menu h2 {
+      font-size: calc(36 * var(--s));
+      font-weight: 500;
+      margin: 0 0 calc(6 * var(--s));
+    }
+    #pause-menu button, #settings-menu > button {
+      position: static;
+      width: calc(140 * var(--s));
+    }
+    #ui #settings-menu {
+      background: #000d;
+      pointer-events: auto;
+    }
+    #settings-menu label, #settings-menu fieldset {
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: calc(12 * var(--s));
+      width: calc(300 * var(--s));
+      min-height: calc(30 * var(--s));
+      margin: 0;
+      padding: 0;
+      border: 0;
+      cursor: pointer;
+    }
+    #settings-menu legend {
+      float: left;
+      padding: 0;
+    }
+    #settings-menu input {
+      accent-color: #fe9501;
+      margin: 0;
+      cursor: pointer;
+    }
+    #settings-menu input[type="range"] {
+      width: calc(150 * var(--s));
+    }
+    #settings-menu input:focus-visible, .choices label:has(input:focus-visible) {
+      outline: calc(3 * var(--s)) solid #fff;
+      outline-offset: calc(2 * var(--s));
+    }
+    .choices {
+      display: flex;
+    }
+    #settings-menu .choices label {
+      width: auto;
+      min-height: 0;
+      height: calc(26 * var(--s));
+      padding: 0 calc(10 * var(--s));
+      border: calc(2 * var(--s)) solid #fe9501;
+      margin-left: calc(-2 * var(--s));
+      font-size: calc(14 * var(--s));
+    }
+    .choices label:first-child {
+      border-radius: calc(13 * var(--s)) 0 0 calc(13 * var(--s));
+    }
+    .choices label:last-child {
+      border-radius: 0 calc(13 * var(--s)) calc(13 * var(--s)) 0;
+    }
+    .choices label:has(input:checked) {
+      background: #fe9501;
+      color: #000;
+    }
+    .choices input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+    #touch button {
+      position: fixed;
+      bottom: 16px;
+      width: 72px;
+      height: 72px;
+      padding: 18px;
+      border: 3px solid #fe950188;
+      border-radius: 50%;
+      background: #0006;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+    }
+    #touch button.held {
+      background: #fe950166;
+    }
+    #touch svg {
+      width: 100%;
+      height: 100%;
+      fill: #fe9501;
+    }
+    #touch [data-move="left"] {
+      left: 16px;
+    }
+    #touch [data-move="right"] {
+      left: 100px;
+    }
+    #touch [data-move="down"] {
+      right: 100px;
+    }
+    #touch [data-move="jump"] {
+      right: 16px;
+      bottom: 40px;
+    }
+    #repair {
+      left: calc(70 * var(--s));
+      top: calc(290 * var(--s));
+      width: calc(320 * var(--s));
+      height: calc(48 * var(--s));
+      border: 0;
+      border-radius: calc(8 * var(--s));
+      background: none;
+      color: transparent;
+    }
+    #repair:hover {
+      background: #ff000026;
+    }
+    #over-menu .stat {
+      left: calc(12 * var(--s));
+      top: calc(8 * var(--s));
+      font-size: calc(16 * var(--s));
+      line-height: 1.25;
+    }
+    #over-menu .stat p {
+      margin: 0;
+    }
+    #over-menu .stat p:first-child {
+      font-size: calc(20 * var(--s));
+    }
+    #new-best {
+      font-weight: 500;
+      color: #fff;
+      background: #ff0000;
+      border-radius: calc(4 * var(--s));
+      padding: 0 calc(5 * var(--s));
+      font-size: calc(13 * var(--s));
+      vertical-align: middle;
+    }
+    #title-best {
+      right: calc(24 * var(--s));
+      top: calc(250 * var(--s));
+      font-size: calc(16 * var(--s));
+    }
+    #over-menu .pill {
+      right: calc(12 * var(--s));
+      top: calc(10 * var(--s));
+    }
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+    .screen {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      background: #000;
+      user-select: none;
+    }
+    .screen h1 {
+      font-weight: normal;
+      font-size: 36px;
+      margin: 0 0 16px;
+    }
+    .progress {
+      border: 1px solid currentColor;
+      height: 10px;
+      width: 200px;
+    }
+    #loading-bar {
+      height: 100%;
+      width: 0;
+      background: currentColor;
+    }
+    #error-message {
+      font-family: monospace;
+      max-width: 600px;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1 class="visually-hidden">Inside the firewall</h1>
+    <canvas id="game" aria-label="Inside the firewall game"></canvas>
+    <div id="ui">
+      <section id="title-menu" hidden>
+        <button id="play" type="button" aria-label="Play"><img class="normal" src="assets/costumes/play.svg" alt=""><img class="hover" src="assets/costumes/play-hover.svg" alt=""></button>
+        <p id="title-best" class="stat" hidden></p>
+      </section>
+      <section id="pause-menu" hidden>
+        <h2>Paused</h2>
+        <button class="pill" type="button" data-action="resume">Resume</button>
+        <button class="pill" type="button" data-action="restart">Restart</button>
+        <button class="pill" type="button" data-fullscreen>Full screen</button>
+        <button class="pill" type="button" data-action="settings">Settings</button>
+        <button class="pill" type="button" data-action="menu">Menu</button>
+      </section>
+      <section id="settings-menu" role="dialog" aria-labelledby="settings-title" hidden>
+        <h2 id="settings-title">Settings</h2>
+        <label>Music <input id="music-volume" type="range" min="0" max="100" step="5"></label>
+        <label>Sound effects <input id="effects-volume" type="range" min="0" max="100" step="5"></label>
+        <fieldset>
+          <legend>Touch buttons</legend>
+          <span class="choices">
+            <label><input type="radio" name="touch" value="auto">Auto</label>
+            <label><input type="radio" name="touch" value="on">On</label>
+            <label><input type="radio" name="touch" value="off">Off</label>
+          </span>
+        </fieldset>
+        <button class="pill" type="button" data-action="close-settings">Done</button>
+      </section>
+      <section id="over-menu" hidden>
+        <div class="stat">
+          <p>Time <span id="over-time">0</span> <strong id="new-best" hidden>New best!</strong></p>
+          <p>Best <span id="over-best">0</span></p>
+        </div>
+        <button class="pill dark" type="button" data-action="menu">Menu</button>
+        <button id="repair" type="button" data-action="restart">Repair (R)</button>
+      </section>
+    </div>
+    <div id="corner">
+      <button id="open-settings" class="icon" type="button" title="Settings" aria-label="Settings" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 1h4l.6 2.6 1.6.9 2.5-.9 2 3.4-2 1.8v2.4l2 1.8-2 3.4-2.5-.9-1.6.9L12 19H8l-.6-2.6-1.6-.9-2.5.9-2-3.4 2-1.8V8.8l-2-1.8 2-3.4 2.5.9 1.6-.9zm2 6a3 3 0 100 6 3 3 0 000-6z"/></svg></button>
+      <button id="fullscreen-game" class="icon" type="button" data-fullscreen title="Full screen" aria-label="Full screen"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 3h5v2H5v3H3zm9 0h5v5h-2V5h-3zM3 12h2v3h3v2H3zm12 0h2v5h-5v-2h3z"/></svg></button>
+      <button id="pause-game" class="icon" type="button" title="Pause" aria-label="Pause" hidden>
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 3h4v14H4zm8 0h4v14h-4z"/></svg>
+      </button>
+    </div>
+    <div id="touch" hidden>
+      <button type="button" data-move="left" aria-label="Left"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M14 2v16L4 10z"/></svg></button>
+      <button type="button" data-move="right" aria-label="Right"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 2v16l10-8z"/></svg></button>
+      <button type="button" data-move="down" aria-label="Fall faster"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 6h16l-8 10z"/></svg></button>
+      <button type="button" data-move="jump" aria-label="Jump"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 14h16L10 4z"/></svg></button>
+    </div>
+    <p id="status" class="visually-hidden" aria-live="polite"></p>
+
+    <div id="loading" class="screen">
+      <noscript>Enable JavaScript</noscript>
+      <h1>Loading malware...</h1>
+      <div class="progress"><div id="loading-bar"></div></div>
+    </div>
+
+    <div id="error" class="screen" hidden>
+      <h1>Error</h1>
+      <p id="error-message"></p>
+    </div>
+  </main>
+
+  <script type="module" src="game.js"></script>
+</body>
+</html>
