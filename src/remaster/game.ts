@@ -450,7 +450,8 @@ export class Game {
       threat.stopX = this.randomInt(-100, 100);
     } else if (kind === "popup") {
       s.x = this.randomInt(-200, 200);
-      s.y = 180 + 24;
+      // Just above the top of the stage, hidden until it falls.
+      s.y = 180 + 26;
     } else if (from) {
       s.x = from.x;
       s.y = from.y + 40;
