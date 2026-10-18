@@ -213,6 +213,18 @@ try:
         touch.wait_for_function("() => insideTheFirewall.game.phase === 'playing'", timeout=5000)
         touch.evaluate("() => { insideTheFirewall.game.invincible = Infinity }")
         assert visible(touch, "#touch [data-move=\"jump\"]")
+        # At this size the stage doesn't scale evenly. Its bottom row is still all floor, no green line.
+        touch.wait_for_timeout(500)  # Past the fade in.
+        bottom_row = touch.evaluate("""() => {
+          const canvas = document.querySelector('#game');
+          const { x, y, scale } = insideTheFirewall.view;
+          const row = Math.round(y + 360 * scale) - 1;
+          const data = canvas.getContext('2d').getImageData(x, row, Math.round(480 * scale), 1).data;
+          let green = 0;
+          for (let i = 0; i < data.length; i += 4) if (data[i + 1] > data[i] && data[i + 1] > 40) green++;
+          return green;
+        }""")
+        assert bottom_row == 0, f"{bottom_row} green pixels along the bottom of the stage"
         start_x = touch.evaluate("insideTheFirewall.game.player.x")
         button = touch.locator('#touch [data-move="right"]').bounding_box()
         center = (button["x"] + button["width"] / 2, button["y"] + button["height"] / 2)

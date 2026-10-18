@@ -55,6 +55,7 @@ interface Raster {
 export class RemasterRenderer {
   private readonly ctx: CanvasRenderingContext2D;
   private readonly rasters = new Map<Costume, Raster>();
+  private stageRaster: HTMLCanvasElement | null = null;
   view: View = { x: 0, y: 0, scale: 1 };
   /** 0 shows the game, 1 is fully black. Used for fades between screens. */
   fade = 0;
@@ -134,12 +135,26 @@ export class RemasterRenderer {
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
   }
 
-  /** The 2013 stage. */
+  /**
+   * The 2013 stage, filling the stage exactly. Scratch exported it with half a
+   * pixel of empty border, so only the picture inside is drawn.
+   */
   private drawStage(): void {
     const { x, y, scale } = this.view;
-    this.ctx.fillStyle = colors.green;
-    this.ctx.fillRect(x, y, Math.round(STAGE_WIDTH * scale), Math.round(STAGE_HEIGHT * scale));
-    this.drawCostume(this.backdrops.stage, 0, 0, 0, 1, 1);
+    const width = Math.round(STAGE_WIDTH * scale);
+    const height = Math.round(STAGE_HEIGHT * scale);
+    let stage = this.stageRaster;
+    if (stage?.width !== width || stage.height !== height) {
+      const image = this.images.get(this.backdrops.stage);
+      if (!image) return;
+      stage = document.createElement("canvas");
+      stage.width = width;
+      stage.height = height;
+      const border = -this.backdrops.stage.x;
+      stage.getContext("2d")?.drawImage(image, border, border, STAGE_WIDTH, STAGE_HEIGHT, 0, 0, width, height);
+      this.stageRaster = stage;
+    }
+    this.ctx.drawImage(stage, x, y);
   }
 
   /** The 2013 title, a little smaller than the stage so the room shows around it like a frame. */
