@@ -1,14 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import fc from "fast-check";
-import { Best, difficulty, HARDEST_AT, RANKS, rankFor } from "../src/remaster/progress.ts";
-
-describe("difficulty", () => {
-  test("goes from 0 at the start to 1 at its hardest, in a straight line", () => {
-    expect([0, HARDEST_AT / 4, HARDEST_AT / 2, HARDEST_AT, HARDEST_AT * 3].map(difficulty)).toEqual([0, 0.25, 0.5, 1, 1]);
-    expect(difficulty(-5)).toBe(0);
-  });
-
-});
+import { Best, RANKS, rankFor } from "../src/remaster/progress.ts";
 
 describe("ranks", () => {
   test("go by seconds survived", () => {

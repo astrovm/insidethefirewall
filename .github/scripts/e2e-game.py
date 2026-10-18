@@ -178,6 +178,20 @@ try:
         assert abs(moved) > 30, f"Player only moved {moved} px"
         print("The player runs and jumps")
 
+        # Grabbing a jetpack and holding jump flies higher than any jump.
+        page.evaluate("""() => {
+          const g = insideTheFirewall.game;
+          g.powerUp.setCostume('jetpack');
+          g.powerUp.setXY(g.player.x, g.player.y);
+          g.powerUp.visible = true;
+        }""")
+        page.wait_for_function("() => insideTheFirewall.game.powers.jetpack > 0", timeout=2000)
+        assert page.locator("#status").text_content().startswith("Jetpack")
+        page.keyboard.down("ArrowUp")
+        page.wait_for_function("() => insideTheFirewall.game.player.y > 20", timeout=3000)
+        page.keyboard.up("ArrowUp")
+        print("A jetpack flies")
+
         # The pause menu goes back to the title.
         page.click("#pause-game")
         page.get_by_role("button", name="Menu").click()

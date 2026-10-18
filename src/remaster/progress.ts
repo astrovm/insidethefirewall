@@ -1,12 +1,4 @@
-// Difficulty, ranks and the best time. The game gets harder little by little.
-
-/** Seconds until the game is as hard as it gets. */
-export const HARDEST_AT = 150;
-
-/** How hard the game is after this many seconds: 0 at the start, 1 from HARDEST_AT on. */
-export function difficulty(seconds: number): number {
-  return Math.min(1, Math.max(0, seconds / HARDEST_AT));
-}
+// Ranks and the best time.
 
 /** Ranks by seconds survived. */
 export const RANKS = [

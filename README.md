@@ -11,7 +11,7 @@ The remaster is a normal game loop at 60 updates a second, drawn as big as the w
 
 The 2013 game is also ported script by script, with the same rules as Scratch: 30 frames per second, the same collision, edge and timing quirks. Tests run it against the original project file. The remaster takes its sprites and collision from it.
 
-- `src/remaster/`: the remaster's rules, difficulty, drawing and effects.
+- `src/remaster/`: the remaster's rules, power-ups, drawing and effects. The power-ups' pixel art is in `src/remaster/art.ts`. Run `bun tools/pixel-art.ts` after changing it.
 - `src/engine/`: a small Scratch-like runtime (sprites, threads, timing) for the port.
 - `src/game/classic.ts`: the 2013 game's scripts.
 - `src/`: loading, sound, controls and the page.

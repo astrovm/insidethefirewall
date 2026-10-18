@@ -1,7 +1,7 @@
 import { STAGE_HEIGHT, STAGE_WIDTH, type Costume, type Sprite } from "../engine/sprite.ts";
 import { interpolate, type CostumeImages } from "../render.ts";
 import type { Effects } from "./effects.ts";
-import { PICKUP_BLINK, type Game } from "./game.ts";
+import { flameCostumes, PICKUP_BLINK, POWER_UP_TIME, POWER_UPS, powerUpCostumes, type Game } from "./game.ts";
 
 export const colors = {
   green: "#00cc44",
@@ -10,6 +10,7 @@ export const colors = {
   title: "#006321",
   orange: "#fe9501",
   red: "#ff0000",
+  shield: "#66ccff",
 };
 
 /** Where the 480x360 stage sits on the canvas, in device pixels. */
@@ -95,12 +96,19 @@ export class RemasterRenderer {
       ctx.rect(this.view.x, this.view.y, Math.round(STAGE_WIDTH * this.view.scale), Math.round(STAGE_HEIGHT * this.view.scale));
       ctx.clip();
     }
+    const playing = game.phase === "playing";
     for (const sprite of game.layers) {
       if (!sprite.visible) continue;
-      const [x, y] = interpolate(sprite, game.previous.get(sprite), between);
-      ctx.globalAlpha = game.phase === "playing" ? this.alphaOf(game, sprite) : 1;
+      let [x, y] = interpolate(sprite, game.previous.get(sprite), between);
+      // Power-ups bob up and down, so they read as things to grab.
+      if (sprite === game.powerUp) y += Math.sin(game.time * 5) * 3;
+      if (playing && sprite === game.player && game.powers.jetpack > 0) this.drawJetpack(game, x, y);
+      ctx.globalAlpha = playing ? this.alphaOf(game, sprite) : 1;
+      if (playing && sprite === game.virus && game.powers.freeze > 0) ctx.filter = "hue-rotate(160deg) saturate(1.5)";
       if (ctx.globalAlpha > 0) this.drawSprite(sprite, x, y);
+      ctx.filter = "none";
       ctx.globalAlpha = 1;
+      if (playing && sprite === game.player && game.powers.shield > 0) this.drawShield(game, x, y);
     }
     ctx.restore();
     this.view = steady;
@@ -120,14 +128,45 @@ export class RemasterRenderer {
   }
 
   /**
-   * Blinking, as a warning: the player while invincible, the penguin before it
-   * goes and the virus before it flies. Calm mode dims them instead.
+   * Blinking, as a warning: the player while invincible, the penguin and
+   * power-ups before they go, and a frozen virus about to thaw.
    */
   private alphaOf(game: Game, sprite: Sprite): number {
-    const blink = (seconds: number) => (Math.floor(seconds / 0.15) % 2 === 0 ? 1 : 0.5);
     if (sprite === game.player && game.invincible > 0) return blink(game.invincible);
     if (sprite === game.pickup && game.pickupLeft < PICKUP_BLINK) return blink(game.pickupLeft);
+    if (sprite === game.powerUp && game.powerUpLeft < PICKUP_BLINK) return blink(game.powerUpLeft);
+    if (sprite === game.virus && game.powers.freeze > 0) return game.powers.freeze < 1 ? blink(game.powers.freeze) : 0.8;
     return 1;
+  }
+
+  /** The jetpack on the player's back, with a flame while it pushes. */
+  private drawJetpack(game: Game, x: number, y: number): void {
+    const back = x - game.player.flipX * 30;
+    const ending = game.powers.jetpack < 1;
+    this.ctx.globalAlpha = ending ? blink(game.powers.jetpack) : 1;
+    this.drawCostume(powerUpCostumes[0]!, back, y + 4, 0, 3, 3);
+    if (game.thrusting) {
+      const frame = flameCostumes[Math.floor(game.time / 0.08) % 2]!;
+      this.drawCostume(frame, back, y - 20, 0, 3, 3);
+    }
+    this.ctx.globalAlpha = 1;
+  }
+
+  /** A bubble around the player while the shield is up. */
+  private drawShield(game: Game, x: number, y: number): void {
+    const ctx = this.ctx;
+    const [cx, cy] = toCanvas(this.view, x, y - 4);
+    ctx.save();
+    ctx.globalAlpha = 0.7 * (game.powers.shield < 1.5 ? blink(game.powers.shield) : 1);
+    ctx.strokeStyle = colors.shield;
+    ctx.lineWidth = 3 * this.view.scale;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 52 * this.view.scale, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha *= 0.25;
+    ctx.fillStyle = colors.shield;
+    ctx.fill();
+    ctx.restore();
   }
 
   private drawBackdrop(color: string): void {
@@ -237,9 +276,25 @@ export class RemasterRenderer {
     ctx.textAlign = "left";
     ctx.strokeText(time, 12, 48);
     ctx.fillText(time, 12, 48);
+    // Power-ups the player has, each with a bar for the time left.
+    const active = POWER_UPS.filter((kind) => game.powers[kind] > 0);
+    active.forEach((kind, i) => {
+      const left = 12 + i * 44;
+      ctx.fillStyle = colors.mortar;
+      ctx.fillRect(left, 96, 36, 6);
+      ctx.fillStyle = colors.orange;
+      ctx.fillRect(left + 1, 97, 34 * Math.min(1, game.powers[kind] / POWER_UP_TIME[kind]), 4);
+    });
     ctx.restore();
+    active.forEach((kind, i) => {
+      const costume = powerUpCostumes[POWER_UPS.indexOf(kind)]!;
+      this.drawCostume(costume, -240 + 12 + i * 44 + 18, 180 - 78, 0, 2.5, 2.5);
+    });
   }
 }
+
+/** Full and half see-through in turn, as a warning that something is about to end. */
+const blink = (seconds: number) => (Math.floor(seconds / 0.15) % 2 === 0 ? 1 : 0.5);
 
 /** Whole seconds, as m:ss once it reaches a minute. */
 export function formatTime(seconds: number): string {

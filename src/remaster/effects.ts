@@ -1,4 +1,4 @@
-// Things that only change how the game looks: screen shake and the red flash
+// Things that only change how the game looks: screen shake, and the red flash
 // on hits. They never change the rules.
 
 import type { GameEvent } from "./game.ts";
@@ -13,6 +13,7 @@ export class Effects {
   constructor(private readonly random: () => number = Math.random) {}
 
   handle(event: GameEvent): void {
+    if (event.type === "shield") this.shake(0.1, 2);
     if (event.type !== "hit") return;
     this.shake(event.last ? 0.3 : 0.15, event.last ? 4 : 2);
     this.flash = event.last ? 0.6 : 0.3;

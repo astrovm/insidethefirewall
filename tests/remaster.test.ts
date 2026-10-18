@@ -18,13 +18,18 @@ import {
   PLAYER_SPEED,
   VIRUS_SPAWN,
   VIRUS_START_SPEED,
-  VIRUS_TOP_SPEED,
+  VIRUS_FAST,
+  VIRUS_SPEEDUP,
+  CEILING_Y,
+  JET_RISE,
+  POWER_UP_FIRST,
+  POWER_UP_SHOWN,
+  POWER_UP_TIME,
   WARNING_LONGEST,
   WARNING_SHORTEST,
   type GameEvent,
   type Input,
 } from "../src/remaster/game.ts";
-import { HARDEST_AT } from "../src/remaster/progress.ts";
 import { fitStage, formatTime, toCanvas, toStage } from "../src/remaster/render.ts";
 import { seeded } from "./support.ts";
 
@@ -83,7 +88,7 @@ describe("starting", () => {
     expect(game.player.x).toBeGreaterThanOrEqual(-205);
     expect(game.player.x).toBeLessThanOrEqual(205);
     expect([game.virus.x, game.virus.y]).toEqual([VIRUS_SPAWN.x, VIRUS_SPAWN.y]);
-    expect(game.layers.map((s) => s.name)).toEqual(["pickup", "player", "monitor", "virus"]);
+    expect(game.layers.map((s) => s.name)).toEqual(["pickup", "powerUp", "player", "monitor", "virus"]);
     expect(game.pickup.visible).toBe(false);
     expect(game.events.at(-1)).toEqual({ type: "music", playing: true });
   });
@@ -406,11 +411,30 @@ describe("the virus", () => {
   test("warns for less time as it gets faster", () => {
     const game = started();
     launch(game);
-    game.speed = VIRUS_TOP_SPEED;
+    game.speed = VIRUS_FAST;
     game.virus.setXY(239, 0);
     game.virus.setDirection(90);
     run(game, DT);
     expect(game.warning).toBeCloseTo(WARNING_SHORTEST, 6);
+    // And never less than that, however fast it gets.
+    game.speed = VIRUS_FAST * 3;
+    game.warning = 0;
+    game.virus.setXY(239, 0);
+    run(game, DT);
+    expect(game.warning).toBeCloseTo(WARNING_SHORTEST, 6);
+  });
+
+  test("can't skip past the player, however fast it gets", () => {
+    const game = started();
+    game.health = 2;
+    launch(game);
+    game.player.setXY(0, GROUND_Y);
+    // 50 px a frame, more than the player is wide.
+    game.speed = 3000;
+    game.virus.setXY(-60, GROUND_Y);
+    game.virus.setDirection(90);
+    game.update(noInput);
+    expect(game.health).toBe(1);
   });
 
   test("a hit takes a heart, shows the hit face and sends the virus back", () => {
@@ -686,28 +710,17 @@ describe("game over", () => {
 });
 
 describe("difficulty", () => {
-  test("the virus starts at its 2013 speed and speeds up little by little", () => {
+  test("the virus starts at its 2013 speed and speeds up forever", () => {
     const game = started();
     parkVirus(game);
     game.invincible = Infinity;
     expect(game.speed).toBe(VIRUS_START_SPEED);
     run(game, 30);
-    expect(game.speed).toBeCloseTo(VIRUS_START_SPEED + (VIRUS_TOP_SPEED - VIRUS_START_SPEED) * (30 / HARDEST_AT), 6);
-    let before = game.speed;
-    for (let i = 0; i < 60; i++) {
-      game.update(noInput);
-      expect(game.speed).toBeGreaterThan(before);
-      before = game.speed;
-    }
-  });
-
-  test("the virus tops out at its top speed", () => {
-    const game = started();
-    parkVirus(game);
-    game.invincible = Infinity;
-    game.time = HARDEST_AT;
-    run(game, 10);
-    expect(game.speed).toBe(VIRUS_TOP_SPEED);
+    expect(game.speed).toBeCloseTo(VIRUS_START_SPEED + VIRUS_SPEEDUP * 30, 6);
+    game.time = 600;
+    run(game, DT);
+    expect(game.speed).toBeCloseTo(VIRUS_START_SPEED + VIRUS_SPEEDUP * (600 + DT), 6);
+    expect(game.speed).toBeGreaterThan(VIRUS_FAST * 2);
   });
 
   test("a new game starts slow again", () => {
@@ -720,7 +733,192 @@ describe("difficulty", () => {
     game.start();
     expect(game.speed).toBe(VIRUS_START_SPEED);
   });
+});
 
+describe("power-ups", () => {
+  /** A game with a power-up of a kind on stage, far from the player. */
+  function withPowerUp(kind: "jetpack" | "shield" | "freeze"): Game {
+    const game = started();
+    game.powerUp.setCostume(kind);
+    game.powerUp.setXY(200, GROUND_Y);
+    game.powerUp.visible = true;
+    game.player.setXY(-200, GROUND_Y);
+    return game;
+  }
+
+  /** Puts the player on the power-up and lets them grab it. */
+  function grab(game: Game): void {
+    game.player.setXY(game.powerUp.x, game.powerUp.y);
+    game.update(noInput);
+  }
+
+  test("the first one shows up after 15 s, within a jump of the floor and away from the player", () => {
+    for (let seed = 1; seed <= 30; seed++) {
+      const game = started(seed);
+      parkVirus(game);
+      run(game, POWER_UP_FIRST - DT);
+      expect(game.powerUp.visible).toBe(false);
+      run(game, DT);
+      expect(game.powerUp.visible).toBe(true);
+      expect(["jetpack", "shield", "freeze"]).toContain(game.powerUpKind);
+      expect(Math.abs(game.powerUp.x)).toBeLessThanOrEqual(200);
+      expect(game.powerUp.y).toBeGreaterThanOrEqual(GROUND_Y);
+      expect(game.powerUp.y).toBeLessThanOrEqual(GROUND_Y + 60);
+      expect(Math.abs(game.powerUp.x - game.player.x)).toBeGreaterThanOrEqual(80);
+    }
+  });
+
+  test("every kind shows up, then one every 12 to 18 s", () => {
+    const kinds = new Set<string>();
+    const gaps: number[] = [];
+    const game = started(3);
+    parkVirus(game);
+    game.invincible = Infinity;
+    game.player.setXY(-230, GROUND_Y);
+    let last = -1;
+    for (let i = 0; i < Math.round(300 / DT); i++) {
+      const before = game.powerUp.visible;
+      game.update(noInput);
+      game.health = 9;
+      if (game.powerUp.visible && !before) {
+        kinds.add(game.powerUpKind);
+        if (last >= 0) gaps.push(game.time - last);
+        last = game.time;
+      }
+    }
+    expect([...kinds].sort()).toEqual(["freeze", "jetpack", "shield"]);
+    expect(Math.min(...gaps)).toBeGreaterThanOrEqual(12 - 1e-6);
+    expect(Math.max(...gaps)).toBeLessThanOrEqual(18 + 1e-6);
+  });
+
+  test("goes away after 5 s if nobody grabs it", () => {
+    const game = withPowerUp("shield");
+    parkVirus(game);
+    run(game, POWER_UP_SHOWN - DT);
+    expect(game.powerUp.visible).toBe(true);
+    expect(game.powerUpLeft).toBeCloseTo(DT, 6);
+    run(game, DT);
+    expect(game.powerUp.visible).toBe(false);
+    expect(game.powerUpLeft).toBe(0);
+  });
+
+  test("grabbing one gives its power for a while", () => {
+    for (const kind of ["jetpack", "shield", "freeze"] as const) {
+      const game = withPowerUp(kind);
+      parkVirus(game);
+      game.events.length = 0;
+      grab(game);
+      expect(game.powerUp.visible).toBe(false);
+      expect(game.powers[kind]).toBeCloseTo(POWER_UP_TIME[kind], 6);
+      expect(game.events).toContainEqual({ type: "powerUp", kind, x: game.powerUp.x, y: game.powerUp.y });
+      run(game, POWER_UP_TIME[kind]);
+      expect(game.powers[kind]).toBe(0);
+    }
+  });
+
+  test("with a jetpack, holding jump flies up to the top and no higher", () => {
+    const game = withPowerUp("jetpack");
+    parkVirus(game);
+    grab(game);
+    run(game, 0.3, { jump: true, jumpPressed: true });
+    expect(game.onGround).toBe(false);
+    expect(game.thrusting).toBe(true);
+    expect(game.vy).toBeGreaterThan(0);
+    run(game, 1.5, { jump: true });
+    expect(game.player.y).toBe(CEILING_Y);
+    // Letting go falls back down.
+    run(game, 1.5);
+    expect(game.thrusting).toBe(false);
+    expect(game.onGround).toBe(true);
+  });
+
+  test("the jetpack climbs at a steady speed, and a normal jump still starts at full speed", () => {
+    const game = withPowerUp("jetpack");
+    parkVirus(game);
+    grab(game);
+    game.update(hold({ jump: true, jumpPressed: true }));
+    // The jump's own speed, minus a little gravity.
+    expect(game.vy).toBeGreaterThan(JET_RISE);
+    run(game, 0.5, { jump: true });
+    expect(game.vy).toBeLessThanOrEqual(JET_RISE);
+    expect(game.vy).toBeGreaterThan(JET_RISE - 100);
+  });
+
+  test("without a jetpack, holding jump doesn't fly", () => {
+    const game = started();
+    parkVirus(game);
+    game.update(hold({ jump: true, jumpPressed: true }));
+    run(game, 2, { jump: true });
+    expect(game.thrusting).toBe(false);
+    expect(game.player.y).toBe(GROUND_Y);
+  });
+
+  test("the jetpack runs out in the air and the player falls", () => {
+    const game = withPowerUp("jetpack");
+    parkVirus(game);
+    grab(game);
+    run(game, 1, { jump: true, jumpPressed: true });
+    game.powers.jetpack = DT;
+    run(game, 2, { jump: true });
+    expect(game.thrusting).toBe(false);
+    expect(game.player.y).toBe(GROUND_Y);
+  });
+
+  test("a shield takes one hit instead of a heart", () => {
+    const game = withPowerUp("shield");
+    game.health = 2;
+    grab(game);
+    launch(game);
+    game.virus.setXY(game.player.x, game.player.y);
+    game.update(noInput);
+    expect(game.health).toBe(2);
+    expect(game.powers.shield).toBe(0);
+    expect(types(game.events)).toContain("shield");
+    expect(types(game.events)).not.toContain("hit");
+    expect(game.invincible).toBeGreaterThan(0);
+    expect([game.virus.x, game.virus.y]).toEqual([VIRUS_SPAWN.x, VIRUS_SPAWN.y]);
+    // The next hit counts.
+    game.invincible = 0;
+    launch(game);
+    game.virus.setXY(game.player.x, game.player.y);
+    game.update(noInput);
+    expect(game.health).toBe(1);
+  });
+
+  test("a frozen virus stays put and can't hurt, then carries on", () => {
+    const game = withPowerUp("freeze");
+    game.health = 2;
+    launch(game);
+    grab(game);
+    game.virus.setXY(game.player.x, game.player.y);
+    const at = [game.virus.x, game.virus.y];
+    run(game, POWER_UP_TIME.freeze);
+    expect([game.virus.x, game.virus.y]).toEqual(at);
+    expect(game.health).toBe(2);
+    run(game, DT);
+    expect(game.health).toBe(1);
+  });
+
+  test("freezing also stops the virus waiting in the monitor", () => {
+    const game = started();
+    game.powers.freeze = 1;
+    const warning = game.warning;
+    run(game, 0.5);
+    expect(game.warning).toBe(warning);
+  });
+
+  test("power-ups are gone after game over and in a new game", () => {
+    const game = withPowerUp("jetpack");
+    grab(game);
+    game.powers.shield = 3;
+    game.powers.freeze = 0;
+    die(game);
+    expect(game.powers).toEqual({ jetpack: 0, shield: 0, freeze: 0 });
+    expect(game.powerUp.visible).toBe(false);
+    game.start();
+    expect([game.powers, game.powerUp.visible, game.thrusting]).toEqual([{ jetpack: 0, shield: 0, freeze: 0 }, false, false]);
+    expect(game.layers.map((s) => s.name)).toEqual(["pickup", "powerUp", "player", "monitor", "virus"]);
+  });
 });
 
 describe("controls", () => {

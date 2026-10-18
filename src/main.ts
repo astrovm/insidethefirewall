@@ -6,12 +6,19 @@ import type { Costume } from "./engine/sprite.ts";
 import type { CostumeImages } from "./render.ts";
 import { Effects } from "./remaster/effects.ts";
 import { Fader } from "./remaster/fader.ts";
-import { DT, Game, type GameEvent } from "./remaster/game.ts";
+import { DT, flameCostumes, Game, POWER_UP_TIME, powerUpCostumes, type GameEvent, type PowerUpKind } from "./remaster/game.ts";
 import { Best, rankFor } from "./remaster/progress.ts";
 import { formatTime, RemasterRenderer, toStage } from "./remaster/render.ts";
 import { defaults, loadSettings, saveSettings, showTouch, type TouchControls } from "./remaster/settings.ts";
 
 const MAX_UPDATES_PER_FRAME = 8;
+
+/** What the screen reader says when the player grabs a power-up. */
+const powerUpMessages: Record<PowerUpKind, (seconds: number) => string> = {
+  jetpack: (seconds) => `Jetpack for ${seconds} seconds. Hold jump to fly.`,
+  shield: (seconds) => `Shield for ${seconds} seconds`,
+  freeze: (seconds) => `Virus frozen for ${seconds} seconds`,
+};
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -34,6 +41,8 @@ async function main(): Promise<void> {
   const allCostumes = [
     project.stage,
     ...project.sprites.flatMap(({ sprite }) => sprite.costumes),
+    ...powerUpCostumes,
+    ...flameCostumes,
     title,
   ];
   const soundFiles = Object.keys(sounds).map((name) => `sounds/${name}.${name === "laser" || name === "meow" ? "wav" : "mp3"}`);
@@ -210,6 +219,13 @@ async function main(): Promise<void> {
     switch (event.type) {
       case "sound":
         audio.play(event.sound);
+        break;
+      case "powerUp":
+        audio.play("laser");
+        status.textContent = powerUpMessages[event.kind](POWER_UP_TIME[event.kind]);
+        break;
+      case "shield":
+        status.textContent = "The shield blocked a hit";
         break;
       case "music":
         audio.setMusic(event.playing ? "music" : null);
