@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import fc from "fast-check";
-import { defaults, loadSettings, parseSettings, saveSettings, showTouch } from "../src/remaster/settings.ts";
+import { bindKey, defaultKeys } from "../src/input.ts";
+import { defaults, gameSpeed, loadSettings, parseSettings, saveSettings, showTouch } from "../src/remaster/settings.ts";
 
 const KEY = "insidethefirewall.settings";
 
@@ -15,13 +16,13 @@ function memory(initial: Record<string, string> = {}) {
 }
 
 describe("settings", () => {
-  test("default to full sound effects, quieter music and auto touch buttons", () => {
-    expect(defaults).toEqual({ music: 0.8, effects: 1, touch: "auto" });
+  test("default to full sound effects, quieter music, auto touch buttons, full speed and the 2013 keys", () => {
+    expect(defaults).toEqual({ music: 0.8, effects: 1, touch: "auto", speed: 1, keys: defaultKeys });
   });
 
   test("come back the same after saving", () => {
     const storage = memory();
-    const settings = { music: 0.25, effects: 0, touch: "off" as const };
+    const settings = { music: 0.25, effects: 0, touch: "off" as const, speed: 0.75, keys: bindKey(defaultKeys, "jump", "k") };
     saveSettings(storage, settings);
     expect(JSON.parse(storage.items.get(KEY)!)).toEqual(settings);
     expect(loadSettings(storage)).toEqual(settings);
@@ -38,6 +39,43 @@ describe("settings", () => {
     }
     expect(parseSettings('{"music":"loud","effects":null,"touch":"sometimes"}')).toEqual(defaults);
     expect(parseSettings('{"music":1e999,"effects":-1e999}')).toEqual(defaults);
+    expect(parseSettings('{"speed":"slow","keys":[]}')).toEqual(defaults);
+  });
+
+  test("keep the game speed between 70% and 100%, in 5% steps", () => {
+    expect([0.85, 0.7, 1, 0.5, 2, 0.82, 0.83, 0.725].map((speed) => gameSpeed(speed))).toEqual([
+      0.85, 0.7, 1, 0.7, 1, 0.8, 0.85, 0.75,
+    ]);
+    expect([NaN, Infinity, "1", null].map((speed) => gameSpeed(speed, 0.9))).toEqual([0.9, 0.9, 0.9, 0.9]);
+    fc.assert(
+      fc.property(fc.double(), (speed) => {
+        const result = parseSettings(JSON.stringify({ speed })).speed;
+        return result >= 0.7 && result <= 1 && Number.isInteger(Math.round(result * 1e9) / 5e7);
+      }),
+    );
+  });
+
+  test("keep saved keys, but only if every move has keys and no key does two moves", () => {
+    const keys = { left: ["J"], right: ["l"], down: ["k"], jump: ["i", " "] };
+    expect(parseSettings(JSON.stringify({ keys })).keys).toEqual({ left: ["j"], right: ["l"], down: ["k"], jump: ["i", " "] });
+    for (const broken of [
+      { ...keys, jump: [] },
+      { ...keys, jump: ["j"] },
+      { ...keys, jump: ["J"] },
+      { ...keys, down: undefined },
+      { ...keys, down: "k" },
+      { ...keys, down: [7] },
+      { ...keys, down: [""] },
+      { ...keys, down: ["x".repeat(21)] },
+      { ...keys, down: ["Escape"] },
+      { ...keys, down: ["a", "b", "c", "d", "e"] },
+      null,
+      "keys",
+    ]) {
+      expect(parseSettings(JSON.stringify({ keys: broken }))).toEqual(defaults);
+    }
+    expect(parseSettings(JSON.stringify({ keys: { ...keys, down: ["x".repeat(20)] } })).keys.down).toEqual(["x".repeat(20)]);
+    expect(parseSettings(JSON.stringify({ keys: { ...keys, down: ["a", "b", "c", "d"] } })).keys.down).toHaveLength(4);
   });
 
   test("ignore settings that no longer exist", () => {

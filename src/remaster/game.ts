@@ -2,7 +2,7 @@
 // of Scratch scripts and updated 60 times a second, with smoother movement,
 // real jumps, a fairer virus and power-ups.
 
-import { Sprite, type Costume, type RotationStyle } from "../engine/sprite.ts";
+import { Sprite, type Bounds, type Costume, type RotationStyle } from "../engine/sprite.ts";
 import { costumes, sounds } from "../game/classic.ts";
 
 export const HZ = 60;
@@ -37,6 +37,8 @@ export const INVINCIBLE = 1.25;
 export const HIT_STOP = 4 * DT;
 /** The last hit holds a little longer before the game over screen. */
 export const DEATH_PAUSE = 0.7;
+/** At most this many hearts, so lives can't pile up. */
+export const MAX_HEALTH = 5;
 export const VIRUS_SPAWN = { x: -1, y: 134 } as const;
 export const VIRUS_START_SPEED = 5.5 * SCRATCH_FPS;
 /** Like 2013, the virus keeps speeding up forever, 1.7 px/s faster every second. */
@@ -50,6 +52,10 @@ export const WARNING_LONGEST = 0.6;
 export const WARNING_SHORTEST = 0.3;
 /** Its aim follows the player until this long before it flies. */
 export const AIM_LOCK = 0.15;
+/** A virus that flies by this close, in stage pixels, without a hit is a near miss. */
+export const NEAR_MISS = 8;
+/** The music speeds up with the virus, up to this fast. */
+export const MUSIC_FASTEST = 1.3;
 /** The penguin, an extra life, comes after 20 s, then every 20 to 30 s. In 2013 it came every 10 s. */
 export const PICKUP_FIRST = 20;
 const PICKUP_EVERY = [20, 30] as const;
@@ -60,7 +66,11 @@ const PICKUP_Y = -25;
 /** Penguin spots where all of it is on stage. The 2013 game could put half of it off the right edge. */
 const PICKUP_LEFTMOST = -120;
 const PICKUP_RIGHTMOST = 260;
+/** A penguin grabbed with full hearts gives a short shield instead. */
+export const PENGUIN_SHIELD = 3;
 export type PowerUpKind = "jetpack" | "shield" | "freeze";
+/** Things the player can grab. */
+export type Grab = "penguin" | PowerUpKind;
 export const POWER_UPS: PowerUpKind[] = ["jetpack", "shield", "freeze"];
 /** Seconds each power-up lasts. A shield also ends when it blocks a hit. */
 export const POWER_UP_TIME: Record<PowerUpKind, number> = { jetpack: 6, shield: 10, freeze: 4 };
@@ -77,6 +87,14 @@ export const FLY_SPEED = 300;
 const FLY_ACCELERATION = FLY_SPEED * 10;
 /** The jetpack can't fly the player off the top of the stage. */
 export const CEILING_Y = 180 - 58;
+/** A power-up ticks at these seconds left, so the player hears it ending. */
+const TICKS = [3, 2, 1];
+/** Jump can start a new game this long after game over, so a jump held while dying doesn't skip the screen. */
+export const RETRY_LOCK = 0.5;
+/** The game over screen replays the last seconds of the run, slowed down, then holds the last frame. */
+export const REPLAY_SECONDS = 2;
+export const REPLAY_SPEED = 0.5;
+const REPLAY_HOLD = 1;
 const GLADOS_AFTER = 6;
 const HL3_AFTER = 10;
 
@@ -97,12 +115,15 @@ export type GameEvent =
   | { type: "sound"; sound: "laser" | "death" | "glados" | "meow" }
   | { type: "music"; playing: boolean }
   | { type: "hit"; x: number; y: number; last: boolean }
-  | { type: "pickup"; x: number; y: number }
+  | { type: "pickup"; x: number; y: number; full: boolean }
   | { type: "jump"; x: number; y: number }
   | { type: "land"; x: number; y: number }
   | { type: "launch"; x: number; y: number }
   | { type: "powerUp"; kind: PowerUpKind; x: number; y: number }
   | { type: "shield"; x: number; y: number }
+  | { type: "appear"; thing: Grab }
+  | { type: "ending"; kind: PowerUpKind; left: number }
+  | { type: "nearMiss" }
   | { type: "lost"; time: number };
 
 const pixelArt = (name: string, width: number, height: number): Costume => ({
@@ -120,6 +141,26 @@ const pixelArt = (name: string, width: number, height: number): Costume => ({
 /** Costumes for the power-ups, and the jetpack's flame. Drawn 3 stage pixels per pixel. */
 export const powerUpCostumes = POWER_UPS.map((kind) => pixelArt(kind, 12, 12));
 export const flameCostumes = [pixelArt("flame1", 12, 4), pixelArt("flame2", 12, 4)];
+
+/** A sprite as it looked in one update, for the replay. */
+export interface SpriteShot {
+  costume: Costume;
+  x: number;
+  y: number;
+  rotation: number;
+  flipX: number;
+  size: number;
+}
+
+/** One update of the run, for the replay on the game over screen. */
+export interface ReplayFrame {
+  sprites: SpriteShot[];
+  /** Which of the sprites is the player. */
+  player: number;
+  shield: boolean;
+  jetpack: boolean;
+  flying: boolean;
+}
 
 function sprite(
   name: string,
@@ -185,8 +226,16 @@ export class Game {
   powers: Record<PowerUpKind, number> = { jetpack: 0, shield: 0, freeze: 0 };
   /** In the air with a jetpack. */
   flying = false;
+  /** Everything grabbed this run, in order. */
+  grabbed: Grab[] = [];
+  /** The last seconds of the run, oldest first. */
+  replay: ReplayFrame[] = [];
+  /** Seconds on the game over screen. */
+  overTime = 0;
   private powerUpTimer = POWER_UP_FIRST;
   private powerUpShown = 0;
+  /** The flying virus came close to the player without a hit. */
+  private closeCall = false;
   private dying = 0;
   private jumpCut = false;
   private jumpBuffer = 0;
@@ -195,10 +244,9 @@ export class Game {
   private pickupTimer = PICKUP_FIRST;
   private pickupShown = 0;
   private gladosTimer = new Timer(GLADOS_AFTER);
-  private hl3Time = 0;
   private hl3Clicked = false;
 
-  constructor(readonly random: () => number = Math.random) {
+  constructor(public random: () => number = Math.random) {
     this.toTitle();
   }
 
@@ -215,6 +263,11 @@ export class Game {
   /** Seconds the power-up has left on stage, while it's shown. */
   get powerUpLeft(): number {
     return this.powerUp.visible ? POWER_UP_SHOWN - this.powerUpShown : 0;
+  }
+
+  /** Whether jump can start a new game yet. */
+  get canRetry(): boolean {
+    return this.phase === "over" && this.overTime >= RETRY_LOCK - 1e-9;
   }
 
   /** Seconds the penguin has left on stage, while it's shown. */
@@ -249,6 +302,9 @@ export class Game {
     this.flying = false;
     this.powerUpTimer = POWER_UP_FIRST;
     this.powerUpShown = 0;
+    this.closeCall = false;
+    this.grabbed = [];
+    this.replay = [];
     for (const s of this.allSprites()) s.visible = false;
 
     const { player, virus, monitor, pickup } = this;
@@ -291,10 +347,24 @@ export class Game {
     this.updatePickup();
     this.updatePowerUps();
     this.updateDifficulty();
+    this.record();
     if (this.health < 1) {
       this.health = 0;
       this.dying = DEATH_PAUSE;
     }
+  }
+
+  /** Keeps the last seconds of the run for the replay. */
+  private record(): void {
+    const shown = this.layers.filter((s) => s.visible);
+    this.replay.push({
+      sprites: shown.map((s) => ({ costume: s.currentCostume, x: s.x, y: s.y, rotation: s.rotation, flipX: s.flipX, size: s.size })),
+      player: shown.indexOf(this.player),
+      shield: this.powers.shield > 0,
+      jetpack: this.powers.jetpack > 0,
+      flying: this.flying,
+    });
+    if (this.replay.length > REPLAY_SECONDS * HZ) this.replay.shift();
   }
 
   private movePlayer(input: Input): void {
@@ -377,8 +447,12 @@ export class Game {
 
   /** Seconds a virus shows where it's aiming. Shorter as it gets faster. */
   private aimWarning(): number {
-    const progress = Math.min(1, (this.speed - VIRUS_START_SPEED) / (VIRUS_FAST - VIRUS_START_SPEED));
-    return WARNING_LONGEST - (WARNING_LONGEST - WARNING_SHORTEST) * progress;
+    return WARNING_LONGEST - (WARNING_LONGEST - WARNING_SHORTEST) * speedUp(this.speed);
+  }
+
+  /** How fast the music plays: faster with the virus. */
+  get musicRate(): number {
+    return 1 + (MUSIC_FASTEST - 1) * speedUp(this.speed);
   }
 
   private moveVirus(): void {
@@ -397,7 +471,15 @@ export class Game {
     const steps = Math.ceil(distance / VIRUS_STEP);
     for (let i = 0; i < steps; i++) {
       virus.move(distance / steps);
-      if (this.hurts(virus) || virus.isTouchingEdge()) {
+      if (this.hurts(virus)) {
+        this.closeCall = false;
+        this.respawnVirus();
+        return;
+      }
+      if (this.invincible === 0 && gap(virus.bounds(), this.player.bounds()) <= NEAR_MISS) this.closeCall = true;
+      if (virus.isTouchingEdge()) {
+        if (this.closeCall) this.events.push({ type: "nearMiss" });
+        this.closeCall = false;
         this.respawnVirus();
         return;
       }
@@ -431,8 +513,11 @@ export class Game {
   /** Counts down the player's power-ups, and shows a new one now and then. */
   private updatePowerUps(): void {
     for (const kind of POWER_UPS) {
-      const left = this.powers[kind] - DT;
+      const before = this.powers[kind];
+      const left = before - DT;
       this.powers[kind] = left > 1e-9 ? left : 0;
+      const tick = TICKS.find((mark) => before > mark + 1e-9 && left <= mark + 1e-9);
+      if (tick !== undefined) this.events.push({ type: "ending", kind, left: tick });
     }
     const powerUp = this.powerUp;
     if (powerUp.visible) {
@@ -440,6 +525,7 @@ export class Game {
       if (powerUp.isTouching(this.player)) {
         const kind = this.powerUpKind;
         this.powers[kind] = POWER_UP_TIME[kind];
+        this.grabbed.push(kind);
         powerUp.visible = false;
         this.events.push({ type: "powerUp", kind, x: powerUp.x, y: powerUp.y });
       } else if (this.powerUpShown >= POWER_UP_SHOWN - 1e-9) {
@@ -457,6 +543,7 @@ export class Game {
     powerUp.setXY(x, this.randomInt(POWER_UP_LOWEST, POWER_UP_HIGHEST));
     powerUp.visible = true;
     this.powerUpShown = 0;
+    this.events.push({ type: "appear", thing: this.powerUpKind });
   }
 
   private updatePickup(): void {
@@ -464,9 +551,12 @@ export class Game {
     if (pickup.visible) {
       this.pickupShown += DT;
       if (pickup.isTouching(this.player)) {
-        this.health += 1;
+        const full = this.health >= MAX_HEALTH;
+        if (full) this.powers.shield = Math.max(this.powers.shield, PENGUIN_SHIELD);
+        else this.health += 1;
+        this.grabbed.push("penguin");
         pickup.visible = false;
-        this.events.push({ type: "pickup", x: pickup.x, y: pickup.y });
+        this.events.push({ type: "pickup", x: pickup.x, y: pickup.y, full });
       } else if (this.pickupShown >= PICKUP_SHOWN - 1e-9) {
         pickup.visible = false;
       }
@@ -479,6 +569,7 @@ export class Game {
       this.pickupShown = 0;
       const [low, high] = PICKUP_EVERY;
       this.pickupTimer = low + this.random() * (high - low);
+      this.events.push({ type: "appear", thing: "penguin" });
     }
   }
 
@@ -494,7 +585,7 @@ export class Game {
     this.events.push({ type: "sound", sound: "death" });
     this.events.push({ type: "lost", time: Math.floor(this.time) });
     this.gladosTimer = new Timer(GLADOS_AFTER);
-    this.hl3Time = 0;
+    this.overTime = 0;
 
     const { player, virus, monitor, pickup, gameOver, hl3 } = this;
     gameOver.visible = true;
@@ -516,16 +607,16 @@ export class Game {
       this.gladosTimer.every = GLADOS_AFTER + sounds.glados;
       this.gladosTimer.left = this.gladosTimer.every;
     }
-    const before = this.hl3Time;
-    this.hl3Time += DT;
+    const before = this.overTime;
+    this.overTime += DT;
     const hl3 = this.hl3;
-    if (hl3Shown(this.hl3Time) && !hl3Shown(before)) {
+    if (hl3Shown(this.overTime) && !hl3Shown(before)) {
       hl3.setXY(this.randomInt(-200, 200), this.randomInt(-150, 150));
       hl3.setDirection(hl3.direction + 30);
       hl3.ifOnEdgeBounce();
       this.hl3Clicked = false;
     }
-    hl3.visible = hl3Shown(this.hl3Time) && !this.hl3Clicked;
+    hl3.visible = hl3Shown(this.overTime) && !this.hl3Clicked;
   }
 
   /** Clicking the Half-Life 3 logo makes it meow and go away. */
@@ -540,6 +631,29 @@ export class Game {
   private allSprites(): Sprite[] {
     return [this.player, this.virus, this.monitor, this.pickup, this.gameOver, this.hl3, this.powerUp];
   }
+}
+
+/** From 0 at the starting virus speed to 1 once it's fast. */
+function speedUp(speed: number): number {
+  return Math.min(1, (speed - VIRUS_START_SPEED) / (VIRUS_FAST - VIRUS_START_SPEED));
+}
+
+/** Stage pixels between two boxes, 0 when they overlap. */
+export function gap(a: Bounds, b: Bounds): number {
+  const x = Math.max(0, a.left - b.right, b.left - a.right);
+  const y = Math.max(0, a.bottom - b.top, b.bottom - a.top);
+  return Math.hypot(x, y);
+}
+
+/**
+ * The replay frame to show this long into the game over screen: the last
+ * seconds of the run, slowed down, then the last frame for a moment, then again.
+ */
+export function replayFrame(replay: ReplayFrame[], seconds: number): ReplayFrame | null {
+  if (replay.length === 0) return null;
+  const playing = replay.length / HZ / REPLAY_SPEED;
+  const t = seconds % (playing + REPLAY_HOLD);
+  return replay[Math.min(replay.length - 1, Math.floor((t * REPLAY_SPEED * HZ) + 1e-9))]!;
 }
 
 /**

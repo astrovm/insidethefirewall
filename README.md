@@ -9,6 +9,8 @@ Scratch videogame I made in 2013, now remastered in TypeScript with the original
 
 The remaster is a normal game loop at 60 updates a second, drawn as big as the window allows, with menus, pause, fades, touch buttons and settings. It uses the original art and sounds.
 
+It also takes ideas from classic games: hearts capped at 5 like Zelda, music that speeds up with the virus like Space Invaders, instant retry like Super Meat Boy, a replay of the last 2 seconds on the game over screen, and a daily run that is the same for everyone, like Spelunky and Wordle. For comfort, **Settings** has a game speed slider like Celeste's Assist Mode, and the keys can be changed.
+
 The 2013 game is also ported script by script, with the same rules as Scratch: 30 frames per second, the same collision, edge and timing quirks. Tests run it against the original project file. The remaster takes its sprites and collision from it.
 
 - `src/remaster/`: the remaster's rules, power-ups, drawing and effects. The power-ups' pixel art is in `src/remaster/art.ts`. Run `bun tools/pixel-art.ts` after changing it.

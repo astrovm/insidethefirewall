@@ -28,6 +28,14 @@ import {
   POWER_UP_TIME,
   WARNING_LONGEST,
   WARNING_SHORTEST,
+  MAX_HEALTH,
+  MUSIC_FASTEST,
+  NEAR_MISS,
+  PENGUIN_SHIELD,
+  REPLAY_SECONDS,
+  RETRY_LOCK,
+  gap,
+  replayFrame,
   type GameEvent,
   type Input,
 } from "../src/remaster/game.ts";
@@ -1037,7 +1045,7 @@ describe("power-ups", () => {
 
 describe("controls", () => {
   test("the 2013 keys move the player", () => {
-    expect(["a", "A", "ArrowLeft", "d", "ArrowRight", "s", "ArrowDown", "w", " ", "ArrowUp", "x", "Enter"].map(moveForKey)).toEqual([
+    expect(["a", "A", "ArrowLeft", "d", "ArrowRight", "s", "ArrowDown", "w", " ", "ArrowUp", "x", "Enter"].map((key) => moveForKey(key))).toEqual([
       "left",
       "left",
       "left",
@@ -1130,5 +1138,264 @@ describe("screen", () => {
     expect(fader.value).toBe(1);
     fader.update(0.3);
     expect(fader.value).toBe(0);
+  });
+});
+
+describe("hearts", () => {
+  /** Puts the penguin on stage and the player in it. */
+  function grabPenguin(game: Game): void {
+    game.pickup.setXY(0, GROUND_Y + 40);
+    game.pickup.visible = true;
+    game.player.setXY(underPenguin(game), GROUND_Y + 40);
+    game.update(noInput);
+  }
+
+  test("a penguin adds a heart, up to 5", () => {
+    const game = started();
+    parkVirus(game);
+    game.health = MAX_HEALTH - 1;
+    grabPenguin(game);
+    expect(game.health).toBe(MAX_HEALTH);
+    expect(game.powers.shield).toBe(0);
+    expect(game.events.find((e) => e.type === "pickup")).toMatchObject({ full: false });
+  });
+
+  test("with full hearts, a penguin gives a short shield instead", () => {
+    const game = started();
+    parkVirus(game);
+    game.health = MAX_HEALTH;
+    grabPenguin(game);
+    expect(game.health).toBe(MAX_HEALTH);
+    expect(game.powers.shield).toBeCloseTo(PENGUIN_SHIELD - DT, 6);
+    expect(game.events.find((e) => e.type === "pickup")).toMatchObject({ full: true });
+  });
+
+  test("a penguin never shortens a longer shield", () => {
+    const game = started();
+    parkVirus(game);
+    game.health = MAX_HEALTH;
+    game.powers.shield = 8;
+    grabPenguin(game);
+    expect(game.powers.shield).toBeCloseTo(8 - DT, 6);
+  });
+});
+
+describe("music", () => {
+  test("speeds up with the virus, up to its fastest, and starts over each game", () => {
+    const game = started();
+    parkVirus(game);
+    expect(game.musicRate).toBe(1);
+    game.speed = (VIRUS_START_SPEED + VIRUS_FAST) / 2;
+    expect(game.musicRate).toBeCloseTo((1 + MUSIC_FASTEST) / 2, 6);
+    game.speed = VIRUS_FAST;
+    expect(game.musicRate).toBeCloseTo(MUSIC_FASTEST, 6);
+    game.speed = VIRUS_FAST * 3;
+    expect(game.musicRate).toBeCloseTo(MUSIC_FASTEST, 6);
+    game.start();
+    expect(game.musicRate).toBe(1);
+  });
+});
+
+describe("retrying", () => {
+  test("jump can start again only after a moment on the game over screen", () => {
+    const game = started();
+    parkVirus(game);
+    expect(game.canRetry).toBe(false);
+    die(game);
+    expect(game.phase).toBe("over");
+    expect(game.canRetry).toBe(false);
+    run(game, RETRY_LOCK - DT);
+    expect(game.canRetry).toBe(false);
+    run(game, DT);
+    expect(game.canRetry).toBe(true);
+    game.start();
+    expect(game.canRetry).toBe(false);
+    die(game);
+    expect(game.overTime).toBe(0);
+  });
+});
+
+describe("near misses", () => {
+  /** A flying virus that passes over the player's head, this far above it, to the right edge. */
+  function flyOver(game: Game, above: number): void {
+    parkVirus(game);
+    game.player.setXY(0, GROUND_Y);
+    game.virus.visible = true;
+    game.warning = 0;
+    game.virus.setDirection(90);
+    game.virus.setXY(-150, 100);
+    const offset = game.virus.bounds().bottom - game.player.bounds().top;
+    game.virus.setXY(-150, 100 - offset + above);
+    game.events.length = 0;
+    // Until it's back in the monitor.
+    for (let i = 0; i < 4 / DT && game.warning === 0; i++) game.update(noInput);
+    expect(game.warning).toBeGreaterThan(0);
+  }
+
+  test("a virus that flies by close without a hit makes a whoosh, once", () => {
+    const game = started();
+    flyOver(game, NEAR_MISS / 2);
+    expect(types(game.events).filter((t) => t === "nearMiss" || t === "hit")).toEqual(["nearMiss"]);
+    expect(game.health).toBe(1);
+  });
+
+  test("right at the near miss distance still counts, a little further doesn't", () => {
+    const close = started();
+    flyOver(close, NEAR_MISS - 0.5);
+    expect(types(close.events)).toContain("nearMiss");
+    const far = started();
+    flyOver(far, NEAR_MISS + 3);
+    expect(types(far.events)).not.toContain("nearMiss");
+  });
+
+  test("a hit, or flying by while invincible, isn't a near miss", () => {
+    const hit = started();
+    flyOver(hit, -20);
+    expect(types(hit.events)).toContain("hit");
+    expect(types(hit.events)).not.toContain("nearMiss");
+    const invincible = started();
+    invincible.invincible = 100;
+    flyOver(invincible, NEAR_MISS / 2);
+    expect(types(invincible.events)).not.toContain("nearMiss");
+  });
+
+  test("the distance between boxes is 0 when they overlap", () => {
+    const box = (left: number, bottom: number) => ({ left, right: left + 10, bottom, top: bottom + 10 });
+    expect(gap(box(0, 0), box(5, 5))).toBe(0);
+    expect(gap(box(0, 0), box(13, 0))).toBe(3);
+    expect(gap(box(13, 0), box(0, 0))).toBe(3);
+    expect(gap(box(0, 0), box(0, 14))).toBe(4);
+    expect(gap(box(0, 14), box(0, 0))).toBe(4);
+    expect(gap(box(0, 0), box(13, 14))).toBe(5);
+  });
+});
+
+describe("cues", () => {
+  test("the penguin and power-ups say when they show up", () => {
+    const game = started(4);
+    parkVirus(game);
+    game.player.setXY(-205, GROUND_Y);
+    run(game, PICKUP_FIRST - DT);
+    expect(types(game.events)).not.toContain("appear");
+    run(game, DT);
+    expect(game.events.filter((e) => e.type === "appear")).toEqual([{ type: "appear", thing: "penguin" }]);
+    game.events.length = 0;
+    run(game, POWER_UP_FIRST - PICKUP_FIRST);
+    const appeared = game.events.filter((e) => e.type === "appear");
+    expect(appeared).toEqual([{ type: "appear", thing: game.powerUpKind }]);
+  });
+
+  test("a power-up ticks at 3, 2 and 1 s left", () => {
+    const game = started();
+    parkVirus(game);
+    game.powers.jetpack = POWER_UP_TIME.jetpack;
+    run(game, POWER_UP_TIME.jetpack - 3 - DT);
+    expect(types(game.events)).not.toContain("ending");
+    run(game, DT);
+    expect(game.events.filter((e) => e.type === "ending")).toEqual([{ type: "ending", kind: "jetpack", left: 3 }]);
+    run(game, 3);
+    expect(game.events.filter((e) => e.type === "ending").map((e) => (e.type === "ending" ? e.left : 0))).toEqual([3, 2, 1]);
+  });
+
+  test("a power-up shorter than 3 s only ticks for what's left", () => {
+    const game = started();
+    parkVirus(game);
+    game.powers.freeze = 2.5;
+    run(game, 3);
+    expect(game.events.filter((e) => e.type === "ending").map((e) => (e.type === "ending" ? e.left : 0))).toEqual([2, 1]);
+  });
+});
+
+describe("the replay", () => {
+  test("keeps the last 2 s of the run, with the player and power-ups", () => {
+    const game = started();
+    parkVirus(game);
+    run(game, 0.5);
+    expect(game.replay).toHaveLength(30);
+    game.powers.shield = 5;
+    run(game, 3);
+    expect(game.replay).toHaveLength(REPLAY_SECONDS * 60);
+    const last = game.replay.at(-1)!;
+    expect(last.sprites[last.player]!.costume.name).toBe(game.player.currentCostume.name);
+    expect(last.sprites[last.player]!.x).toBe(game.player.x);
+    expect([last.shield, last.jetpack, last.flying]).toEqual([true, false, false]);
+    game.start();
+    expect(game.replay).toEqual([]);
+  });
+
+  test("ends on the hit that ended the run, not on the pause after it", () => {
+    const game = started();
+    launch(game);
+    game.virus.setXY(game.player.x, game.player.y);
+    game.update(noInput);
+    const frames = game.replay.length;
+    const hit = game.replay.at(-1)!;
+    expect(hit.sprites[hit.player]!.costume.name).toBe("hit");
+    run(game, DEATH_PAUSE + 1);
+    expect(game.phase).toBe("over");
+    expect(game.replay.length).toBe(frames);
+  });
+
+  test("leaves out the hit stop, so it doesn't stall", () => {
+    const game = started();
+    game.health = 3;
+    launch(game);
+    const before = game.replay.length;
+    game.virus.setXY(game.player.x, game.player.y);
+    game.update(noInput);
+    run(game, HIT_STOP);
+    expect(game.replay.length).toBe(before + 1);
+  });
+
+  test("plays at half speed, holds the last frame for 1 s, then starts again", () => {
+    const frames = Array.from({ length: 120 }, (_, i) => ({ sprites: [], player: i, shield: false, jetpack: false, flying: false }));
+    const at = (seconds: number) => replayFrame(frames, seconds)?.player;
+    expect([at(0), at(1), at(2), at(3.99), at(4), at(4.99), at(5), at(6)]).toEqual([0, 30, 60, 119, 119, 119, 0, 30]);
+    expect(replayFrame(frames.slice(0, 30), 1.5)?.player).toBe(29);
+    expect(replayFrame(frames.slice(0, 30), 2)?.player).toBe(0);
+    expect(replayFrame([], 1)).toBeNull();
+  });
+});
+
+describe("the run summary", () => {
+  test("lists what was grabbed, in order, and starts empty each game", () => {
+    const game = started();
+    parkVirus(game);
+    for (const kind of ["shield", "freeze"] as const) {
+      game.powerUp.setCostume(kind);
+      game.powerUp.setXY(game.player.x, game.player.y);
+      game.powerUp.visible = true;
+      game.update(noInput);
+    }
+    game.pickup.setXY(0, GROUND_Y + 40);
+    game.pickup.visible = true;
+    game.player.setXY(underPenguin(game), GROUND_Y + 40);
+    game.update(noInput);
+    expect(game.grabbed).toEqual(["shield", "freeze", "penguin"]);
+    game.start();
+    expect(game.grabbed).toEqual([]);
+  });
+});
+
+describe("the same seed", () => {
+  test("gives everyone the same penguins and power-ups, however they play", () => {
+    const appearances = (input: Partial<Input>) => {
+      const game = new Game(seeded(9));
+      game.start();
+      parkVirus(game);
+      game.invincible = Infinity;
+      const seen: string[] = [];
+      for (let i = 0; i < 120 * 60; i++) {
+        game.update(hold(input));
+        for (const event of game.events.splice(0)) {
+          if (event.type === "appear") seen.push(event.thing === "penguin" ? `penguin ${game.pickup.x}` : event.thing);
+        }
+        game.health = 3;
+      }
+      return seen;
+    };
+    const still = appearances({});
+    expect(still.length).toBeGreaterThan(5);
+    expect(appearances({ right: true, jump: true, jumpPressed: true })).toEqual(still);
   });
 });
