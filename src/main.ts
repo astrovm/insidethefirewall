@@ -177,7 +177,8 @@ async function main(): Promise<void> {
     if (paused) audio.pause();
     else audio.unlock();
   };
-  $("flag").addEventListener("click", () => {
+  const flag = $("flag");
+  flag.addEventListener("click", () => {
     setPaused(false);
     world.greenFlag();
   });
@@ -214,6 +215,7 @@ async function main(): Promise<void> {
       steps++;
     }
     if (steps === MAX_STEPS_PER_FRAME) pending = 0;
+    flag.classList.toggle("active", world.scheduler.threads.length > 0);
     renderer.draw(world, Math.min(1, pending / stepMs));
     requestAnimationFrame(frame);
   };
