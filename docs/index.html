@@ -71,11 +71,11 @@
       background: #00e04b;
     }
     .pill.dark {
-      background: #006321;
+      background: #004a19;
       color: #fe9501;
     }
     .pill.dark:hover {
-      background: #00782a;
+      background: #005d20;
     }
     #corner {
       position: absolute;
@@ -129,7 +129,7 @@
     #play:hover .hover, #play:focus-visible .hover {
       display: block;
     }
-    #ui #pause-menu, #ui #settings-menu {
+    #ui #pause-menu, #ui #settings-menu, #ui #keys-menu {
       position: fixed;
       background: #000a;
       display: flex;
@@ -138,23 +138,23 @@
       justify-content: center;
       gap: calc(10 * var(--s));
     }
-    #pause-menu[hidden], #settings-menu[hidden] {
+    #pause-menu[hidden], #settings-menu[hidden], #keys-menu[hidden] {
       display: none;
     }
-    #pause-menu h2, #settings-menu h2 {
+    #pause-menu h2, #settings-menu h2, #keys-menu h2 {
       font-size: calc(36 * var(--s));
       font-weight: 500;
       margin: 0 0 calc(6 * var(--s));
     }
-    #pause-menu button, #settings-menu > button {
+    #pause-menu button, #settings-menu > button, #keys-menu > button {
       position: static;
       width: calc(140 * var(--s));
     }
-    #ui #settings-menu {
+    #ui #settings-menu, #ui #keys-menu {
       background: #000d;
       pointer-events: auto;
     }
-    #settings-menu label, #settings-menu fieldset {
+    #settings-menu label, #settings-menu fieldset, #keys-menu .row {
       pointer-events: auto;
       display: flex;
       align-items: center;
@@ -178,6 +178,33 @@
     }
     #settings-menu input[type="range"] {
       width: calc(150 * var(--s));
+    }
+    .speed {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--s));
+    }
+    #settings-menu .speed input[type="range"] {
+      width: calc(110 * var(--s));
+    }
+    .speed output {
+      width: calc(36 * var(--s));
+      text-align: right;
+    }
+    #ui .row button {
+      position: static;
+      min-width: calc(110 * var(--s));
+      height: calc(26 * var(--s));
+      padding: 0 calc(10 * var(--s));
+      border: calc(2 * var(--s)) solid #fe9501;
+      border-radius: calc(13 * var(--s));
+      background: none;
+      color: inherit;
+      font-size: calc(14 * var(--s));
+    }
+    #ui .row button.listening {
+      background: #fe9501;
+      color: #000;
     }
     #settings-menu input:focus-visible, .choices label:has(input:focus-visible) {
       outline: calc(3 * var(--s)) solid #fff;
@@ -273,7 +300,7 @@
     #new-best {
       font-weight: 500;
       color: #fff;
-      background: #ff0000;
+      background: #d40000;
       border-radius: calc(4 * var(--s));
       padding: 0 calc(5 * var(--s));
       font-size: calc(13 * var(--s));
@@ -284,9 +311,37 @@
       top: calc(250 * var(--s));
       font-size: calc(16 * var(--s));
     }
-    #over-menu .pill {
+    #over-menu .actions {
+      position: absolute;
       right: calc(12 * var(--s));
       top: calc(10 * var(--s));
+      display: flex;
+      gap: calc(8 * var(--s));
+    }
+    #over-menu .actions button {
+      position: static;
+    }
+    .grabs {
+      display: flex;
+      gap: calc(10 * var(--s));
+    }
+    .grabs span {
+      display: flex;
+      align-items: center;
+      gap: calc(3 * var(--s));
+    }
+    .grabs img {
+      height: calc(18 * var(--s));
+      image-rendering: pixelated;
+    }
+    #replay-label {
+      position: absolute;
+      left: calc(318 * var(--s));
+      top: calc(50 * var(--s));
+      padding: 0 calc(5 * var(--s));
+      font-size: calc(12 * var(--s));
+      background: #fe9501;
+      color: #000;
     }
     .visually-hidden {
       position: absolute;
@@ -350,6 +405,7 @@
         <h2 id="settings-title">Settings</h2>
         <label>Music <input id="music-volume" type="range" min="0" max="100" step="5"></label>
         <label>Sound effects <input id="effects-volume" type="range" min="0" max="100" step="5"></label>
+        <label>Game speed <span class="speed"><input id="game-speed" type="range" min="70" max="100" step="5"><output id="game-speed-value" for="game-speed">100%</output></span></label>
         <fieldset>
           <legend>Touch buttons</legend>
           <span class="choices">
@@ -358,14 +414,29 @@
             <label><input type="radio" name="touch" value="off">Off</label>
           </span>
         </fieldset>
+        <button class="pill" type="button" data-action="keys">Keys</button>
         <button class="pill" type="button" data-action="close-settings">Done</button>
+      </section>
+      <section id="keys-menu" role="dialog" aria-labelledby="keys-title" hidden>
+        <h2 id="keys-title">Keys</h2>
+        <div class="row"><span id="key-left">Left</span> <button id="bind-left" type="button" data-bind="left" aria-labelledby="key-left bind-left"></button></div>
+        <div class="row"><span id="key-right">Right</span> <button id="bind-right" type="button" data-bind="right" aria-labelledby="key-right bind-right"></button></div>
+        <div class="row"><span id="key-down">Down</span> <button id="bind-down" type="button" data-bind="down" aria-labelledby="key-down bind-down"></button></div>
+        <div class="row"><span id="key-jump">Jump</span> <button id="bind-jump" type="button" data-bind="jump" aria-labelledby="key-jump bind-jump"></button></div>
+        <button class="pill" type="button" data-action="reset-keys">Reset</button>
+        <button class="pill" type="button" data-action="close-keys">Done</button>
       </section>
       <section id="over-menu" hidden>
         <div class="stat">
           <p>Time <span id="over-time">0</span> <strong id="new-best" hidden>New best!</strong></p>
           <p>Best <span id="over-best">0</span></p>
+          <p id="over-grabs" class="grabs"></p>
         </div>
-        <button class="pill dark" type="button" data-action="menu">Menu</button>
+        <span id="replay-label">Replay</span>
+        <div class="actions">
+          <button id="share" class="pill dark" type="button">Share</button>
+          <button class="pill dark" type="button" data-action="menu">Menu</button>
+        </div>
         <button id="repair" type="button" data-action="restart">Repair (R)</button>
       </section>
     </div>

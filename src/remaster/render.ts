@@ -1,7 +1,16 @@
 import { STAGE_HEIGHT, STAGE_WIDTH, type Costume, type Sprite } from "../engine/sprite.ts";
 import { interpolate, type CostumeImages } from "../render.ts";
 import type { Effects } from "./effects.ts";
-import { flameCostumes, PICKUP_BLINK, POWER_UP_TIME, POWER_UPS, powerUpCostumes, type Game } from "./game.ts";
+import {
+  flameCostumes,
+  PICKUP_BLINK,
+  POWER_UP_TIME,
+  POWER_UPS,
+  powerUpCostumes,
+  REPLAY_SPEED,
+  replayFrame,
+  type Game,
+} from "./game.ts";
 
 export const colors = {
   green: "#00cc44",
@@ -46,6 +55,9 @@ const TITLE_X = -1;
 const TITLE_Y = 1;
 const TITLE_SIZE = 0.9708737864077678;
 
+/** The replay on the game over screen: a small window in the top right corner, under Menu. */
+export const REPLAY_BOX = { left: 318, top: 50, scale: 0.3 } as const;
+
 interface Raster {
   canvas: HTMLCanvasElement;
   /** Device pixels per costume unit. */
@@ -55,7 +67,8 @@ interface Raster {
 /** Draws the remastered game on a canvas that fills the window. */
 export class RemasterRenderer {
   private readonly ctx: CanvasRenderingContext2D;
-  private readonly rasters = new Map<Costume, Raster>();
+  /** Each costume at up to two sizes: in the game and in the replay. */
+  private readonly rasters = new Map<Costume, Raster[]>();
   private stageRaster: HTMLCanvasElement | null = null;
   view: View = { x: 0, y: 0, scale: 1 };
   /** 0 shows the game, 1 is fully black. Used for fades between screens. */
@@ -102,15 +115,20 @@ export class RemasterRenderer {
       let [x, y] = interpolate(sprite, game.previous.get(sprite), between);
       // Power-ups bob up and down, so they read as things to grab.
       if (sprite === game.powerUp) y += Math.sin(game.time * 5) * 3;
-      if (playing && sprite === game.player && game.powers.jetpack > 0) this.drawJetpack(game, x, y);
+      if (playing && sprite === game.player && game.powers.jetpack > 0) {
+        this.drawJetpack(x, y, sprite.flipX, game.powers.jetpack < 1 ? blink(game.powers.jetpack) : 1, game.flying, game.time);
+      }
       ctx.globalAlpha = playing ? this.alphaOf(game, sprite) : 1;
       if (playing && sprite === game.virus && game.powers.freeze > 0) ctx.filter = "hue-rotate(160deg) saturate(1.5)";
       if (ctx.globalAlpha > 0) this.drawSprite(sprite, x, y);
       ctx.filter = "none";
       ctx.globalAlpha = 1;
-      if (playing && sprite === game.player && game.powers.shield > 0) this.drawShield(game, x, y);
+      if (playing && sprite === game.player && game.powers.shield > 0) {
+        this.drawShield(x, y, 0.7 * (game.powers.shield < 1.5 ? blink(game.powers.shield) : 1));
+      }
     }
     ctx.restore();
+    if (game.phase === "over") this.drawReplay(game);
     this.view = steady;
     if (game.phase === "playing") this.drawHud(game);
 
@@ -140,24 +158,23 @@ export class RemasterRenderer {
   }
 
   /** The jetpack on the player's back, with a flame while it pushes. */
-  private drawJetpack(game: Game, x: number, y: number): void {
-    const back = x - game.player.flipX * 30;
-    const ending = game.powers.jetpack < 1;
-    this.ctx.globalAlpha = ending ? blink(game.powers.jetpack) : 1;
+  private drawJetpack(x: number, y: number, flipX: number, alpha: number, flying: boolean, time: number): void {
+    const back = x - flipX * 30;
+    this.ctx.globalAlpha = alpha;
     this.drawCostume(powerUpCostumes[0]!, back, y + 4, 0, 3, 3);
-    if (game.flying) {
-      const frame = flameCostumes[Math.floor(game.time / 0.08) % 2]!;
+    if (flying) {
+      const frame = flameCostumes[Math.floor(time / 0.08) % 2]!;
       this.drawCostume(frame, back, y - 20, 0, 3, 3);
     }
     this.ctx.globalAlpha = 1;
   }
 
   /** A bubble around the player while the shield is up. */
-  private drawShield(game: Game, x: number, y: number): void {
+  private drawShield(x: number, y: number, alpha: number): void {
     const ctx = this.ctx;
     const [cx, cy] = toCanvas(this.view, x, y - 4);
     ctx.save();
-    ctx.globalAlpha = 0.7 * (game.powers.shield < 1.5 ? blink(game.powers.shield) : 1);
+    ctx.globalAlpha = alpha;
     ctx.strokeStyle = colors.shield;
     ctx.lineWidth = 3 * this.view.scale;
     ctx.beginPath();
@@ -194,6 +211,39 @@ export class RemasterRenderer {
       this.stageRaster = stage;
     }
     this.ctx.drawImage(stage, x, y);
+  }
+
+  /**
+   * The last seconds of the run, slowed down, in a small window on the game
+   * over screen, so the player sees what hit them.
+   */
+  private drawReplay(game: Game): void {
+    const frame = replayFrame(game.replay, game.overTime);
+    if (!frame) return;
+    const ctx = this.ctx;
+    const outer = this.view;
+    const [left, top] = toCanvas(outer, REPLAY_BOX.left - STAGE_WIDTH / 2, STAGE_HEIGHT / 2 - REPLAY_BOX.top);
+    const scale = outer.scale * REPLAY_BOX.scale;
+    const width = Math.round(STAGE_WIDTH * scale);
+    const height = Math.round(STAGE_HEIGHT * scale);
+    this.view = { x: Math.round(left), y: Math.round(top), scale };
+    ctx.save();
+    ctx.fillStyle = colors.orange;
+    const border = Math.max(1, Math.round(2 * outer.scale));
+    ctx.fillRect(this.view.x - border, this.view.y - border, width + 2 * border, height + 2 * border);
+    ctx.beginPath();
+    ctx.rect(this.view.x, this.view.y, width, height);
+    ctx.clip();
+    this.drawStage();
+    frame.sprites.forEach((shot, i) => {
+      const player = i === frame.player;
+      if (player && frame.jetpack) this.drawJetpack(shot.x, shot.y, shot.flipX, 1, frame.flying, game.overTime * REPLAY_SPEED);
+      const size = shot.size / 100;
+      this.drawCostume(shot.costume, shot.x, shot.y, shot.rotation, size * shot.flipX, size);
+      if (player && frame.shield) this.drawShield(shot.x, shot.y, 0.7);
+    });
+    ctx.restore();
+    this.view = outer;
   }
 
   /** The 2013 title, a little smaller than the stage so the room shows around it like a frame. */
@@ -233,8 +283,9 @@ export class RemasterRenderer {
    */
   private raster(costume: Costume, scaleX: number, scaleY: number): Raster | null {
     const scale = Math.max(scaleX, scaleY);
-    const cached = this.rasters.get(costume);
-    if (cached && Math.abs(cached.scale - scale) < 1e-6) return cached;
+    const sizes = this.rasters.get(costume) ?? [];
+    const cached = sizes.find((r) => Math.abs(r.scale - scale) < 1e-6);
+    if (cached) return cached;
     const image = this.images.get(costume);
     if (!image) return null;
     const canvas = document.createElement("canvas");
@@ -245,7 +296,7 @@ export class RemasterRenderer {
     ctx.imageSmoothingEnabled = costume.smooth;
     ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
     const raster = { canvas, scale };
-    this.rasters.set(costume, raster);
+    this.rasters.set(costume, [raster, ...sizes].slice(0, 2));
     return raster;
   }
 
@@ -256,20 +307,12 @@ export class RemasterRenderer {
     ctx.save();
     ctx.translate(this.view.x, this.view.y);
     ctx.scale(s, s);
-    const shown = Math.min(game.health, 5);
-    for (let i = 0; i < shown; i++) drawHeart(ctx, 12 + i * 26, 12);
-    ctx.font = "500 18px 'Noto Sans', sans-serif";
+    for (let i = 0; i < game.health; i++) drawHeart(ctx, 12 + i * 26, 12);
     ctx.textBaseline = "middle";
     ctx.lineJoin = "round";
     ctx.lineWidth = 4;
     ctx.strokeStyle = colors.mortar;
     ctx.fillStyle = colors.orange;
-    if (game.health > shown) {
-      const text = `×${game.health}`;
-      ctx.textAlign = "left";
-      ctx.strokeText(text, 12 + shown * 26, 23);
-      ctx.fillText(text, 12 + shown * 26, 23);
-    }
     // Under the hearts, where the 2013 Time monitor was.
     const time = `Time ${formatTime(game.time)}`;
     ctx.font = "500 20px 'Noto Sans', sans-serif";

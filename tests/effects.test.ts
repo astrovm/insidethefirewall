@@ -22,7 +22,11 @@ test("a blocked hit only shakes a little, with no flash", () => {
 
 test("only hits shake or flash", () => {
   const effects = new Effects(seeded(5));
-  for (const type of ["pickup", "land", "jump", "launch"] as const) effects.handle({ type, x: 0, y: 0 });
+  for (const type of ["land", "jump", "launch"] as const) effects.handle({ type, x: 0, y: 0 });
+  effects.handle({ type: "pickup", x: 0, y: 0, full: false });
+  effects.handle({ type: "nearMiss" });
+  effects.handle({ type: "appear", thing: "penguin" });
+  effects.handle({ type: "ending", kind: "jetpack", left: 1 });
   effects.handle({ type: "lost", time: 3 });
   expect([effects.shakeTime, effects.flash]).toEqual([0, 0]);
   expect(effects.shakeOffset()).toEqual([0, 0]);

@@ -14,26 +14,58 @@ export function scratchKey(key: string): string | null {
 }
 
 export type Move = "left" | "right" | "down" | "jump";
+export const MOVES: Move[] = ["left", "right", "down", "jump"];
+
+/** The keys for each move, as DOM key names, lower case for letters. */
+export type Keys = Record<Move, string[]>;
 
 /** The 2013 controls: W, A, S, D, Space and the arrows. */
-export function moveForKey(key: string): Move | null {
-  switch (key.length === 1 ? key.toLowerCase() : key) {
-    case "a":
-    case "ArrowLeft":
-      return "left";
-    case "d":
-    case "ArrowRight":
-      return "right";
-    case "s":
-    case "ArrowDown":
-      return "down";
-    case "w":
-    case " ":
-    case "ArrowUp":
-      return "jump";
-    default:
-      return null;
+export const defaultKeys: Keys = {
+  left: ["a", "ArrowLeft"],
+  right: ["d", "ArrowRight"],
+  down: ["s", "ArrowDown"],
+  jump: ["w", " ", "ArrowUp"],
+};
+
+/** Keys the game already uses for something else: pause, full screen, menus. */
+export const RESERVED_KEYS = ["Escape", "p", "f", "r", "Tab", "Enter"];
+
+/** Whether a key can be given to a move. */
+export function canBind(key: string): boolean {
+  return key !== "Unidentified" && key !== "Dead" && !RESERVED_KEYS.includes(normalKey(key));
+}
+
+/** DOM key name as stored in Keys: letters in lower case. */
+export function normalKey(key: string): string {
+  return key.length === 1 ? key.toLowerCase() : key;
+}
+
+export function moveForKey(key: string, keys: Keys = defaultKeys): Move | null {
+  const normal = normalKey(key);
+  return MOVES.find((move) => keys[move].includes(normal)) ?? null;
+}
+
+/**
+ * Keys with `key` as the only key for `move`. Another move that used it loses
+ * it, and if that leaves it with no keys, it gets the old first key of `move`.
+ */
+export function bindKey(keys: Keys, move: Move, key: string): Keys {
+  const normal = normalKey(key);
+  const bound = { ...keys, [move]: [normal] };
+  for (const other of MOVES) {
+    if (other === move || !keys[other].includes(normal)) continue;
+    const rest = keys[other].filter((k) => k !== normal);
+    const swap = keys[move].find((k) => k !== normal);
+    bound[other] = rest.length > 0 ? rest : swap === undefined ? [] : [swap];
   }
+  return bound;
+}
+
+const keyNames: Record<string, string> = { " ": "Space", ArrowLeft: "←", ArrowRight: "→", ArrowUp: "↑", ArrowDown: "↓" };
+
+/** How a key is shown in Settings. */
+export function keyLabel(key: string): string {
+  return keyNames[key] ?? (key.length === 1 ? key.toUpperCase() : key);
 }
 
 /**
