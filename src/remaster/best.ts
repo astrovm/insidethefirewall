@@ -1,19 +1,4 @@
-// Ranks and the best time.
-
-/** Ranks by seconds survived. */
-export const RANKS = [
-  { from: 0, name: "Script kiddie" },
-  { from: 20, name: "Antivirus trial" },
-  { from: 45, name: "Sysadmin" },
-  { from: 75, name: "Firewall" },
-  { from: 110, name: "Root" },
-];
-
-export function rankFor(seconds: number): string {
-  let rank = RANKS[0]!.name;
-  for (const r of RANKS) if (seconds >= r.from) rank = r.name;
-  return rank;
-}
+// The best time, kept in the browser.
 
 const KEY = "insidethefirewall.best";
 

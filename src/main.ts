@@ -7,7 +7,7 @@ import type { CostumeImages } from "./render.ts";
 import { Effects } from "./remaster/effects.ts";
 import { Fader } from "./remaster/fader.ts";
 import { DT, flameCostumes, Game, POWER_UP_TIME, powerUpCostumes, type GameEvent, type PowerUpKind } from "./remaster/game.ts";
-import { Best, rankFor } from "./remaster/progress.ts";
+import { Best } from "./remaster/best.ts";
 import { formatTime, RemasterRenderer, toStage } from "./remaster/render.ts";
 import { defaults, loadSettings, saveSettings, showTouch, type TouchControls } from "./remaster/settings.ts";
 
@@ -83,7 +83,7 @@ async function main(): Promise<void> {
   const best = new Best(storage());
   const showBest = () => {
     $("title-best").hidden = best.value === 0;
-    $("title-best").textContent = `Best ${formatTime(best.value)} · ${rankFor(best.value)}`;
+    $("title-best").textContent = `Best ${formatTime(best.value)}`;
   };
   showBest();
   let paused = false;
@@ -241,11 +241,9 @@ async function main(): Promise<void> {
         effects.clear();
         fader.fadeIn();
         const isBest = best.record(event.time);
-        const rank = rankFor(event.time);
-        status.textContent = `Game over. You lasted ${formatTime(event.time)} seconds. Rank: ${rank}.${isBest ? " New best!" : ""}`;
+        status.textContent = `Game over. You lasted ${formatTime(event.time)} seconds.${isBest ? " New best!" : ""}`;
         $("over-time").textContent = formatTime(event.time);
         $("over-best").textContent = formatTime(best.value);
-        $("over-rank").textContent = rank;
         $("new-best").hidden = !isBest;
         showBest();
         showMenus();

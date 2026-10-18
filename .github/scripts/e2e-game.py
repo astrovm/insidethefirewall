@@ -156,7 +156,6 @@ try:
         page.wait_for_function("() => insideTheFirewall.game.phase === 'over'", timeout=30000)
         assert state(page)["health"] == 0 and visible(page, "#repair")
         assert page.locator("#status").text_content().startswith("Game over")
-        assert page.locator("#over-rank").text_content() == "Script kiddie"
         assert visible(page, "#new-best"), "The first game should be a new best"
         print("Started the game and got hit")
 

@@ -1,38 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import fc from "fast-check";
-import { Best, RANKS, rankFor } from "../src/remaster/progress.ts";
-
-describe("ranks", () => {
-  test("go by seconds survived", () => {
-    expect(RANKS).toEqual([
-      { from: 0, name: "Script kiddie" },
-      { from: 20, name: "Antivirus trial" },
-      { from: 45, name: "Sysadmin" },
-      { from: 75, name: "Firewall" },
-      { from: 110, name: "Root" },
-    ]);
-    expect([0, 19, 20, 50, 80, 109, 110, 300].map(rankFor)).toEqual([
-      "Script kiddie",
-      "Script kiddie",
-      "Antivirus trial",
-      "Sysadmin",
-      "Firewall",
-      "Firewall",
-      "Root",
-      "Root",
-    ]);
-  });
-
-  test("never go down with more time", () => {
-    const order = RANKS.map((r) => r.name);
-    fc.assert(
-      fc.property(fc.double({ min: 0, max: 1000, noNaN: true }), fc.double({ min: 0, max: 1000, noNaN: true }), (a, b) => {
-        const [low, high] = a < b ? [a, b] : [b, a];
-        return order.indexOf(rankFor(low)) <= order.indexOf(rankFor(high));
-      }),
-    );
-  });
-});
+import { Best } from "../src/remaster/best.ts";
 
 /** In-memory storage, like localStorage. */
 function memory(initial: Record<string, string> = {}) {
