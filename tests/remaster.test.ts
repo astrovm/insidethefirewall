@@ -5,7 +5,6 @@ import {
   AIM_LOCK,
   FEET_Y,
   THREAT_WARNING,
-  TROJAN_STOP,
   WORM_SPEED,
   DEATH_PAUSE,
   DT,
@@ -28,7 +27,7 @@ import {
   type GameEvent,
   type Input,
 } from "../src/remaster/game.ts";
-import { STAGES } from "../src/remaster/progress.ts";
+import { HARDEST_AT } from "../src/remaster/progress.ts";
 import { fitStage, formatTime, toCanvas, toStage } from "../src/remaster/render.ts";
 import { seeded } from "./support.ts";
 
@@ -381,7 +380,8 @@ describe("the virus", () => {
     const aim = 90 - (Math.atan2(GROUND_Y - VIRUS_SPAWN.y, 150 - VIRUS_SPAWN.x) * 180) / Math.PI;
     expect(game.virus.direction).toBeCloseTo(aim, 6);
     const flown = Math.hypot(game.virus.x - VIRUS_SPAWN.x, game.virus.y - VIRUS_SPAWN.y);
-    expect(flown).toBeCloseTo(VIRUS_START_SPEED * DT, 6);
+    // The speed creeps up every update, so only about the start speed.
+    expect(flown).toBeCloseTo(VIRUS_START_SPEED * DT, 1);
     expect(game.virus.x).toBeGreaterThan(VIRUS_SPAWN.x);
   });
 
@@ -391,7 +391,7 @@ describe("the virus", () => {
     launch(game);
     run(game, 0.25);
     const flown = Math.hypot(game.virus.x - VIRUS_SPAWN.x, game.virus.y - VIRUS_SPAWN.y);
-    expect(flown).toBeCloseTo(VIRUS_START_SPEED * (0.25 + DT), 6);
+    expect(Math.abs(flown / (VIRUS_START_SPEED * (0.25 + DT)) - 1)).toBeLessThan(0.01);
   });
 
   test("goes back to the monitor and warns again when it reaches an edge", () => {
@@ -402,7 +402,7 @@ describe("the virus", () => {
     game.virus.setDirection(90);
     run(game, DT);
     expect([game.virus.x, game.virus.y]).toEqual([VIRUS_SPAWN.x, VIRUS_SPAWN.y]);
-    expect(game.warning).toBe(WARNING_LONGEST);
+    expect(game.warning).toBeCloseTo(WARNING_LONGEST, 2);
     expect(game.target.x).toBe(-200);
   });
 
@@ -688,69 +688,68 @@ describe("game over", () => {
   });
 });
 
-describe("stages", () => {
-  test("a new game announces stage 1", () => {
-    const game = new Game(seeded(1));
-    game.start();
-    expect(game.events).toContainEqual({ type: "stage", stage: 0 });
-    expect([game.stage, game.stageTime, game.threats]).toEqual([0, 0, []]);
-  });
-
-  test("every stage starts on time, with a sound and a faster virus", () => {
-    const game = started();
-    parkVirus(game);
-    game.health = 999;
-    const seen: [number, number, number][] = [];
-    for (let i = 0; i < Math.round(115 / DT); i++) {
-      game.update(noInput);
-      for (const event of game.events) if (event.type === "stage") seen.push([event.stage, Math.round(game.time), game.speed]);
-      if (game.events.some((e) => e.type === "stage")) expect(game.events).toContainEqual({ type: "sound", sound: "laser" });
-      game.events.length = 0;
-      game.health = 999;
-    }
-    expect(seen).toEqual(STAGES.slice(1).map((s, i) => [i + 1, s.from, s.virusSpeed]));
-  });
-
-  test("the last stage keeps speeding the virus up to its top speed", () => {
+describe("difficulty", () => {
+  test("the virus starts at its 2013 speed and speeds up little by little", () => {
     const game = started();
     parkVirus(game);
     game.invincible = Infinity;
-    game.time = 109.99;
-    run(game, DT);
-    expect(game.speed).toBe(STAGES.at(-1)!.virusSpeed);
+    expect(game.speed).toBe(VIRUS_START_SPEED);
+    run(game, 30);
+    expect(game.speed).toBeCloseTo(VIRUS_START_SPEED + (VIRUS_TOP_SPEED - VIRUS_START_SPEED) * (30 / HARDEST_AT), 6);
+    let before = game.speed;
+    for (let i = 0; i < 60; i++) {
+      game.update(noInput);
+      expect(game.speed).toBeGreaterThan(before);
+      before = game.speed;
+    }
+  });
+
+  test("the virus tops out at its top speed", () => {
+    const game = started();
+    parkVirus(game);
+    game.invincible = Infinity;
+    game.time = HARDEST_AT;
     run(game, 10);
-    expect(game.speed).toBe(STAGES.at(-1)!.virusSpeed + 27);
-    run(game, 60);
     expect(game.speed).toBe(VIRUS_TOP_SPEED);
   });
 
-  test("stage 1 has only the virus", () => {
+  test("nothing but the virus for the first 20 s", () => {
     const game = started();
     parkVirus(game);
-    run(game, 19.9);
+    run(game, 20 - 2 * DT);
     expect(game.threats).toEqual([]);
   });
 
-  test("a new kind of threat comes 1.5 s after its stage starts, then every few seconds", () => {
+  test("the first worm comes at 20 s, then one every few seconds", () => {
     const game = started();
     parkVirus(game);
     game.invincible = Infinity;
     game.time = 20 - DT;
     run(game, DT);
-    run(game, 1.5 - 2 * DT);
-    expect(game.threats).toEqual([]);
-    run(game, DT);
     expect(game.threats.map((t) => t.kind)).toEqual(["worm"]);
     let worms = 1;
     for (let i = 0; i < Math.round(20 / DT); i++) {
-      const before = game.threats.length;
+      const before = game.threats.filter((t) => t.kind === "worm").length;
       game.update(noInput);
-      game.health = 9;
-      if (game.threats.length > before) worms++;
+      if (game.threats.filter((t) => t.kind === "worm").length > before) worms++;
     }
-    // One every 6 to 9 s.
+    // One every 6.5 to 9.5 s around this time.
     expect(worms).toBeGreaterThanOrEqual(3);
     expect(worms).toBeLessThanOrEqual(4);
+  });
+
+  test("the second virus comes at 60 s, once the first one has left the monitor", () => {
+    const game = started();
+    game.invincible = Infinity;
+    game.time = 60 - DT;
+    // The first virus is still in the monitor, so the second one waits.
+    game.warning = 0.2;
+    run(game, DT);
+    expect(game.threats.some((t) => t.kind === "virus")).toBe(false);
+    for (let i = 0; i < 60 && !game.threats.some((t) => t.kind === "virus"); i++) game.update(noInput);
+    const second = game.threats.find((t) => t.kind === "virus");
+    expect(second).toBeDefined();
+    expect(game.warning).toBe(0);
   });
 
   test("threats are gone after game over and in a new game", () => {
@@ -758,20 +757,34 @@ describe("stages", () => {
     parkVirus(game);
     game.invincible = Infinity;
     game.time = 75;
-    run(game, 5);
+    run(game, 10);
     expect(game.threats.length).toBeGreaterThan(0);
     game.invincible = 0;
     die(game);
     expect(game.threats).toEqual([]);
     expect(game.layers.map((s) => s.name)).toEqual(["gameOver", "virus", "monitor", "player", "pickup", "hl3"]);
     game.start();
-    expect([game.stage, game.threats]).toEqual([0, []]);
+    expect([game.speed, game.threats]).toEqual([VIRUS_START_SPEED, []]);
+  });
+
+  test("threats come between the shortest and longest wait for the time", () => {
+    for (const [share, wait] of [[0, 6.2], [0.5, 7.6], [0.99, 8.972]]) {
+      const game = new Game(() => share!);
+      game.start();
+      parkVirus(game);
+      game.invincible = Infinity;
+      game.time = 30 - DT;
+      const spawns = (game as unknown as { spawns: Record<string, number> }).spawns;
+      spawns.worm = DT;
+      run(game, DT);
+      expect(spawns.worm).toBeCloseTo(wait!, 6);
+    }
   });
 });
 
 describe("threats", () => {
-  /** A game in stage 1 with one threat of a kind, coming from the left (share < 0.5). */
-  function withThreat(kind: "worm" | "popup" | "trojan", share = 0.25): Game {
+  /** A game with one threat, a worm coming from the left (share < 0.5) or a second virus. */
+  function withThreat(kind: "worm" | "virus", share = 0.25): Game {
     const game = new Game(() => share);
     game.start();
     parkVirus(game);
@@ -846,108 +859,13 @@ describe("threats", () => {
     expect(game.threats).toEqual([]);
   });
 
-  test("a popup shows where it will land, then falls and shatters on the floor", () => {
-    const game = withThreat("popup");
-    const popupThreat = game.threats[0]!;
-    const x = popupThreat.sprite.x;
-    expect(x).toBe(-100);
-    expect(popupThreat.sprite.y).toBeGreaterThan(180);
-    game.player.setXY(150, GROUND_Y);
-    run(game, THREAT_WARNING);
-    expect(popupThreat.sprite.y).toBeGreaterThan(180);
-    run(game, 1);
-    expect(game.threats).toEqual([]);
-    const shatter = game.events.find((e) => e.type === "shatter");
-    expect(shatter).toMatchObject({ x });
-    expect(game.health).toBe(1);
-  });
-
-  test("a popup that lands on the player hurts", () => {
-    const game = withThreat("popup");
-    game.health = 2;
-    game.player.setXY(-100, GROUND_Y);
-    run(game, THREAT_WARNING + 1);
-    expect(game.health).toBe(1);
-    expect(game.threats).toEqual([]);
-  });
-
-  test("a Trojan horse rolls in, stops, lets out a small virus and rolls on", () => {
-    const game = withThreat("trojan");
-    const horse = game.threats[0]!;
-    const stop = horse.stopX;
-    expect(stop).toBe(-50);
-    game.player.setXY(200, GROUND_Y);
-    game.invincible = 999;
-    let released = -1;
-    for (let i = 0; i < Math.round(10 / DT) && released < 0; i++) {
-      game.update(noInput);
-      if (game.threats.some((t) => t.kind === "virus")) released = i;
-    }
-    expect(horse.sprite.x).toBe(stop);
-    const small = game.threats.find((t) => t.kind === "virus")!;
-    expect(small.sprite.size).toBe(150);
-    expect([small.sprite.x, small.sprite.y]).toEqual([stop, FEET_Y + 40]);
-    expect(small.warning).toBe(WARNING_LONGEST);
-    expect(game.layers.at(-1)).toBe(small.sprite);
-    run(game, TROJAN_STOP - DT);
-    expect(horse.sprite.x).toBe(stop);
-    run(game, 0.5);
-    expect(horse.sprite.x).toBeGreaterThan(stop);
-  });
-
-  /** Runs until the Trojan horse lets out its virus. */
-  function released(game: Game) {
-    for (let i = 0; i < Math.round(10 / DT); i++) {
-      const small = game.threats.find((t) => t.kind === "virus");
-      if (small) return small;
-      game.update(noInput);
-    }
-    throw new Error("No virus came out");
-  }
-
-  test("the small virus aims at the player, flies, and goes away at the edge", () => {
-    const game = withThreat("trojan");
-    game.player.setXY(200, GROUND_Y);
-    game.invincible = 999;
-    const small = released(game);
-    game.player.setXY(-200, GROUND_Y);
-    const launched = () => game.events.some((e) => e.type === "launch");
-    game.events.length = 0;
-    for (let i = 0; i < 60 && !launched(); i++) game.update(noInput);
-    expect(small.target.x).toBe(-200);
-    run(game, 3);
-    expect(game.threats.includes(small)).toBe(false);
-  });
-
-  test("the small virus hurts and goes away", () => {
-    const game = withThreat("trojan");
-    game.player.setXY(200, GROUND_Y);
-    game.invincible = 999;
-    const small = released(game);
-    game.invincible = 0;
-    small.warning = 0;
-    small.sprite.setXY(game.player.x, game.player.y);
-    game.health = 2;
-    run(game, DT);
-    expect(game.health).toBe(1);
-    expect(game.threats.includes(small)).toBe(false);
-  });
-
-  test("only the small virus aims and launches", () => {
+  test("threats can't hurt while the player blinks", () => {
     const game = withThreat("worm");
-    game.player.setXY(200, GROUND_Y);
-    const worm = game.threats[0]!;
-    run(game, THREAT_WARNING + DT);
-    expect(types(game.events)).not.toContain("launch");
-    expect(worm.sprite.direction).toBe(90);
-  });
-
-  test("worms and Trojan horses are full size, and only popups never turn", () => {
-    for (const kind of ["worm", "popup", "trojan"] as const) {
-      const sprite = withThreat(kind).threats[0]!.sprite;
-      expect(sprite.size).toBe(300);
-      expect(sprite.rotationStyle).toBe(kind === "popup" ? "don't rotate" : "left-right");
-    }
+    game.health = 2;
+    game.invincible = 999;
+    game.player.setXY(-150, GROUND_Y);
+    run(game, THREAT_WARNING + 2);
+    expect(game.health).toBe(2);
   });
 
   test("threats come from the right half the time", () => {
@@ -972,108 +890,83 @@ describe("threats", () => {
     expect(changes).toBeLessThanOrEqual(7);
   });
 
-  test("a Trojan horse rolls slower than a worm, and hurts", () => {
-    const game = withThreat("trojan");
-    const horse = game.threats[0]!.sprite;
+  test("a worm is drawn 3 px per pixel, and turns to face where it's going", () => {
+    const sprite = withThreat("worm").threats[0]!.sprite;
+    expect(sprite.size).toBe(300);
+    expect(sprite.rotationStyle).toBe("left-right");
+  });
+
+  test("only a virus aims and launches", () => {
+    const game = withThreat("worm");
     game.player.setXY(200, GROUND_Y);
-    run(game, THREAT_WARNING + 1);
-    expect(horse.x).toBeCloseTo(-280 + 80 * (1 + DT), 6);
-    game.health = 2;
-    game.player.setXY(horse.x, GROUND_Y);
+    const worm = game.threats[0]!;
+    run(game, THREAT_WARNING + DT);
+    expect(types(game.events)).not.toContain("launch");
+    expect(worm.sprite.direction).toBe(90);
+  });
+
+  test("the second virus starts in the monitor, like the first one", () => {
+    const game = withThreat("virus");
+    const second = game.threats[0]!;
+    expect([second.sprite.x, second.sprite.y]).toEqual([VIRUS_SPAWN.x, VIRUS_SPAWN.y]);
+    expect(second.sprite.size).toBe(game.virus.size);
+    expect(second.sprite.currentCostume.name).toBe(game.virus.currentCostume.name);
+    expect(second.warning).toBe(WARNING_LONGEST);
+    expect(second.target).toEqual({ x: game.player.x, y: game.player.y });
+  });
+
+  test("the second virus warns for less time when the game is harder", () => {
+    const game = new Game(() => 0.25);
+    game.start();
+    parkVirus(game);
+    game.time = HARDEST_AT;
     run(game, DT);
-    expect(game.health).toBe(1);
+    (game as unknown as { spawn(kind: string): void }).spawn("virus");
+    expect(game.threats.at(-1)!.warning).toBeCloseTo(WARNING_SHORTEST, 6);
   });
 
-  test("a Trojan horse lets out only one virus", () => {
-    const game = withThreat("trojan");
-    game.player.setXY(200, GROUND_Y);
+  test("the second virus follows the player, locks its aim, then flies at it", () => {
+    const game = withThreat("virus");
     game.invincible = Infinity;
-    let viruses = 0;
-    for (let i = 0; i < Math.round(12 / DT); i++) {
-      const before = game.threats.filter((t) => t.kind === "virus").length;
-      game.update(noInput);
-      if (game.threats.filter((t) => t.kind === "virus").length > before) viruses++;
-    }
-    expect(viruses).toBe(1);
-  });
-
-  test("the small virus starts aimed at the player, locks its aim, then flies at it", () => {
-    const game = withThreat("trojan");
+    const second = game.threats[0]!;
+    const [x, y] = [second.sprite.x, second.sprite.y];
     game.player.setXY(200, GROUND_Y);
-    game.invincible = Infinity;
-    const small = released(game);
-    expect(small.target).toEqual({ x: 200, y: GROUND_Y });
-    const [x, y] = [small.sprite.x, small.sprite.y];
     run(game, WARNING_LONGEST - AIM_LOCK);
+    expect(second.target).toEqual({ x: 200, y: GROUND_Y });
     game.player.setXY(-200, GROUND_Y);
     game.events.length = 0;
     run(game, AIM_LOCK);
-    expect(small.target).toEqual({ x: 200, y: GROUND_Y });
-    // It launches from where the Trojan horse let it out.
+    expect(second.target).toEqual({ x: 200, y: GROUND_Y });
     expect(game.events).toContainEqual({ type: "launch", x, y });
-    const distance = () => Math.hypot(small.sprite.x - 200, small.sprite.y - GROUND_Y);
+    const distance = () => Math.hypot(second.sprite.x - 200, second.sprite.y - GROUND_Y);
     const before = distance();
     run(game, 0.1);
-    expect(distance()).toBeCloseTo(before - game.speed * 0.1, 6);
+    expect(distance()).toBeCloseTo(before - game.speed * 0.1, 1);
   });
 
-  test("threats are drawn back to front: floor, player, popups, monitor, viruses", () => {
-    const game = withThreat("trojan");
-    game.player.setXY(200, GROUND_Y);
+  test("the second virus goes away at the edge", () => {
+    const game = withThreat("virus");
     game.invincible = Infinity;
-    released(game);
-    const spawn = (kind: string) => (game as unknown as { spawn(kind: string): void }).spawn(kind);
-    spawn("worm");
-    spawn("popup");
-    game.update(noInput);
-    expect(game.layers.map((s) => s.name)).toEqual(["pickup", "trojan", "worm", "player", "popup", "monitor", "virus", "virus"]);
+    run(game, WARNING_LONGEST + 3);
+    expect(game.threats).toEqual([]);
   });
 
-  test("the stage clock counts up and starts over each stage", () => {
-    const game = started();
-    parkVirus(game);
-    run(game, 1);
-    expect(game.stageTime).toBeCloseTo(1, 6);
-    game.time = 20 - DT;
-    run(game, DT);
-    expect(game.stageTime).toBe(0);
-  });
-
-  test("a new stage doesn't reset the timer of threats already coming", () => {
-    const game = started();
-    parkVirus(game);
-    game.invincible = Infinity;
-    game.time = 30;
-    run(game, DT);
-    const spawns = (game as unknown as { spawns: Record<string, number> }).spawns;
-    spawns.worm = 4;
-    game.time = 45 - DT;
-    run(game, DT);
-    expect(spawns.worm).toBeCloseTo(4 - DT, 6);
-    expect(spawns.popup).toBeCloseTo(1.5 - DT, 6);
-  });
-
-  test("threats come between the stage's shortest and longest wait", () => {
-    for (const [share, wait] of [[0, 6], [0.5, 7.5], [0.99, 8.97]]) {
-      const game = new Game(() => share!);
-      game.start();
-      parkVirus(game);
-      game.invincible = Infinity;
-      game.time = 30;
-      const spawns = (game as unknown as { spawns: Record<string, number> }).spawns;
-      spawns.worm = DT;
-      run(game, DT);
-      expect(spawns.worm).toBeCloseTo(wait!, 6);
-    }
-  });
-
-  test("threats can't hurt while the player blinks", () => {
-    const game = withThreat("worm");
+  test("the second virus hurts and goes away", () => {
+    const game = withThreat("virus");
+    const second = game.threats[0]!;
+    second.warning = 0;
+    second.sprite.setXY(game.player.x, game.player.y);
     game.health = 2;
-    game.invincible = 999;
-    game.player.setXY(-150, GROUND_Y);
-    run(game, THREAT_WARNING + 2);
-    expect(game.health).toBe(2);
+    run(game, DT);
+    expect(game.health).toBe(1);
+    expect(game.threats).toEqual([]);
+  });
+
+  test("threats are drawn back to front: penguin, worms, player, monitor, viruses", () => {
+    const game = withThreat("virus");
+    (game as unknown as { spawn(kind: string): void }).spawn("worm");
+    game.update(noInput);
+    expect(game.layers.map((s) => s.name)).toEqual(["pickup", "worm", "player", "monitor", "virus", "virus"]);
   });
 });
 

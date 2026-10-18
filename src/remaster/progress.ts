@@ -1,48 +1,49 @@
-// Stages, ranks and the best time. The game gets harder in clear steps, and
-// the rank is named after the last stage reached.
+// Difficulty, ranks and the best time. The game gets harder little by little.
 
-export type ThreatKind = "worm" | "popup" | "trojan";
+/** Seconds until the game is as hard as it gets. */
+export const HARDEST_AT = 150;
 
-export interface Stage {
-  /** Seconds survived when the stage starts. */
-  from: number;
-  name: string;
-  rank: string;
-  /** Virus speed in stage pixels per second. */
-  virusSpeed: number;
-  /** Seconds between threats of each kind, from shortest to longest. */
-  every: Partial<Record<ThreatKind, [number, number]>>;
+/** How hard the game is after this many seconds: 0 at the start, 1 from HARDEST_AT on. */
+export function difficulty(seconds: number): number {
+  return Math.min(1, Math.max(0, seconds / HARDEST_AT));
 }
 
-export const STAGES: Stage[] = [
-  { from: 0, name: "Infected", rank: "Script kiddie", virusSpeed: 165, every: {} },
-  { from: 20, name: "Worms", rank: "Antivirus trial", virusSpeed: 210, every: { worm: [6, 9] } },
-  { from: 45, name: "Popups", rank: "Sysadmin", virusSpeed: 255, every: { worm: [6, 9], popup: [3, 5] } },
-  {
-    from: 75,
-    name: "Trojan horse",
-    rank: "Firewall",
-    virusSpeed: 300,
-    every: { worm: [5, 8], popup: [3, 5], trojan: [10, 14] },
-  },
-  {
-    from: 110,
-    name: "Meltdown",
-    rank: "Root",
-    virusSpeed: 345,
-    every: { worm: [3, 6], popup: [2, 4], trojan: [8, 12] },
-  },
+export type ThreatKind = "worm" | "virus";
+
+export interface Schedule {
+  /** Seconds survived before the first one comes. */
+  from: number;
+  /** Seconds between them, shortest to longest, at the start and at the hardest. */
+  easiest: [number, number];
+  hardest: [number, number];
+}
+
+/** Worms on the floor, then a second virus out of the monitor. */
+export const THREATS: Record<ThreatKind, Schedule> = {
+  worm: { from: 20, easiest: [7, 10], hardest: [3, 5] },
+  virus: { from: 60, easiest: [9, 12], hardest: [4, 6] },
+};
+
+/** Shortest and longest wait for the next threat of a kind, after this many seconds. */
+export function gapFor(kind: ThreatKind, seconds: number): [number, number] {
+  const { easiest, hardest } = THREATS[kind];
+  const d = difficulty(seconds);
+  return [easiest[0] + (hardest[0] - easiest[0]) * d, easiest[1] + (hardest[1] - easiest[1]) * d];
+}
+
+/** Ranks by seconds survived. */
+export const RANKS = [
+  { from: 0, name: "Script kiddie" },
+  { from: 20, name: "Antivirus trial" },
+  { from: 45, name: "Sysadmin" },
+  { from: 75, name: "Firewall" },
+  { from: 110, name: "Root" },
 ];
 
-/** The stage reached after this many seconds. */
-export function stageAt(seconds: number): number {
-  let stage = 0;
-  for (const [i, s] of STAGES.entries()) if (seconds >= s.from) stage = i;
-  return stage;
-}
-
 export function rankFor(seconds: number): string {
-  return STAGES[stageAt(seconds)]!.rank;
+  let rank = RANKS[0]!.name;
+  for (const r of RANKS) if (seconds >= r.from) rank = r.name;
+  return rank;
 }
 
 const KEY = "insidethefirewall.best";

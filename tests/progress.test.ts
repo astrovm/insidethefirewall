@@ -1,50 +1,65 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import fc from "fast-check";
-import { artFiles, palette, popup, toSvg, trojan, worm } from "../src/remaster/art.ts";
+import { artFiles, palette, toSvg, worm } from "../src/remaster/art.ts";
 import { threatCostumes } from "../src/remaster/game.ts";
-import { Best, rankFor, STAGES, stageAt } from "../src/remaster/progress.ts";
+import { Best, difficulty, gapFor, HARDEST_AT, RANKS, rankFor, THREATS } from "../src/remaster/progress.ts";
 
-describe("stages and ranks", () => {
-  test("stages start at 0, 20, 45, 75 and 110 seconds", () => {
-    expect(STAGES.map((s) => s.from)).toEqual([0, 20, 45, 75, 110]);
-    expect([0, 19.9, 20, 44, 45, 75, 109, 110, 9999].map(stageAt)).toEqual([0, 0, 1, 1, 2, 3, 3, 4, 4]);
+describe("difficulty", () => {
+  test("goes from 0 at the start to 1 at its hardest, in a straight line", () => {
+    expect([0, HARDEST_AT / 4, HARDEST_AT / 2, HARDEST_AT, HARDEST_AT * 3].map(difficulty)).toEqual([0, 0.25, 0.5, 1, 1]);
+    expect(difficulty(-5)).toBe(0);
   });
 
-  test("each stage is harder than the one before", () => {
-    for (let i = 1; i < STAGES.length; i++) {
-      const [before, now] = [STAGES[i - 1]!, STAGES[i]!];
-      expect(now.virusSpeed).toBeGreaterThan(before.virusSpeed);
-      for (const kind of Object.keys(before.every) as (keyof typeof before.every)[]) {
-        expect(now.every[kind]).toBeDefined();
-        expect(now.every[kind]![1]).toBeLessThanOrEqual(before.every[kind]![1]);
-      }
-    }
+  test("worms start at 20 s and the second virus at 60 s", () => {
+    expect([THREATS.worm.from, THREATS.virus.from]).toEqual([20, 60]);
   });
 
-  test("stages have their own names and ranks", () => {
-    expect(STAGES.map((s) => [s.name, s.rank])).toEqual([
-      ["Infected", "Script kiddie"],
-      ["Worms", "Antivirus trial"],
-      ["Popups", "Sysadmin"],
-      ["Trojan horse", "Firewall"],
-      ["Meltdown", "Root"],
+  test("waits between threats go from easiest to hardest", () => {
+    expect(gapFor("worm", 0)).toEqual([7, 10]);
+    expect(gapFor("worm", HARDEST_AT)).toEqual([3, 5]);
+    expect(gapFor("virus", HARDEST_AT / 2)).toEqual([6.5, 9]);
+    expect(gapFor("virus", 1000)).toEqual([4, 6]);
+  });
+
+  test("waits never get longer with more time, and the shortest is never longer than the longest", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom("worm" as const, "virus" as const),
+        fc.double({ min: 0, max: 1000, noNaN: true }),
+        fc.double({ min: 0, max: 1000, noNaN: true }),
+        (kind, a, b) => {
+          const [early, late] = [gapFor(kind, Math.min(a, b)), gapFor(kind, Math.max(a, b))];
+          return late[0] <= early[0] && late[1] <= early[1] && late[0] <= late[1];
+        },
+      ),
+    );
+  });
+});
+
+describe("ranks", () => {
+  test("go by seconds survived", () => {
+    expect(RANKS).toEqual([
+      { from: 0, name: "Script kiddie" },
+      { from: 20, name: "Antivirus trial" },
+      { from: 45, name: "Sysadmin" },
+      { from: 75, name: "Firewall" },
+      { from: 110, name: "Root" },
     ]);
-  });
-
-  test("the rank is named after the last stage reached", () => {
-    expect([0, 19, 20, 50, 80, 300].map(rankFor)).toEqual([
+    expect([0, 19, 20, 50, 80, 109, 110, 300].map(rankFor)).toEqual([
       "Script kiddie",
       "Script kiddie",
       "Antivirus trial",
       "Sysadmin",
       "Firewall",
+      "Firewall",
+      "Root",
       "Root",
     ]);
   });
 
-  test("ranks never go down with more time", () => {
-    const order = STAGES.map((s) => s.rank);
+  test("never go down with more time", () => {
+    const order = RANKS.map((r) => r.name);
     fc.assert(
       fc.property(fc.double({ min: 0, max: 1000, noNaN: true }), fc.double({ min: 0, max: 1000, noNaN: true }), (a, b) => {
         const [low, high] = a < b ? [a, b] : [b, a];
@@ -105,7 +120,7 @@ describe("best time", () => {
 
 describe("pixel art", () => {
   test("every pixel uses a palette color", () => {
-    for (const rows of [...worm, popup, trojan]) {
+    for (const rows of worm) {
       for (const row of rows) for (const pixel of row) expect(pixel === "." || pixel in palette).toBe(true);
     }
   });
@@ -113,9 +128,8 @@ describe("pixel art", () => {
   test("frames and costumes have the same size as the art", () => {
     const size = (rows: string[]) => [Math.max(...rows.map((r) => r.length)), rows.length];
     expect(size(worm[0]!)).toEqual(size(worm[1]!));
-    expect(new Set(popup.map((r) => r.length))).toEqual(new Set([22]));
-    const costumes = [...threatCostumes.worm, ...threatCostumes.popup, ...threatCostumes.trojan];
-    const art = [worm[0]!, worm[1]!, popup, trojan];
+    const costumes = threatCostumes.worm;
+    const art = [worm[0]!, worm[1]!];
     costumes.forEach((costume, i) => expect([costume.width, costume.height]).toEqual(size(art[i]!)));
   });
 
@@ -145,7 +159,7 @@ describe("pixel art", () => {
       expect(readFileSync(`${root}src/assets/costumes/${file}`, "utf8")).toBe(svg);
     }
     expect([...artFiles().keys()]).toEqual(
-      [...threatCostumes.worm, ...threatCostumes.popup, ...threatCostumes.trojan].map((c) => c.file),
+      threatCostumes.worm.map((c) => c.file),
     );
   });
 });

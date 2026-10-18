@@ -1,5 +1,5 @@
-// Pixel art for the remaster's new threats, in the chunky style of the 2013
-// virus. Each letter is one pixel. tools/pixel-art.ts turns these into SVGs.
+// Pixel art for the remaster's worm, in the chunky style of the 2013 virus.
+// Each letter is one pixel. tools/pixel-art.ts turns these into SVGs.
 
 export const palette: Record<string, string> = {
   k: "#000008",
@@ -7,14 +7,6 @@ export const palette: Record<string, string> = {
   G: "#2f7a00",
   w: "#ffffff",
   r: "#ff0000",
-  R: "#b51000",
-  b: "#0044cc",
-  B: "#88aaff",
-  s: "#c0c0c0",
-  S: "#808080",
-  o: "#8b4513",
-  O: "#c47a3a",
-  y: "#ffcc00",
 };
 
 /** A worm crawling right. Two frames, so it wriggles. */
@@ -41,49 +33,6 @@ export const worm = [
   ],
 ];
 
-/** An error window falling from the top of the screen. */
-export const popup = [
-  "kkkkkkkkkkkkkkkkkkkkkk",
-  "kbbbbbbbbbbbbbbbbkrrrk",
-  "kbBBBBBBbbbbbbbbbkrwrk",
-  "kbbbbbbbbbbbbbbbbkrrrk",
-  "kkkkkkkkkkkkkkkkkkkkkk",
-  "kssssssssssssssssssssk",
-  "ksssrrrssssssssssssssk",
-  "kssrwrwrsskkkkkkkksssk",
-  "kssrrwrrsssssssssssssk",
-  "kssrwrwrsskkkkkksssssk",
-  "ksssrrrssssssssssssssk",
-  "kssssssssssssssssssssk",
-  "kssssssskkkkkkkssssssk",
-  "kssssssskSySySkssssssk",
-  "kssssssskkkkkkkssssssk",
-  "kkkkkkkkkkkkkkkkkkkkkk",
-];
-
-/** A wooden Trojan horse on wheels, facing right. */
-export const trojan = [
-  "...............kk...",
-  "..............kOOk..",
-  ".............kOOOOk.",
-  ".............kOkOOOk",
-  ".............kOOOOOk",
-  "............kOOOkkk.",
-  "...........kOOOk....",
-  ".kk.......kOOOOk....",
-  "kOOk.kkkkkOOOOk.....",
-  ".kOkOOOOOOOOOOk.....",
-  "..kOoOOoOOoOOOk.....",
-  "..kOoOOoOOoOOOk.....",
-  "..kOOOOOOOOOOOk.....",
-  "...kkkkkkkkkkk......",
-  "....kOk....kOk......",
-  "....kOk....kOk......",
-  "...kSSSk..kSSSk.....",
-  "...kSkSk..kSkSk.....",
-  "....kkk....kkk......",
-];
-
 /** Rows of pixels to an SVG drawn with one rectangle per run of a color. */
 export function toSvg(rows: string[]): string {
   const width = Math.max(...rows.map((row) => row.length));
@@ -106,12 +55,10 @@ export function toSvg(rows: string[]): string {
   ].join("\n");
 }
 
-/** The SVG files for every new costume, by file name. */
+/** The SVG files for the worm, by file name. */
 export function artFiles(): Map<string, string> {
   return new Map([
     ["worm1.svg", toSvg(worm[0]!)],
     ["worm2.svg", toSvg(worm[1]!)],
-    ["popup.svg", toSvg(popup)],
-    ["trojan.svg", toSvg(trojan)],
   ]);
 }

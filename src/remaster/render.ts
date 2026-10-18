@@ -1,8 +1,7 @@
 import { STAGE_HEIGHT, STAGE_WIDTH, type Costume, type Sprite } from "../engine/sprite.ts";
 import { interpolate, type CostumeImages } from "../render.ts";
 import type { Effects } from "./effects.ts";
-import { FEET_Y, PICKUP_BLINK, THREAT_WARNING, type Game, type Threat } from "./game.ts";
-import { STAGES } from "./progress.ts";
+import { FEET_Y, PICKUP_BLINK, type Game, type Threat } from "./game.ts";
 
 export const colors = {
   green: "#00cc44",
@@ -134,35 +133,24 @@ export class RemasterRenderer {
     return 1;
   }
 
-  /** What's coming: an aim line for viruses, an arrow at the wall for things on the floor, a shadow for popups. */
+  /** What's coming: an aim line for a virus, an arrow at the wall for a worm. */
   private drawWarning(threat: Threat): void {
     if (threat.kind === "virus") {
       this.drawAim(threat.sprite, threat.target);
       return;
     }
+    // A pixel arrow on the side it comes from, pointing in.
     const ctx = this.ctx;
-    const s = this.view.scale;
-    const shown = 1 - threat.warning / THREAT_WARNING;
+    const side = Math.sign(threat.sprite.x);
+    const [x, y] = toCanvas(this.view, side * 226, FEET_Y + 14);
     ctx.save();
-    if (threat.kind === "popup") {
-      // A shadow on the floor that grows as the popup gets closer.
-      const [x, y] = toCanvas(this.view, threat.sprite.x, FEET_Y);
-      const width = 66 * s * (0.4 + 0.6 * shown);
-      ctx.globalAlpha = 0.25 + 0.35 * shown;
-      ctx.fillStyle = colors.mortar;
-      ctx.fillRect(Math.round(x - width / 2), Math.round(y - 3 * s), Math.round(width), Math.round(6 * s));
-    } else {
-      // A pixel arrow on the side it comes from, pointing in.
-      const side = Math.sign(threat.sprite.x);
-      const [x, y] = toCanvas(this.view, side * 226, FEET_Y + 14);
-      ctx.globalAlpha = 0.8;
-      ctx.fillStyle = colors.red;
-      const pixel = 3 * s;
-      for (let column = 0; column < 4; column++) {
-        const height = 7 - column * 2;
-        const left = x - side * (column - 1.5) * pixel - pixel / 2;
-        ctx.fillRect(Math.round(left), Math.round(y - (height * pixel) / 2), Math.round(pixel), Math.round(height * pixel));
-      }
+    ctx.globalAlpha = 0.8;
+    ctx.fillStyle = colors.red;
+    const pixel = 3 * this.view.scale;
+    for (let column = 0; column < 4; column++) {
+      const height = 7 - column * 2;
+      const left = x - side * (column - 1.5) * pixel - pixel / 2;
+      ctx.fillRect(Math.round(left), Math.round(y - (height * pixel) / 2), Math.round(pixel), Math.round(height * pixel));
     }
     ctx.restore();
   }
@@ -255,35 +243,7 @@ export class RemasterRenderer {
   }
 
   /** Hearts for health and the time survived, in the top left corner like the 2013 monitors. */
-  /** "Stage 2: Worms" in the middle of the screen when a stage starts. */
-  private drawBanner(game: Game): void {
-    const SHOWN = 2.2;
-    if (game.stageTime >= SHOWN) return;
-    const ctx = this.ctx;
-    const s = this.view.scale;
-    ctx.save();
-    ctx.translate(this.view.x, this.view.y);
-    ctx.scale(s, s);
-    ctx.globalAlpha = Math.min(1, (SHOWN - game.stageTime) / 0.5, game.stageTime / 0.15);
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.lineJoin = "round";
-    ctx.strokeStyle = colors.mortar;
-    ctx.fillStyle = colors.orange;
-    ctx.font = "500 18px 'Noto Sans', sans-serif";
-    ctx.lineWidth = 4;
-    ctx.strokeText(`Stage ${game.stage + 1}`, STAGE_WIDTH / 2, 168);
-    ctx.fillText(`Stage ${game.stage + 1}`, STAGE_WIDTH / 2, 168);
-    ctx.font = "500 36px 'Noto Sans', sans-serif";
-    ctx.lineWidth = 6;
-    const name = STAGES[game.stage]?.name ?? "";
-    ctx.strokeText(name, STAGE_WIDTH / 2, 200);
-    ctx.fillText(name, STAGE_WIDTH / 2, 200);
-    ctx.restore();
-  }
-
   private drawHud(game: Game): void {
-    this.drawBanner(game);
     const ctx = this.ctx;
     const s = this.view.scale;
     ctx.save();

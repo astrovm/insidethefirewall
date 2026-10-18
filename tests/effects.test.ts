@@ -16,7 +16,7 @@ test("the last hit is bigger", () => {
 
 test("only hits shake or flash", () => {
   const effects = new Effects(seeded(5));
-  for (const type of ["pickup", "land", "jump", "launch", "shatter"] as const) effects.handle({ type, x: 0, y: 0 });
+  for (const type of ["pickup", "land", "jump", "launch"] as const) effects.handle({ type, x: 0, y: 0 });
   effects.handle({ type: "lost", time: 3 });
   expect([effects.shakeTime, effects.flash]).toEqual([0, 0]);
   expect(effects.shakeOffset()).toEqual([0, 0]);
