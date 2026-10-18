@@ -114,14 +114,14 @@ try:
         assert touches == SCRATCH_PICKUP_TOUCHES, touches
         print("Collision masks match Scratch")
 
-        # The title screen sits inside the room like the 2013 one. Only the credit changed.
+        # The title screen sits inside the room like the 2013 one. Only the credit changed, and the Daily button is new.
         page.wait_for_timeout(500)
         view = page.evaluate("""() => {
           const { x, y, scale } = insideTheFirewall.view;
           const ratio = devicePixelRatio;
           return { x: x / ratio, y: y / ratio, width: 480 * scale / ratio, height: 360 * scale / ratio };
         }""")
-        title = page.screenshot(clip=view, style="#corner { visibility: hidden }")
+        title = page.screenshot(clip=view, style="#corner, #daily { visibility: hidden }")
         # The credit starts at row 320. Text edges are smoothed a little differently than in Scratch.
         difference = page.evaluate(DIFF_SCRIPT, [as_data_url(title), as_data_url(classic_title), 320])
         assert difference < 0.03, f"Title screen differs from the original in {difference:.1%} of pixels"
@@ -305,8 +305,121 @@ try:
         assert visible(pad, "#pause-menu")
         tap_button(9)
         assert not visible(pad, "#pause-menu")
+        # A on the game over screen starts again, once the screen has been up a moment.
+        pad.evaluate("() => { insideTheFirewall.game.invincible = 0; insideTheFirewall.game.health = 0 }")
+        pad.wait_for_function("() => insideTheFirewall.game.phase === 'over'", timeout=5000)
+        tap_button(0)
+        assert state(pad)["phase"] == "over", "A skipped the game over screen right away"
+        pad.wait_for_timeout(500)
+        tap_button(0)
+        pad.wait_for_function("() => insideTheFirewall.game.phase === 'playing'", timeout=5000)
         pad.close()
         print("Gamepads start, move, jump and pause")
+
+        # The daily run: cues, faster music, the run summary, the replay, sharing and instant retry.
+        context.grant_permissions(["clipboard-read", "clipboard-write"], origin=base)
+        day = context.new_page()
+        watch_errors(day, errors)
+        day.goto(base, wait_until="load")
+        day.wait_for_function("() => document.querySelector('#loading').hidden && window.insideTheFirewall", timeout=60000)
+        day.evaluate("""() => {
+          window.synths = [];
+          const audio = insideTheFirewall.audio;
+          const synth = audio.synth.bind(audio);
+          audio.synth = (name) => { synths.push(name); synth(name); };
+          delete Navigator.prototype.share;
+        }""")
+        assert day.locator("#daily").text_content().startswith("Daily #")
+        day.click("#daily")
+        day.wait_for_function("() => insideTheFirewall.game.phase === 'playing'", timeout=5000)
+        number = day.evaluate("insideTheFirewall.daily")
+        assert day.locator("#daily").text_content() == f"Daily #{number}"
+        first_x = day.evaluate("insideTheFirewall.game.player.x")
+        day.evaluate("() => { insideTheFirewall.game.invincible = Infinity; insideTheFirewall.game.pickupTimer = 0.05 }")
+        day.wait_for_function("() => synths.includes('appear')", timeout=2000)
+        day.evaluate("() => { insideTheFirewall.game.powers.freeze = 1.05 }")
+        day.wait_for_function("() => synths.includes('tick')", timeout=2000)
+        day.evaluate("() => insideTheFirewall.game.events.push({ type: 'nearMiss' })")
+        day.wait_for_function("() => synths.includes('whoosh')", timeout=2000)
+        print("Cues sound when things show up, end, and fly close")
+
+        day.evaluate("() => { insideTheFirewall.game.time = 300 }")
+        day.wait_for_function("() => Math.abs(insideTheFirewall.audio.music.playbackRate.value - 1.3) < 1e-6", timeout=2000)
+        print("The music speeds up with the virus")
+
+        day.evaluate("""() => {
+          const g = insideTheFirewall.game;
+          g.powerUp.setCostume('shield');
+          g.powerUp.setXY(g.player.x, g.player.y);
+          g.powerUp.visible = true;
+        }""")
+        day.wait_for_function("() => insideTheFirewall.game.grabbed.includes('shield')", timeout=2000)
+        day.evaluate("() => { const g = insideTheFirewall.game; g.invincible = 0; g.powers.shield = 0; g.health = 0 }")
+        day.wait_for_function("() => insideTheFirewall.game.phase === 'over'", timeout=5000)
+        # Jump right away does nothing, so a jump held while dying can't skip the screen.
+        day.keyboard.press("Space")
+        day.wait_for_timeout(100)
+        assert state(day)["phase"] == "over", "Jump skipped the game over screen right away"
+        assert day.locator("#over-daily").text_content() == f"Daily #{number}"
+        assert day.locator('#over-grabs img[alt="Shields"]').is_visible()
+        assert day.locator("#over-grabs").text_content() == "1"
+        day.wait_for_timeout(500)
+        replay_border = day.evaluate("""() => {
+          const { x, y, scale } = insideTheFirewall.view;
+          const ctx = document.querySelector('#game').getContext('2d');
+          return [...ctx.getImageData(Math.round(x + 318 * scale) - 1, Math.round(y + 80 * scale), 1, 1).data];
+        }""")
+        assert replay_border[:3] == [254, 149, 1], f"No replay window on the game over screen: {replay_border}"
+        print("Game over shows the run summary and a replay")
+
+        day.click("#share")
+        day.wait_for_function("() => document.querySelector('#share').textContent === 'Copied'", timeout=2000)
+        shared = day.evaluate("navigator.clipboard.readText()")
+        assert shared.startswith(f"Inside the firewall daily #{number} · ") and "🛡️" in shared, shared
+        print("Share copies the result")
+
+        # Focus is still on Share, so Space would share again. Up jumps.
+        day.keyboard.press("ArrowUp")
+        day.wait_for_function("() => insideTheFirewall.game.phase === 'playing'", timeout=5000)
+        assert day.evaluate("insideTheFirewall.daily") == number
+        assert day.evaluate("insideTheFirewall.game.player.x") == first_x, "The daily run started differently"
+        print("Jump starts the same daily run again")
+
+        # Settings: a slower game speed, and a new jump key.
+        day.click("#pause-game")
+        day.locator("#pause-menu").get_by_role("button", name="Menu").click()
+        day.wait_for_function("() => insideTheFirewall.game.phase === 'title'", timeout=5000)
+        day.wait_for_timeout(400)
+        day.click("#open-settings")
+        day.locator("#game-speed").fill("70")
+        assert day.locator("#game-speed-value").text_content() == "70%"
+        day.get_by_role("button", name="Keys").click()
+        assert visible(day, "#keys-menu") and not visible(day, "#settings-menu")
+        day.click("#bind-jump")
+        assert day.locator("#bind-jump").text_content() == "Press a key"
+        day.keyboard.press("Escape")
+        assert day.locator("#bind-jump").text_content() == "W · Space · ↑", "Escape didn't cancel"
+        day.click("#bind-jump")
+        day.keyboard.press("k")
+        assert day.locator("#bind-jump").text_content() == "K"
+        day.keyboard.press("Escape")
+        assert visible(day, "#settings-menu") and not visible(day, "#keys-menu")
+        day.get_by_role("button", name="Done").click()
+        day.click("#play")
+        day.wait_for_function("() => insideTheFirewall.game.phase === 'playing'", timeout=5000)
+        day.evaluate("() => { insideTheFirewall.game.invincible = Infinity }")
+        day.wait_for_timeout(400)
+        before = state(day)["time"]
+        day.wait_for_timeout(1000)
+        played = state(day)["time"] - before
+        assert 0.5 < played < 0.85, f"At 70% speed, 1 s played {played:.2f} s of game"
+        day.keyboard.press("Space")
+        day.wait_for_timeout(200)
+        assert day.evaluate("insideTheFirewall.game.onGround"), "Space still jumps after binding K"
+        day.keyboard.press("k")
+        day.wait_for_function("() => !insideTheFirewall.game.onGround", timeout=2000)
+        day.close()
+        print("Game speed and key changes work")
 
         assert not errors, "\n".join(errors)
         browser.close()

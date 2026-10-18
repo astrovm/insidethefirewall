@@ -448,7 +448,9 @@ async function main(): Promise<void> {
     }
     if (game.phase === "over") {
       // R, or jump once the screen has been up a moment, starts again right away.
-      const jump = moveForKey(event.key, settings.keys) === "jump" && !event.repeat && !onButton && game.canRetry;
+      // Space and Enter on a focused button press that button instead.
+      const pressesButton = onButton && (key === " " || key === "Enter");
+      const jump = moveForKey(event.key, settings.keys) === "jump" && !event.repeat && !pressesButton && game.canRetry;
       if (key === "r" || jump) {
         event.preventDefault();
         startGame();
