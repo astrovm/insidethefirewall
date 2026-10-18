@@ -21,12 +21,12 @@ test("the last hit is bigger", () => {
 });
 
 test("other events make their own bursts, and the rest make none", () => {
-  const counts = (["pickup", "land", "jump", "launch"] as const).map((type) => {
+  const counts = (["pickup", "land", "jump", "launch", "shatter"] as const).map((type) => {
     const effects = new Effects(seeded(2));
     effects.handle({ type, x: 0, y: 0 });
     return effects.particles.length;
   });
-  expect(counts).toEqual([24, 6, 4, 8]);
+  expect(counts).toEqual([24, 6, 4, 8, 26]);
   const effects = new Effects(seeded(2));
   effects.handle({ type: "lost", time: 3 });
   effects.handle({ type: "music", playing: true });
@@ -66,22 +66,51 @@ test("particles fly at 35% to 100% of the burst speed, in pixel sizes", () => {
 });
 
 test("dust kicks up, never down", () => {
-  const effects = new Effects(seeded(3));
-  for (let i = 0; i < 50; i++) effects.handle({ type: "land", x: 0, y: 0 });
-  expect(effects.particles.every((p) => p.vy >= -1e-9)).toBe(true);
+  for (const type of ["land", "jump"] as const) {
+    const effects = new Effects(seeded(3));
+    for (let i = 0; i < 50; i++) effects.handle({ type, x: 0, y: 0 });
+    expect(effects.particles.every((p) => p.vy >= -1e-9)).toBe(true);
+  }
+});
+
+test("every burst uses its own real colors", () => {
+  const events = [
+    { type: "hit", x: 0, y: 0, last: true },
+    { type: "pickup", x: 0, y: 0 },
+    { type: "land", x: 0, y: 0 },
+    { type: "launch", x: 0, y: 0 },
+    { type: "shatter", x: 0, y: 0 },
+  ] as const;
+  const used = events.map((event) => {
+    const effects = new Effects(seeded(12));
+    for (let i = 0; i < 5; i++) effects.handle(event);
+    const colors = new Set(effects.particles.map((p) => p.color));
+    for (const color of colors) expect(color).toMatch(/^#[0-9a-f]{6}$/);
+    return [...colors].sort().join();
+  });
+  expect(new Set(used).size).toBe(events.length);
+  expect(used.map((colors) => colors.split(",").length)).toEqual([6, 3, 3, 2, 4]);
+});
+
+test("most particles are 3 px, some 4 px", () => {
+  const effects = new Effects(seeded(13));
+  effects.burst(0, 0, ["#ffffff"], 300, 100);
+  const big = effects.particles.filter((p) => p.size === 4).length / 300;
+  expect(big).toBeGreaterThan(0.2);
+  expect(big).toBeLessThan(0.4);
 });
 
 test("the shake stays within its strength and fades out", () => {
   const effects = new Effects(seeded(4));
   effects.shake(0.3, 6);
-  let biggest = 0;
-  for (let i = 0; i < 20; i++) {
-    const [dx, dy] = effects.shakeOffset();
-    expect(Math.abs(dx)).toBeLessThanOrEqual(6);
-    expect(Math.abs(dy)).toBeLessThanOrEqual(6);
-    biggest = Math.max(biggest, Math.abs(dx), Math.abs(dy));
+  const offsets = Array.from({ length: 40 }, () => effects.shakeOffset());
+  for (const axis of [0, 1]) {
+    const values = offsets.map((offset) => offset[axis]!);
+    expect(Math.max(...values.map(Math.abs))).toBeLessThanOrEqual(6);
+    // Both ways on each axis, and most of the strength.
+    expect(Math.max(...values)).toBeGreaterThan(3);
+    expect(Math.min(...values)).toBeLessThan(-3);
   }
-  expect(biggest).toBeGreaterThan(3);
   // It eases out over the last 0.15 s.
   effects.update(0.25);
   for (let i = 0; i < 20; i++) {
@@ -99,6 +128,17 @@ test("a weaker shake doesn't cut a stronger one short", () => {
   effects.shake(0.5, 9);
   effects.shake(0.2, 3);
   expect([effects.shakeTime, effects.shakeStrength]).toEqual([0.5, 9]);
+  effects.update(0.1);
+  effects.shake(0.2, 3);
+  expect(effects.shakeStrength).toBe(9);
+});
+
+test("a new shake after the last one ended has its own strength", () => {
+  const effects = new Effects(seeded(4));
+  effects.shake(0.1, 9);
+  effects.update(0.2);
+  effects.shake(0.2, 3);
+  expect(effects.shakeStrength).toBe(3);
 });
 
 test("only hits shake the screen", () => {

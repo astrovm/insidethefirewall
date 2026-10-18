@@ -56,7 +56,9 @@ describe("settings", () => {
 
   test("accept every touch choice", () => {
     for (const touch of ["auto", "on", "off"] as const) {
-      expect(parseSettings(JSON.stringify({ touch }), { ...defaults, touch: "on" }).touch).toBe(touch);
+      for (const fallback of ["auto", "on", "off"] as const) {
+        expect(parseSettings(JSON.stringify({ touch }), { ...defaults, touch: fallback }).touch).toBe(touch);
+      }
     }
   });
 
