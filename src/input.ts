@@ -47,7 +47,8 @@ export function moveForKey(key: string, keys: Keys = defaultKeys): Move | null {
 
 /**
  * Keys with `key` as the only key for `move`. Another move that used it loses
- * it, and if that leaves it with no keys, it gets the old first key of `move`.
+ * it, and if that leaves it with no keys, it gets the old first key of `move`
+ * (which can't be `key`, since no key does two moves).
  */
 export function bindKey(keys: Keys, move: Move, key: string): Keys {
   const normal = normalKey(key);
@@ -55,8 +56,7 @@ export function bindKey(keys: Keys, move: Move, key: string): Keys {
   for (const other of MOVES) {
     if (other === move || !keys[other].includes(normal)) continue;
     const rest = keys[other].filter((k) => k !== normal);
-    const swap = keys[move].find((k) => k !== normal);
-    bound[other] = rest.length > 0 ? rest : swap === undefined ? [] : [swap];
+    bound[other] = rest.length > 0 ? rest : keys[move].slice(0, 1);
   }
   return bound;
 }

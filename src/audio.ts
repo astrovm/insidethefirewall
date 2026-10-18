@@ -1,7 +1,19 @@
 import type { SoundEvent } from "./engine/world.ts";
 
-/** Seconds blended at a loop point. */
-const LOOP_BLEND = 0.02;
+/** Seconds one song takes to fade into the next. */
+const CROSSFADE = 2;
+/** Quieter than this counts as silence at the start and end of a song. */
+const SILENCE = 0.02;
+
+interface Song {
+  index: number;
+  source: AudioBufferSourceNode;
+  gain: GainNode;
+  /** Seconds into the song. */
+  position: number;
+  /** Where the sound ends, before any silence. */
+  end: number;
+}
 
 /** Short sounds made on the fly, for cues the 2013 game had no sound for. */
 export type Synth = "whoosh" | "appear" | "tick";
@@ -14,9 +26,12 @@ export class Audio {
   private readonly effectsOutput = this.context.createGain();
   private readonly buffers = new Map<string, AudioBuffer>();
   private readonly playing = new Map<string, AudioBufferSourceNode>();
-  private music: AudioBufferSourceNode | null = null;
-  /** Where each song loops, in seconds, when it shouldn't loop from end to start. */
-  private readonly loops = new Map<string, { start: number; end: number }>();
+  private songs: string[] = [];
+  private song: Song | null = null;
+  /** The song fading out while the next one fades in. */
+  private fading: Song | null = null;
+  private readonly ranges = new Map<AudioBuffer, { start: number; end: number }>();
+  private musicClock = 0;
   private musicRate = 1;
   private level = 1;
   private noise: AudioBuffer | null = null;
@@ -61,43 +76,58 @@ export class Audio {
   }
 
   /**
-   * Makes a song loop from `end` back to `start` instead of from its end to its
-   * start, skipping a fade out. The few milliseconds before `end` blend into
-   * the ones before `start`, so the jump doesn't click.
+   * Plays the songs one after another, starting with `first`, and back to the
+   * first after the last. Each one crossfades into the next, skipping the
+   * silence at its start and end. Null stops the music.
    */
-  setLoop(name: string, start: number, end: number): void {
-    const buffer = this.buffers.get(name);
-    if (!buffer) return;
-    const blend = Math.round(buffer.sampleRate * LOOP_BLEND);
-    const to = Math.round(end * buffer.sampleRate);
-    const from = Math.round(start * buffer.sampleRate);
-    for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
-      const data = buffer.getChannelData(channel);
-      for (let i = 0; i < blend; i++) {
-        const mix = (i + 1) / blend;
-        data[to - blend + i] = data[to - blend + i]! * (1 - mix) + data[from - blend + i]! * mix;
-      }
-    }
-    this.loops.set(name, { start, end });
+  setMusic(songs: string[] | null, first = 0): void {
+    for (const song of [this.song, this.fading]) song?.source.stop();
+    this.song = this.fading = null;
+    this.songs = songs ?? [];
+    // A new run starts at normal speed, without gliding down from the last one.
+    this.musicRate = 1;
+    if (this.songs.length > 0) this.song = this.startSong((first % this.songs.length + this.songs.length) % this.songs.length, false);
   }
 
-  /** Loops the music, or stops it. */
-  setMusic(name: string | null): void {
-    this.music?.stop();
-    this.music = null;
-    const buffer = name && this.buffers.get(name);
-    if (!buffer) return;
-    this.music = this.context.createBufferSource();
-    this.music.buffer = buffer;
-    this.music.loop = true;
-    const loop = this.loops.get(name);
-    if (loop) {
-      this.music.loopStart = loop.start;
-      this.music.loopEnd = loop.end;
-    }
-    this.music.playbackRate.value = this.musicRate;
-    this.music.connect(this.musicOutput);
-    this.music.start();
+  /** The song playing, if any. */
+  get songName(): string | null {
+    return this.song ? this.songs[this.song.index]! : null;
+  }
+
+  private startSong(index: number, fadeIn: boolean): Song | null {
+    const buffer = this.buffers.get(this.songs[index]!);
+    if (!buffer) return null;
+    const range = this.ranges.get(buffer) ?? audibleRange(buffer.getChannelData(0), buffer.sampleRate);
+    this.ranges.set(buffer, range);
+    const source = this.context.createBufferSource();
+    source.buffer = buffer;
+    source.playbackRate.value = this.musicRate;
+    const gain = this.context.createGain();
+    const now = this.context.currentTime;
+    gain.gain.setValueAtTime(fadeIn ? 0 : 1, now);
+    if (fadeIn) gain.gain.linearRampToValueAtTime(1, now + CROSSFADE);
+    source.connect(gain).connect(this.musicOutput);
+    source.start(now, range.start);
+    this.musicClock = now;
+    return { index, source, gain, position: range.start, end: range.end };
+  }
+
+  /** Moves the songs along. Call it every frame. */
+  update(): void {
+    const now = this.context.currentTime;
+    const elapsed = now - this.musicClock;
+    this.musicClock = now;
+    const song = this.song;
+    if (!song) return;
+    song.position += elapsed * song.source.playbackRate.value;
+    if (song.position < song.end - CROSSFADE * song.source.playbackRate.value) return;
+    // Fade this one out while the next one fades in.
+    this.fading?.source.stop();
+    song.gain.gain.setValueAtTime(song.gain.gain.value, now);
+    song.gain.gain.linearRampToValueAtTime(0, now + CROSSFADE);
+    song.source.stop(now + CROSSFADE);
+    this.fading = song;
+    this.song = this.startSong((song.index + 1) % this.songs.length, true);
   }
 
   /** Plays the music faster or slower, 1 for normal. */
@@ -105,7 +135,7 @@ export class Audio {
     if (rate === this.musicRate) return;
     this.musicRate = rate;
     // Glide over about a second, like a record speeding up.
-    this.music?.playbackRate.setTargetAtTime(rate, this.context.currentTime, 0.3);
+    for (const song of [this.song, this.fading]) song?.source.playbackRate.setTargetAtTime(rate, this.context.currentTime, 0.3);
   }
 
   /** Plays a short made-up sound through the sound effects volume. */
@@ -185,4 +215,14 @@ function noiseBuffer(ctx: AudioContext, seconds: number): AudioBuffer {
   const data = buffer.getChannelData(0);
   for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
   return buffer;
+}
+
+/** Where a song's sound starts and ends, in seconds, leaving out silence at both ends. */
+export function audibleRange(samples: Float32Array, sampleRate: number): { start: number; end: number } {
+  let first = 0;
+  while (first < samples.length && Math.abs(samples[first]!) < SILENCE) first++;
+  let last = samples.length - 1;
+  while (last > first && Math.abs(samples[last]!) < SILENCE) last--;
+  if (first >= samples.length) return { start: 0, end: samples.length / sampleRate };
+  return { start: first / sampleRate, end: (last + 1) / sampleRate };
 }

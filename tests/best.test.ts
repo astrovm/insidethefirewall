@@ -30,7 +30,7 @@ describe("best time", () => {
       expect(new Best(memory({ "insidethefirewall.best": saved })).value).toBe(0);
     }
     expect(new Best(memory({ "insidethefirewall.best": "41.9" })).value).toBe(41);
-    for (const saved of ['{"seconds":"5"}', '{"speed":0.8}', "[5]", "null", '{"seconds":-3}']) {
+    for (const saved of ['{"seconds":1e999}', '{"seconds":"5"}', '{"speed":0.8}', "[5]", "null", '{"seconds":-3}']) {
       expect(new Best(memory({ "insidethefirewall.best": saved })).value).toBe(0);
     }
   });

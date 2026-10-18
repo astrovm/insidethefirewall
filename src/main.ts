@@ -23,9 +23,8 @@ import { formatTime, RemasterRenderer, toStage } from "./remaster/render.ts";
 import { gameSpeed, loadSettings, saveSettings, showTouch, type TouchControls } from "./remaster/settings.ts";
 
 const MAX_UPDATES_PER_FRAME = 8;
-/** Measured by comparing the song with itself: 4213027 samples at 48 kHz. */
-const MUSIC_LOOP_LENGTH = 4213027 / 48000;
-const MUSIC_LOOP_END = 186;
+/** The 2013 song, then nightcore songs in the same spirit. Each game starts with the next one. */
+const SONGS = ["music", "how-do-you-do", "bad-boy", "monster"];
 
 /** What the screen reader says when the player grabs a power-up. */
 const powerUpMessages: Record<PowerUpKind, (seconds: number) => string> = {
@@ -67,7 +66,10 @@ async function main(): Promise<void> {
     ...flameCostumes,
     title,
   ];
-  const soundFiles = Object.keys(sounds).map((name) => `sounds/${name}.${name === "laser" || name === "meow" ? "wav" : "mp3"}`);
+  const soundFiles = [
+    ...Object.keys(sounds).map((name) => `sounds/${name}.${name === "laser" || name === "meow" ? "wav" : "mp3"}`),
+    ...SONGS.filter((name) => !(name in sounds)).map((name) => `sounds/${name}.mp3`),
+  ];
   const [files] = await Promise.all([
     fetchAll([...allCostumes.map((c) => `costumes/${c.file}`), ...soundFiles], (fraction) => {
       $("loading-bar").style.width = `${fraction * 100}%`;
@@ -89,9 +91,7 @@ async function main(): Promise<void> {
     }),
   ]);
 
-  // The 2013 song fades out at the end. The part from 98 s comes back at 186 s,
-  // so it loops there, before the fade, and keeps playing on beat.
-  audio.setLoop("music", MUSIC_LOOP_END - MUSIC_LOOP_LENGTH, MUSIC_LOOP_END);
+  let nextSong = 0;
 
   const game = new Game();
   const controls = new Controls();
@@ -338,7 +338,8 @@ async function main(): Promise<void> {
         status.textContent = "The shield blocked a hit";
         break;
       case "music":
-        audio.setMusic(event.playing ? "music" : null);
+        audio.setMusic(event.playing ? SONGS : null, nextSong);
+        if (event.playing) nextSong = (nextSong + 1) % SONGS.length;
         break;
       case "lost": {
         effects.clear();
@@ -554,6 +555,7 @@ async function main(): Promise<void> {
     }
     if (updates === MAX_UPDATES_PER_FRAME) pending = 0;
     if (game.phase === "playing") audio.setMusicRate(game.musicRate);
+    audio.update();
     if (!paused) effects.update(elapsed / 1000);
     renderer.fade = fader.value;
     renderer.draw(game, paused || game.frozen > 0 ? 1 : Math.min(1, pending / DT), effects);
