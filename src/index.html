@@ -54,6 +54,9 @@
       width: 100%;
       height: 100%;
     }
+    #controls #back svg {
+      fill: #575e75;
+    }
     #controls #fullscreen {
       background: #fff;
     }
@@ -62,6 +65,174 @@
     }
     #pause.paused .play {
       display: block;
+    }
+    #game {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      touch-action: none;
+    }
+    @font-face {
+      font-family: "Noto Sans";
+      font-weight: 500;
+      src: url(assets/fonts/noto-sans-medium.woff2) format("woff2");
+    }
+    #ui {
+      position: absolute;
+      width: calc(480 * var(--s));
+      height: calc(360 * var(--s));
+      font-family: "Noto Sans", sans-serif;
+      font-weight: 500;
+      font-size: calc(16 * var(--s));
+      color: #fe9501;
+      pointer-events: none;
+      user-select: none;
+    }
+    #ui section {
+      position: absolute;
+      inset: 0;
+    }
+    #ui button, #ui .stat {
+      position: absolute;
+      pointer-events: auto;
+      font: inherit;
+      margin: 0;
+    }
+    #ui button {
+      cursor: pointer;
+    }
+    #ui button:focus-visible {
+      outline: calc(3 * var(--s)) solid #fff;
+      outline-offset: calc(2 * var(--s));
+    }
+    .pill {
+      padding: 0 calc(14 * var(--s));
+      height: calc(30 * var(--s));
+      border: calc(3 * var(--s)) solid #fe9501;
+      border-radius: calc(15 * var(--s));
+      background: #00cc44;
+      color: #006321;
+    }
+    .pill:hover {
+      background: #00e04b;
+    }
+    .pill.dark {
+      background: #006321;
+      color: #fe9501;
+    }
+    .pill.dark:hover {
+      background: #00782a;
+    }
+    #corner {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      display: flex;
+      gap: 8px;
+    }
+    .icon {
+      width: 40px;
+      height: 40px;
+      padding: 8px;
+      border: 0;
+      border-radius: 8px;
+      background: #0008;
+      cursor: pointer;
+      display: flex;
+    }
+    .icon[hidden] {
+      display: none;
+    }
+    .icon:hover {
+      background: #000c;
+    }
+    .icon:focus-visible {
+      outline: 3px solid #fff;
+    }
+    .icon svg {
+      width: 100%;
+      height: 100%;
+      fill: #fe9501;
+    }
+    #play {
+      left: calc(127.9 * var(--s));
+      top: calc(104.7 * var(--s));
+      width: calc(217.8 * var(--s));
+      height: calc(97.7 * var(--s));
+      padding: 0;
+      border: 0;
+      border-radius: calc(48 * var(--s));
+      background: none;
+    }
+    #play img {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    #play .hover, #play:hover .normal, #play:focus-visible .normal {
+      display: none;
+    }
+    #play:hover .hover, #play:focus-visible .hover {
+      display: block;
+    }
+    #open-classic {
+      left: 50%;
+      transform: translateX(-50%);
+      top: calc(210 * var(--s));
+      font-size: calc(13 * var(--s));
+      height: calc(26 * var(--s));
+    }
+    #pause-menu {
+      background: #000a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: calc(10 * var(--s));
+    }
+    #pause-menu[hidden] {
+      display: none;
+    }
+    #pause-menu h2 {
+      font-size: calc(36 * var(--s));
+      font-weight: 500;
+      margin: 0 0 calc(6 * var(--s));
+    }
+    #pause-menu button {
+      position: static;
+      width: calc(140 * var(--s));
+    }
+    #repair {
+      left: calc(70 * var(--s));
+      top: calc(290 * var(--s));
+      width: calc(320 * var(--s));
+      height: calc(48 * var(--s));
+      border: 0;
+      border-radius: calc(8 * var(--s));
+      background: none;
+      color: transparent;
+    }
+    #repair:hover {
+      background: #ff000026;
+    }
+    #over-menu .stat {
+      left: calc(12 * var(--s));
+      top: calc(8 * var(--s));
+      font-size: calc(20 * var(--s));
+    }
+    #over-menu .pill {
+      right: calc(12 * var(--s));
+      top: calc(10 * var(--s));
+    }
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
     }
     .screen {
       position: absolute;
@@ -98,23 +269,54 @@
 </head>
 <body>
   <main>
-    <div id="controls">
-      <button id="flag" type="button" title="Restart" aria-label="Restart">
-        <svg viewBox="0 0 16.63 17.5" aria-hidden="true"><path d="M.75 2a6.44 6.44 0 017.69 0h0a6.44 6.44 0 007.69 0v10.4a6.44 6.44 0 01-7.69 0h0a6.44 6.44 0 00-7.69 0" fill="#4cbf56" stroke="#45993d" stroke-linecap="round" stroke-linejoin="round"/><path stroke-width="1.5" fill="#4cbf56" stroke="#45993d" stroke-linecap="round" stroke-linejoin="round" d="M.75 16.75v-16"/></svg>
-      </button>
-      <button id="pause" type="button" title="Pause" aria-label="Pause">
-        <svg class="bars" viewBox="0 0 4.2333332 4.2333335" aria-hidden="true"><path fill="#ffae00" d="M.389.19239126h1.2631972v3.8485508H.389zM2.5810001.19239126h1.2631972v3.8485508H2.5810001z"/></svg>
-        <svg class="play" viewBox="0 0 4.2333332 4.2333335" aria-hidden="true"><path d="m3.95163484 2.02835365-1.66643921.9621191-1.66643913.96211911V.10411543l1.66643922.9621191z" fill="#ffae00"/></svg>
-      </button>
-      <button id="stop" type="button" title="Stop" aria-label="Stop">
-        <svg viewBox="0 0 14 14" aria-hidden="true"><path fill="#ec5959" stroke="#b84848" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" d="M4.3.5h5.4l3.8 3.8v5.4l-3.8 3.8H4.3L.5 9.7V4.3z"/></svg>
-      </button>
-      <span class="spacer"></span>
-      <button id="fullscreen" type="button" title="Full screen" aria-label="Full screen">
-        <svg viewBox="0 0 20 20" aria-hidden="true"><path fill="#575E75" fill-rule="evenodd" d="M16.338 7.35l-.89-.891-3.133 2.374a.815.815 0 01-1.15-.165.819.819 0 010-.986l2.368-3.142-.867-.871a.387.387 0 01.269-.664L16.612 3a.397.397 0 01.388.389V7.08a.387.387 0 01-.662.27M3.662 12.65l.89.89 3.133-2.374a.817.817 0 011.15.166.819.819 0 010 .985l-2.37 3.143.87.871c.248.25.071.664-.27.664L3.388 17A.397.397 0 013 16.611V12.92c0-.342.418-.514.662-.27M3.662 7.35l.89-.891 3.133 2.374a.815.815 0 001.15-.165.819.819 0 000-.986L6.465 4.54l.87-.871a.387.387 0 00-.27-.664L3.388 3A.397.397 0 003 3.389V7.08c0 .341.418.514.662.27M16.338 12.65l-.89.89-3.133-2.374a.817.817 0 00-1.15.166.819.819 0 000 .985l2.368 3.143-.867.871a.387.387 0 00.269.664l3.677.005a.397.397 0 00.388-.389V12.92a.387.387 0 00-.662-.27"/></svg>
+    <canvas id="game" aria-label="Inside the firewall game"></canvas>
+    <div id="ui">
+      <section id="title-menu" hidden>
+        <button id="play" type="button" aria-label="Play"><img class="normal" src="assets/costumes/play.svg" alt=""><img class="hover" src="assets/costumes/play-hover.svg" alt=""></button>
+        <button id="open-classic" class="pill dark" type="button">Play the 2013 original</button>
+      </section>
+      <section id="pause-menu" hidden>
+        <h2>Paused</h2>
+        <button class="pill" type="button" data-action="resume">Resume</button>
+        <button class="pill" type="button" data-action="restart">Restart</button>
+        <button class="pill" type="button" data-fullscreen>Full screen</button>
+        <button class="pill" type="button" data-action="menu">Menu</button>
+      </section>
+      <section id="over-menu" hidden>
+        <p class="stat">Time <span id="over-time">0</span></p>
+        <button class="pill dark" type="button" data-action="menu">Menu</button>
+        <button id="repair" type="button" data-action="restart">Repair (R)</button>
+      </section>
+    </div>
+    <div id="corner">
+      <button id="fullscreen-game" class="icon" type="button" data-fullscreen title="Full screen" aria-label="Full screen"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 3h5v2H5v3H3zm9 0h5v5h-2V5h-3zM3 12h2v3h3v2H3zm12 0h2v5h-5v-2h3z"/></svg></button>
+      <button id="pause-game" class="icon" type="button" title="Pause" aria-label="Pause" hidden>
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 3h4v14H4zm8 0h4v14h-4z"/></svg>
       </button>
     </div>
-    <canvas id="stage" aria-label="Inside the firewall game"></canvas>
+    <div id="classic" hidden>
+      <div id="controls">
+        <button id="back" type="button" title="Back to the remaster" aria-label="Back to the remaster">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.7 3.3a1 1 0 010 1.4L7.4 10l5.3 5.3a1 1 0 01-1.4 1.4l-6-6a1 1 0 010-1.4l6-6a1 1 0 011.4 0z"/></svg>
+        </button>
+        <button id="flag" type="button" title="Restart" aria-label="Restart">
+          <svg viewBox="0 0 16.63 17.5" aria-hidden="true"><path d="M.75 2a6.44 6.44 0 017.69 0h0a6.44 6.44 0 007.69 0v10.4a6.44 6.44 0 01-7.69 0h0a6.44 6.44 0 00-7.69 0" fill="#4cbf56" stroke="#45993d" stroke-linecap="round" stroke-linejoin="round"/><path stroke-width="1.5" fill="#4cbf56" stroke="#45993d" stroke-linecap="round" stroke-linejoin="round" d="M.75 16.75v-16"/></svg>
+        </button>
+        <button id="pause" type="button" title="Pause" aria-label="Pause">
+          <svg class="bars" viewBox="0 0 4.2333332 4.2333335" aria-hidden="true"><path fill="#ffae00" d="M.389.19239126h1.2631972v3.8485508H.389zM2.5810001.19239126h1.2631972v3.8485508H2.5810001z"/></svg>
+          <svg class="play" viewBox="0 0 4.2333332 4.2333335" aria-hidden="true"><path d="m3.95163484 2.02835365-1.66643921.9621191-1.66643913.96211911V.10411543l1.66643922.9621191z" fill="#ffae00"/></svg>
+        </button>
+        <button id="stop" type="button" title="Stop" aria-label="Stop">
+          <svg viewBox="0 0 14 14" aria-hidden="true"><path fill="#ec5959" stroke="#b84848" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" d="M4.3.5h5.4l3.8 3.8v5.4l-3.8 3.8H4.3L.5 9.7V4.3z"/></svg>
+        </button>
+        <span class="spacer"></span>
+        <button id="fullscreen" type="button" title="Full screen" aria-label="Full screen">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path fill="#575E75" fill-rule="evenodd" d="M16.338 7.35l-.89-.891-3.133 2.374a.815.815 0 01-1.15-.165.819.819 0 010-.986l2.368-3.142-.867-.871a.387.387 0 01.269-.664L16.612 3a.397.397 0 01.388.389V7.08a.387.387 0 01-.662.27M3.662 12.65l.89.89 3.133-2.374a.817.817 0 011.15.166.819.819 0 010 .985l-2.37 3.143.87.871c.248.25.071.664-.27.664L3.388 17A.397.397 0 013 16.611V12.92c0-.342.418-.514.662-.27M3.662 7.35l.89-.891 3.133 2.374a.815.815 0 001.15-.165.819.819 0 000-.986L6.465 4.54l.87-.871a.387.387 0 00-.27-.664L3.388 3A.397.397 0 003 3.389V7.08c0 .341.418.514.662.27M16.338 12.65l-.89.89-3.133-2.374a.817.817 0 00-1.15.166.819.819 0 000 .985l2.368 3.143-.867.871a.387.387 0 00.269.664l3.677.005a.397.397 0 00.388-.389V12.92a.387.387 0 00-.662-.27"/></svg>
+        </button>
+      </div>
+      <canvas id="stage" aria-label="Inside the firewall, 2013 version"></canvas>
+    </div>
+    <p id="status" class="visually-hidden" aria-live="polite"></p>
 
     <div id="loading" class="screen">
       <noscript>Enable JavaScript</noscript>

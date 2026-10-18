@@ -27,6 +27,7 @@ export async function build(): Promise<void> {
   await cp(join(root, "src/index.html"), join(out, "index.html"));
   await cp(join(root, "icon.png"), join(out, "icon.png"));
   await cp(join(assets, "sounds"), join(out, "assets/sounds"), { recursive: true });
+  await cp(join(assets, "fonts"), join(out, "assets/fonts"), { recursive: true });
 
   // SVG costumes drawn as images can't see the page's fonts, so embed the
   // font Scratch uses for "Sans Serif" text, the same way Scratch does.

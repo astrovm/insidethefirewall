@@ -6,6 +6,7 @@ export class Audio {
   private readonly output = this.context.createGain();
   private readonly buffers = new Map<string, AudioBuffer>();
   private readonly playing = new Map<string, AudioBufferSourceNode>();
+  private music: AudioBufferSourceNode | null = null;
   private level = 1;
 
   constructor() {
@@ -34,11 +35,30 @@ export class Audio {
     void this.context.suspend();
   }
 
+  /** Plays a sound for the remaster. A new copy cuts off the last one, as in the 2013 game. */
+  play(sound: string): void {
+    this.handle([{ type: "play", owner: "remaster", sound }]);
+  }
+
+  /** Loops the music from the start, or stops it. */
+  setMusic(name: string | null): void {
+    this.music?.stop();
+    this.music = null;
+    const buffer = name && this.buffers.get(name);
+    if (!buffer) return;
+    this.music = this.context.createBufferSource();
+    this.music.buffer = buffer;
+    this.music.loop = true;
+    this.music.connect(this.output);
+    this.music.start();
+  }
+
   handle(events: SoundEvent[]): void {
     for (const event of events) {
       if (event.type === "stopAll") {
         for (const source of this.playing.values()) source.stop();
         this.playing.clear();
+        this.setMusic(null);
         continue;
       }
       const buffer = this.buffers.get(event.sound);

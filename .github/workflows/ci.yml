@@ -1,8 +1,8 @@
 name: PR validation
 
 on:
+  # Every pull request, including ones stacked on other branches.
   pull_request:
-    branches: [master]
   workflow_dispatch:
 
 permissions:

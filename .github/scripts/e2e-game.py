@@ -1,7 +1,7 @@
-"""Play the game in Chromium: title, start, get hit, game over, restart.
+"""Play the game in Chromium: title, start, pause, get hit, game over, repair.
 
-Also checks the 2013 Scratch export at /classic/ still loads, and that the new
-title screen looks like the original one.
+Also checks the 2013 Scratch export at /classic/ still loads, and that the
+in-game Classic mode looks like it.
 """
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -58,11 +58,13 @@ def watch_errors(page, errors):
 
 def state(page):
     return page.evaluate("""() => {
-      const w = insideTheFirewall.world;
-      return { time: w.vars.time, health: w.vars.health, tick: w.tick,
-               gameOver: w.sprite('gameOver').visible, title: w.sprite('title').visible,
-               monitors: w.monitors };
+      const g = insideTheFirewall.game;
+      return { phase: g.phase, time: g.time, health: g.health };
     }""")
+
+
+def visible(page, selector):
+    return page.locator(selector).is_visible()
 
 
 def as_data_url(png):
@@ -98,10 +100,11 @@ try:
             "() => document.querySelector('#loading').hidden && window.insideTheFirewall", timeout=60000
         )
         assert page.locator("#error").is_hidden(), page.locator("#error-message").text_content()
+        assert state(page)["phase"] == "title" and visible(page, "#play")
 
         # Collision masks touch at the same pixels Scratch did.
         touches = page.evaluate("""(points) => {
-          const sprite = insideTheFirewall.world.sprite('pickup');
+          const sprite = insideTheFirewall.game.pickup;
           sprite.visible = true;
           const result = points.map(([u, v]) => [u, v, sprite.isOpaqueAt(...sprite.toStage(u + 0.01, v + 0.01))]);
           sprite.visible = false;
@@ -110,13 +113,20 @@ try:
         assert touches == SCRATCH_PICKUP_TOUCHES, touches
         print("Collision masks match Scratch")
 
-        # The title screen looks like the 2013 one.
+        # Classic mode looks like the 2013 Scratch export.
+        page.click("#open-classic")
+        page.wait_for_function("() => !document.querySelector('#classic').hidden", timeout=5000)
         page.wait_for_timeout(500)
         title = page.locator("#stage").screenshot()
         difference = page.evaluate(DIFF_SCRIPT, [as_data_url(title), as_data_url(classic_title)])
-        assert difference < 0.02, f"Title screen differs from the original in {difference:.1%} of pixels"
-        print(f"Title screen matches the original ({difference:.2%} of pixels differ)")
-        assert state(page)["title"]
+        assert difference < 0.02, f"Classic title screen differs from the original in {difference:.1%} of pixels"
+        print(f"Classic mode matches the original ({difference:.2%} of pixels differ)")
+        page.keyboard.press("Space")
+        page.wait_for_function("() => insideTheFirewall.classic.vars.time >= 0", timeout=5000)
+        page.click("#back")
+        page.wait_for_function("() => document.querySelector('#classic').hidden", timeout=5000)
+        assert visible(page, "#play")
+        print("Classic mode plays and goes back to the remaster")
 
         # xp sets the volume with a message and expects a reply.
         reply = page.evaluate("""() => new Promise((resolve) => {
@@ -129,36 +139,39 @@ try:
 
         # Space starts the game.
         page.keyboard.press("Space")
-        page.wait_for_function("() => insideTheFirewall.world.vars.time >= 0", timeout=5000)
-        playing = state(page)
-        assert not playing["title"] and playing["health"] == 1
-        assert playing["monitors"] == {"health": True, "time": True}
+        page.wait_for_function("() => insideTheFirewall.game.phase === 'playing'", timeout=5000)
+        assert state(page)["health"] == 1 and visible(page, "#pause-game") and not visible(page, "#play")
 
-        # Pause stops the game, and resuming carries on.
-        page.click("#pause")
-        paused_at = state(page)["tick"]
+        # Escape pauses, and resuming carries on.
+        page.keyboard.press("Escape")
+        assert visible(page, "#pause-menu")
+        paused_at = state(page)["time"]
         page.wait_for_timeout(300)
-        assert state(page)["tick"] == paused_at, "Game kept running while paused"
-        page.click("#pause")
-        page.wait_for_function(f"() => insideTheFirewall.world.tick > {paused_at}", timeout=2000)
+        assert state(page)["time"] == paused_at, "Game kept running while paused"
+        page.get_by_role("button", name="Resume").click()
+        page.wait_for_function(f"() => insideTheFirewall.game.time > {paused_at}", timeout=2000)
+        assert not visible(page, "#pause-menu")
+        print("Pause and resume work")
 
         # Standing still, the virus gets you.
-        page.wait_for_function("() => insideTheFirewall.world.sprite('gameOver').visible", timeout=30000)
-        assert state(page)["health"] == 0
+        page.wait_for_function("() => insideTheFirewall.game.phase === 'over'", timeout=30000)
+        assert state(page)["health"] == 0 and visible(page, "#repair")
+        assert page.locator("#status").text_content().startswith("Game over")
         print("Started the game and got hit")
 
         # R repairs the computer and starts over.
-        # The game checks R once per frame, like Scratch, so hold it like a person would.
-        page.keyboard.down("r")
-        page.wait_for_timeout(150)
-        page.keyboard.up("r")
-        page.wait_for_function(
-            "() => !insideTheFirewall.world.sprite('gameOver').visible && insideTheFirewall.world.vars.time === 0",
-            timeout=5000,
-        )
-        assert state(page)["health"] == 1
-        page.wait_for_timeout(500)
+        page.keyboard.press("r")
+        page.wait_for_function("() => insideTheFirewall.game.phase === 'playing'", timeout=5000)
+        assert state(page)["health"] == 1 and state(page)["time"] < 1
         print("R starts a new game")
+
+        # The pause menu goes back to the title.
+        page.click("#pause-game")
+        page.get_by_role("button", name="Menu").click()
+        page.wait_for_function("() => insideTheFirewall.game.phase === 'title'", timeout=5000)
+        page.wait_for_timeout(400)
+        assert visible(page, "#play")
+        print("Menu goes back to the title")
 
         assert not errors, "\n".join(errors)
         browser.close()
