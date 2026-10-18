@@ -115,10 +115,11 @@ const ESCAPE_DROP = 40;
 export const ESCAPE_STUCK = 1.5;
 /**
  * Flying into the monitor's screen with a jetpack drops the player into a 3D
- * world inside it, like Homer³: the dive takes this long, then they're in there
- * for a while, then it sucks them back into the room.
+ * world inside it, like Homer³: diving in and falling down the tunnel takes
+ * this long, then they're in there for a while, then a black hole sucks them
+ * back into the room.
  */
-export const THIRD_IN = 0.7;
+export const THIRD_IN = 1.6;
 export const THIRD_TIME = 10;
 export const THIRD_OUT = 0.6;
 /** The 3D floor: as wide as the stage, and this deep. */

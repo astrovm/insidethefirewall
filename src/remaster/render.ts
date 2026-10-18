@@ -1,6 +1,7 @@
 import { STAGE_HEIGHT, STAGE_WIDTH, type Costume, type Sprite } from "../engine/sprite.ts";
 import { interpolate, type CostumeImages } from "../render.ts";
 import type { Effects } from "./effects.ts";
+import { DIVE_ZOOM, ThirdRenderer } from "./third.ts";
 import {
   ESCAPE_BURST,
   flameCostumes,
@@ -12,13 +13,10 @@ import {
   replayFrame,
   SCREEN,
   SCREEN_ROOM,
-  THIRD_DEPTH,
-  THIRD_IN,
   THIRD_OUT,
   THIRD_TIME,
   type Game,
   type SpriteShot,
-  type ThirdDimension,
 } from "./game.ts";
 
 export const colors = {
@@ -115,6 +113,7 @@ export class RemasterRenderer {
   private stageRasters: HTMLCanvasElement[] = [];
   /** Draw the SVGs straight, for sizes that change every frame. */
   private direct = false;
+  private readonly third: ThirdRenderer;
   view: View = { x: 0, y: 0, scale: 1 };
   /** 0 shows the game, 1 is fully black. Used for fades between screens. */
   fade = 0;
@@ -127,6 +126,7 @@ export class RemasterRenderer {
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("Canvas 2D is not available");
     this.ctx = ctx;
+    this.third = new ThirdRenderer(ctx, images, backdrops.stage);
   }
 
   resize(cssWidth: number, cssHeight: number, pixelRatio: number): void {
@@ -145,7 +145,7 @@ export class RemasterRenderer {
     const shaken = { ...steady, x: steady.x + Math.round(dx * steady.scale), y: steady.y + Math.round(dy * steady.scale) };
     const playing = game.phase === "playing";
     const third = playing ? game.third : null;
-    const zoom = third ? (third.time < THIRD_IN ? diveZoom(third.time) : 1) : playing ? escapeZoom(game.escapeTime) : 1;
+    const zoom = third ? (third.time < DIVE_ZOOM ? diveZoom(third.time) : 1) : playing ? escapeZoom(game.escapeTime) : 1;
     this.view = zoom === 1 ? shaken : zoomView(shaken, zoom);
     this.direct = zoom !== 1;
     this.drawBackdrop("#000");
@@ -156,7 +156,7 @@ export class RemasterRenderer {
       ctx.rect(shaken.x, shaken.y, Math.round(STAGE_WIDTH * shaken.scale), Math.round(STAGE_HEIGHT * shaken.scale));
       ctx.clip();
     }
-    if (third && third.time >= THIRD_IN) this.drawThird(game, third);
+    if (third && third.time >= DIVE_ZOOM) this.third.draw(game, third, this.view);
     else this.drawRoom(game, between, playing);
     const white = whiteOut(game);
     if (white > 0) {
@@ -232,12 +232,41 @@ export class RemasterRenderer {
           this.drawShield(x, y, 0.7 * (game.powers.shield < 1.5 ? blink(game.powers.shield) : 1), grown);
         }
       }
+      if (playing && sprite === game.monitor && game.third) this.drawPortal(game.third.time);
       if (playing && sprite === game.monitor && game.inside.length > 0) {
         this.drawScreenRoom(game.inside, game.monitor.currentCostume, SCREEN_DEPTH);
         const flash = 0.7 * (1 - game.escapeTime / ESCAPE_FLASH);
         if (flash > 0) this.fillScreen(`rgba(255, 255, 255, ${flash})`);
       }
     }
+  }
+
+  /** Blue electricity crackling around the screen as the player dives through it. */
+  private drawPortal(time: number): void {
+    const ctx = this.ctx;
+    const [left, top] = toCanvas(this.view, SCREEN.left, SCREEN.top);
+    const [width, height] = [SCREEN.width * this.view.scale, SCREEN.height * this.view.scale];
+    const flicker = Math.floor(time * 30);
+    ctx.save();
+    ctx.strokeStyle = "#8fd8ff";
+    ctx.shadowColor = "#3aa0ff";
+    ctx.shadowBlur = 10 * this.view.scale;
+    ctx.lineWidth = Math.max(1, 1.5 * this.view.scale);
+    ctx.beginPath();
+    const steps = 40;
+    for (let i = 0; i <= steps; i++) {
+      const along = (i / steps) * 2 * (width + height);
+      const jitter = ((hash(flicker * 131 + i) % 100) / 100 - 0.5) * 6 * this.view.scale;
+      let [x, y] = [left, top];
+      if (along < width) [x, y] = [left + along, top + jitter];
+      else if (along < width + height) [x, y] = [left + width + jitter, top + along - width];
+      else if (along < 2 * width + height) [x, y] = [left + width - (along - width - height), top + height + jitter];
+      else [x, y] = [left + jitter, top + height - (along - 2 * width - height)];
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.restore();
   }
 
   /** Green code falling down the stage, and the floor made of it. */
@@ -274,162 +303,6 @@ export class RemasterRenderer {
         put(column, row, glyph(column, row));
       }
     }
-    ctx.restore();
-  }
-
-  /**
-   * The 3D world inside the monitor, like Homer³: a glowing grid floor going
-   * off into the dark, a few wireframe shapes, and the room left behind
-   * standing at the far end as a flat card. The player and the virus are flat
-   * cutouts too, which shows as the camera sways.
-   */
-  private drawThird(game: Game, third: ThirdDimension): void {
-    const ctx = this.ctx;
-    const { x: left, y: top, scale } = this.view;
-    const t = third.time - THIRD_IN;
-    const sway = Math.sin(t * 0.9) * 0.45 * Math.min(1, t);
-    const cos = Math.cos(sway);
-    const sin = Math.sin(sway);
-    const pivot = THIRD_DEPTH / 2;
-    const camera = { y: 170, z: -330, focal: 420, horizon: 120 };
-    /** World point to canvas point, and how much things shrink there. */
-    const project = (x: number, y: number, z: number): [number, number, number] => {
-      const rx = x * cos - (z - pivot) * sin;
-      const rz = Math.max(20, x * sin + (z - pivot) * cos + pivot - camera.z);
-      const k = camera.focal / rz;
-      return [left + (STAGE_WIDTH / 2 + rx * k) * scale, top + (camera.horizon - (y - camera.y) * k) * scale, k];
-    };
-    const line = (a: [number, number, number], b: [number, number, number]) => {
-      ctx.moveTo(a[0], a[1]);
-      ctx.lineTo(b[0], b[1]);
-    };
-
-    const sky = ctx.createLinearGradient(0, top, 0, top + STAGE_HEIGHT * scale);
-    sky.addColorStop(0, "#000010");
-    sky.addColorStop(0.45, "#001a4d");
-    sky.addColorStop(1, "#000010");
-    ctx.fillStyle = sky;
-    ctx.fillRect(left, top, STAGE_WIDTH * scale, STAGE_HEIGHT * scale);
-
-    // The grid floor.
-    ctx.save();
-    ctx.strokeStyle = "#1e90ff";
-    ctx.lineWidth = Math.max(1, scale);
-    ctx.shadowColor = "#66ccff";
-    ctx.shadowBlur = 6 * scale;
-    ctx.beginPath();
-    for (let x = -360; x <= 360; x += 40) line(project(x, 0, -100), project(x, 0, THIRD_DEPTH + 300));
-    for (let z = -100; z <= THIRD_DEPTH + 300; z += 50) line(project(-360, 0, z), project(360, 0, z));
-    ctx.stroke();
-    ctx.restore();
-
-    // The room left behind, standing at the far end as a flat card, monitor and all.
-    const card = THIRD_DEPTH + 120;
-    this.cutout(project, this.backdrops.stage, 0, 0, card, STAGE_WIDTH, STAGE_HEIGHT, 1, 0.9);
-    const monitor = game.monitor.currentCostume;
-    const monitorSize = game.monitor.size / 100;
-    const monitorHeight = monitor.height * monitorSize;
-    this.cutout(project, monitor, 0, game.monitor.y + STAGE_HEIGHT / 2 - monitorHeight / 2, card - 1, monitor.width * monitorSize, monitorHeight, 1, 0.9);
-
-    // A spinning cube and a cone, in wireframe.
-    ctx.save();
-    ctx.lineWidth = Math.max(1, scale);
-    ctx.shadowColor = "#66ccff";
-    ctx.shadowBlur = 6 * scale;
-    ctx.strokeStyle = "#66ffff";
-    ctx.beginPath();
-    const spin = t * 0.8;
-    const cube = [-1, 1].flatMap((a) => [-1, 1].flatMap((b) => [-1, 1].map((c) => [a, b, c] as const)));
-    const corner = ([a, b, c]: readonly [number, number, number]) => {
-      const [ca, sa] = [Math.cos(spin), Math.sin(spin)];
-      return project(190 + 32 * (a * ca - c * sa), 95 + 32 * b, 470 + 32 * (a * sa + c * ca));
-    };
-    for (const [i, p] of cube.entries()) {
-      for (const [j, q] of cube.entries()) {
-        const differ = (p[0] !== q[0] ? 1 : 0) + (p[1] !== q[1] ? 1 : 0) + (p[2] !== q[2] ? 1 : 0);
-        if (j > i && differ === 1) line(corner(p), corner(q));
-      }
-    }
-    const apex = project(-190, 110, 430);
-    for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * Math.PI * 2 + spin;
-      const b = ((i + 1) / 12) * Math.PI * 2 + spin;
-      const rim = (angle: number) => project(-190 + 38 * Math.cos(angle), 0, 430 + 38 * Math.sin(angle));
-      line(rim(a), rim(b));
-      if (i % 3 === 0) line(rim(a), apex);
-    }
-    ctx.stroke();
-    ctx.restore();
-
-    // Flat things standing on the floor, far ones first.
-    const p = third.player;
-    const v = third.virus;
-    const player = game.player.currentCostume;
-    const virus = game.virus.currentCostume;
-    const cards: { z: number; draw: () => void }[] = [
-      {
-        z: p.z,
-        draw: () => {
-          this.shadow(project, p.x, p.z, 26);
-          const size = game.player.size / 100;
-          ctx.globalAlpha = this.alphaOf(game, game.player);
-          this.cutout(project, player, p.x, 0, p.z, player.width * size, player.height * size, game.player.flipX, 1);
-          ctx.globalAlpha = 1;
-        },
-      },
-      {
-        z: v.z,
-        draw: () => {
-          this.shadow(project, v.x, v.z, 18);
-          const size = game.virus.size / 100;
-          const height = virus.height * size;
-          ctx.globalAlpha = v.warning > 0 ? (Math.floor(v.warning / 0.08) % 2 === 0 ? 1 : 0.3) : 1;
-          if (game.powers.freeze > 0) ctx.filter = "hue-rotate(160deg) saturate(1.5)";
-          this.cutout(project, virus, v.x, v.y - height / 2, v.z, virus.width * size, height, 1, 1);
-          ctx.filter = "none";
-          ctx.globalAlpha = 1;
-        },
-      },
-    ];
-    for (const card of cards.sort((a, b) => b.z - a.z)) card.draw();
-  }
-
-  /** A flat picture standing up in the 3D world, facing where the camera starts. */
-  private cutout(
-    project: (x: number, y: number, z: number) => [number, number, number],
-    costume: Costume,
-    x: number,
-    bottom: number,
-    z: number,
-    width: number,
-    height: number,
-    flipX: number,
-    alpha: number,
-  ): void {
-    const image = this.images.get(costume);
-    if (!image) return;
-    const a = project(x - width / 2, bottom, z);
-    const b = project(x + width / 2, bottom, z);
-    const pixels = height * ((a[2] + b[2]) / 2) * this.view.scale;
-    const ctx = this.ctx;
-    ctx.save();
-    ctx.globalAlpha *= alpha;
-    ctx.imageSmoothingEnabled = costume.smooth;
-    const [from, to] = flipX < 0 ? [b, a] : [a, b];
-    ctx.translate(from[0], (a[1] + b[1]) / 2 - pixels);
-    ctx.drawImage(image, 0, 0, to[0] - from[0], pixels);
-    ctx.restore();
-  }
-
-  /** A soft glow on the floor under something, so it's clear how far away it is. */
-  private shadow(project: (x: number, y: number, z: number) => [number, number, number], x: number, z: number, radius: number): void {
-    const [cx, cy, k] = project(x, 0, z);
-    const ctx = this.ctx;
-    ctx.save();
-    ctx.fillStyle = "rgba(102, 204, 255, 0.35)";
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, radius * k * this.view.scale, radius * 0.3 * k * this.view.scale, 0, 0, Math.PI * 2);
-    ctx.fill();
     ctx.restore();
   }
 
@@ -705,7 +578,7 @@ export function matrixAmount(left: number): number {
 
 /** Diving into the screen: the camera zooms in until the screen fills the stage. */
 export function diveZoom(seconds: number): number {
-  const t = Math.min(1, Math.max(0, seconds / THIRD_IN));
+  const t = Math.min(1, Math.max(0, seconds / DIVE_ZOOM));
   return (1 / SCREEN_ROOM.scale) ** (t * t * (3 - 2 * t));
 }
 
@@ -714,10 +587,10 @@ export function whiteOut(game: Game): number {
   const third = game.phase === "playing" ? game.third : null;
   if (!third) return game.phase === "playing" ? Math.max(0, 1 - game.sinceThird / 0.3) : 0;
   const t = third.time;
-  if (t < THIRD_IN) return Math.max(0, (t - (THIRD_IN - 0.25)) / 0.25);
-  if (t < THIRD_IN + 0.3) return 1 - (t - THIRD_IN) / 0.3;
-  if (t >= THIRD_TIME) return Math.min(1, (t - THIRD_TIME) / THIRD_OUT);
-  return 0;
+  if (t < DIVE_ZOOM) return Math.max(0, (t - (DIVE_ZOOM - 0.2)) / 0.2);
+  if (t < DIVE_ZOOM + 0.25) return 1 - (t - DIVE_ZOOM) / 0.25;
+  const end = THIRD_TIME + THIRD_OUT;
+  return Math.max(0, (t - (end - 0.2)) / 0.2);
 }
 
 /** A well mixed whole number from another, for the code rain. */
