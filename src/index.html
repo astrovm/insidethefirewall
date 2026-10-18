@@ -184,7 +184,8 @@
       font-size: calc(13 * var(--s));
       height: calc(26 * var(--s));
     }
-    #pause-menu {
+    #ui #pause-menu {
+      position: fixed;
       background: #000a;
       display: flex;
       flex-direction: column;
@@ -269,6 +270,7 @@
 </head>
 <body>
   <main>
+    <h1 class="visually-hidden">Inside the firewall</h1>
     <canvas id="game" aria-label="Inside the firewall game"></canvas>
     <div id="ui">
       <section id="title-menu" hidden>
