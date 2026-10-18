@@ -31,6 +31,7 @@ const powerUpMessages: Record<PowerUpKind, (seconds: number) => string> = {
   jetpack: (seconds) => `Jetpack for ${seconds} seconds. Fly with up and down.`,
   shield: (seconds) => `Shield for ${seconds} seconds`,
   freeze: (seconds) => `Virus frozen for ${seconds} seconds`,
+  pill: (seconds) => `Red pill for ${seconds} seconds. The room is code, and time slows down when the virus is close.`,
 };
 
 /** The run summary on the game over screen: an icon and a count for each thing grabbed. */
@@ -39,6 +40,7 @@ const grabIcons: Record<Grab, { file: string; name: string }> = {
   jetpack: { file: "jetpack.svg", name: "Jetpacks" },
   shield: { file: "shield.svg", name: "Shields" },
   freeze: { file: "freeze.svg", name: "Freezes" },
+  pill: { file: "pill.svg", name: "Red pills" },
 };
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -328,6 +330,7 @@ async function main(): Promise<void> {
         break;
       case "nearMiss":
       case "escape":
+      case "dive":
         audio.synth("whoosh");
         break;
       case "appear":
@@ -551,7 +554,7 @@ async function main(): Promise<void> {
     last = now;
     pollGamepads();
     // A slower game speed gives the player more time to react.
-    pending = paused ? 0 : pending + (elapsed / 1000) * settings.speed;
+    pending = paused ? 0 : pending + (elapsed / 1000) * settings.speed * game.timeScale;
     let updates = 0;
     while (pending >= DT && updates < MAX_UPDATES_PER_FRAME) {
       game.update(controls.read());
@@ -560,7 +563,8 @@ async function main(): Promise<void> {
       updates++;
     }
     if (updates === MAX_UPDATES_PER_FRAME) pending = 0;
-    if (game.phase === "playing") audio.setMusicRate(game.musicRate);
+    // Bullet time slows the music down too.
+    if (game.phase === "playing") audio.setMusicRate(game.musicRate * game.timeScale);
     audio.update();
     if (!paused) effects.update(elapsed / 1000);
     renderer.fade = fader.value;

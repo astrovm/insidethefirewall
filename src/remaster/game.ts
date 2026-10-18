@@ -73,12 +73,15 @@ const PICKUP_LEFTMOST = -120;
 const PICKUP_RIGHTMOST = 260;
 /** A penguin grabbed with full hearts gives a short shield instead. */
 export const PENGUIN_SHIELD = 3;
-export type PowerUpKind = "jetpack" | "shield" | "freeze";
+export type PowerUpKind = "jetpack" | "shield" | "freeze" | "pill";
 /** Things the player can grab. */
 export type Grab = "penguin" | PowerUpKind;
-export const POWER_UPS: PowerUpKind[] = ["jetpack", "shield", "freeze"];
+export const POWER_UPS: PowerUpKind[] = ["jetpack", "shield", "freeze", "pill"];
 /** Seconds each power-up lasts. A shield also ends when it blocks a hit. */
-export const POWER_UP_TIME: Record<PowerUpKind, number> = { jetpack: 6, shield: 10, freeze: 4 };
+export const POWER_UP_TIME: Record<PowerUpKind, number> = { jetpack: 6, shield: 10, freeze: 4, pill: 8 };
+/** With the red pill the room is code, and time slows down this much while the flying virus is this close. */
+export const BULLET_TIME = 0.3;
+const BULLET_TIME_RANGE = 90;
 /** Power-ups are rare: the first comes after 30 s, then one every 30 to 45 s, for 5 s each. */
 export const POWER_UP_FIRST = 30;
 const POWER_UP_EVERY = [30, 45] as const;
@@ -110,6 +113,29 @@ export const ESCAPE_BURST = 0.5;
 const ESCAPE_DROP = 40;
 /** The virus is stuck in the room on the screen this long, then comes out of the monitor. */
 export const ESCAPE_STUCK = 1.5;
+/**
+ * Flying into the monitor's screen with a jetpack drops the player into a 3D
+ * world inside it, like Homer³: the dive takes this long, then they're in there
+ * for a while, then it sucks them back into the room.
+ */
+export const THIRD_IN = 0.7;
+export const THIRD_TIME = 10;
+export const THIRD_OUT = 0.6;
+/** The 3D floor: as wide as the stage, and this deep. */
+export const THIRD_DEPTH = 600;
+const THIRD_DEPTH_SPEED = 380;
+/** The virus hits closer than this, in 3D. */
+const THIRD_HIT = 34;
+/** Where the player's chest is in 3D, for the virus to aim at. */
+export const THIRD_CHEST = 40;
+
+/** Things in the 3D world. x is across, y up and z away from the camera. */
+export interface ThirdDimension {
+  /** Seconds since diving in. */
+  time: number;
+  player: { x: number; z: number; vx: number; vz: number };
+  virus: { x: number; y: number; z: number; dx: number; dy: number; dz: number; warning: number };
+}
 /** A power-up ticks at these seconds left, so the player hears it ending. */
 const TICKS = [3, 2, 1];
 /** Jump can start a new game this long after game over, so a jump held while dying doesn't skip the screen. */
@@ -148,6 +174,7 @@ export type GameEvent =
   | { type: "ending"; kind: PowerUpKind; left: number }
   | { type: "nearMiss" }
   | { type: "escape"; x: number; y: number }
+  | { type: "dive" }
   | { type: "lost"; time: number };
 
 /** The player's size, in percent, as in 2013. */
@@ -250,7 +277,7 @@ export class Game {
   /** Seconds the game stays frozen after a hit. */
   frozen = 0;
   /** Seconds left of each power-up the player has. */
-  powers: Record<PowerUpKind, number> = { jetpack: 0, shield: 0, freeze: 0 };
+  powers: Record<PowerUpKind, number> = { jetpack: 0, shield: 0, freeze: 0, pill: 0 };
   /** In the air with a jetpack. */
   flying = false;
   /** Everything grabbed this run, in order. */
@@ -266,6 +293,12 @@ export class Game {
   /** The jetpack hasn't been used to escape yet. */
   private canEscape = false;
   private escapeFrom = { x: 0, y: 0 };
+  /** In the 3D world inside the monitor. */
+  third: ThirdDimension | null = null;
+  /** Seconds since coming back from the 3D world. */
+  sinceThird = Infinity;
+  /** How fast time goes: slower in bullet time. */
+  timeScale = 1;
   /** Where the player was across the room, which is where they come out. */
   private escapeX = 0;
   private powerUpTimer = POWER_UP_FIRST;
@@ -334,8 +367,11 @@ export class Game {
     this.invincible = 0;
     this.frozen = 0;
     this.dying = 0;
-    this.powers = { jetpack: 0, shield: 0, freeze: 0 };
+    this.powers = { jetpack: 0, shield: 0, freeze: 0, pill: 0 };
     this.flying = false;
+    this.third = null;
+    this.sinceThird = Infinity;
+    this.timeScale = 1;
     this.powerUpTimer = POWER_UP_FIRST;
     this.powerUpShown = 0;
     this.closeCall = false;
@@ -379,12 +415,18 @@ export class Game {
     }
     this.time += DT;
     this.invincible = Math.max(0, this.invincible - DT);
-    if (!this.updateEscape()) this.movePlayer(input);
-    this.moveVirus();
-    this.updatePickup();
+    this.sinceThird += DT;
+    if (this.third) {
+      this.updateThird(input);
+    } else {
+      if (!this.updateEscape()) this.movePlayer(input);
+      this.moveVirus();
+      this.updatePickup();
+    }
     this.updatePowerUps();
     this.updateDifficulty();
-    this.record();
+    this.updateBulletTime();
+    if (!this.third) this.record();
     if (this.health < 1) {
       this.health = 0;
       this.dying = DEATH_PAUSE;
@@ -472,6 +514,118 @@ export class Game {
     this.hitTime += DT;
     player.setCostume(this.playerCostume(input, sideways));
     if (escaping) this.escape();
+    else if (jetpack && this.flying && this.canEscape && this.touchesScreen()) this.dive();
+  }
+
+  /** Whether the player is touching the monitor's screen. */
+  private touchesScreen(): boolean {
+    const b = this.player.bounds();
+    return b.right > SCREEN.left && b.left < SCREEN.left + SCREEN.width && b.top > SCREEN.top - SCREEN.height && b.bottom < SCREEN.top;
+  }
+
+  /** Into the monitor's screen, and the 3D world inside it. */
+  private dive(): void {
+    this.canEscape = false;
+    this.powers.jetpack = 0;
+    this.flying = false;
+    this.vx = this.vy = 0;
+    this.closeCall = false;
+    this.third = {
+      time: 0,
+      player: { x: 0, z: 120, vx: 0, vz: 0 },
+      virus: { x: 0, y: 0, z: 0, dx: 0, dy: 0, dz: 0, warning: 0 },
+    };
+    this.respawnThirdVirus();
+    this.events.push({ type: "dive" });
+  }
+
+  private respawnThirdVirus(): void {
+    const third = this.third!;
+    Object.assign(third.virus, { x: this.randomInt(-150, 150), y: 120, z: THIRD_DEPTH, warning: this.aimWarning() });
+  }
+
+  /** The 3D world: diving in, moving around on the floor and dodging the virus, then back to the room. */
+  private updateThird(input: Input): void {
+    const third = this.third!;
+    third.time += DT;
+    if (third.time < THIRD_IN) return;
+    if (third.time >= THIRD_TIME + THIRD_OUT) {
+      // Sucked back into the room, falling out of the monitor.
+      this.third = null;
+      this.sinceThird = 0;
+      const { player } = this;
+      player.setXY(0, 30);
+      player.setCostume("jump");
+      this.onGround = false;
+      this.vx = this.vy = 0;
+      this.jumpCut = true;
+      this.invincible = Math.max(this.invincible, 1);
+      this.respawnVirus();
+      return;
+    }
+    if (third.time >= THIRD_TIME) return;
+    const p = third.player;
+    const sideways = input.left !== input.right;
+    const ahead = input.jump !== input.down;
+    const approach = (value: number, wanted: number) => {
+      const change = (wanted === 0 || Math.sign(wanted) === -Math.sign(value) ? RUN_BRAKING : RUN_ACCELERATION) * DT;
+      return Math.abs(wanted - value) <= change ? wanted : value + Math.sign(wanted - value) * change;
+    };
+    p.vx = approach(p.vx, sideways ? (input.left ? -PLAYER_SPEED : PLAYER_SPEED) : 0);
+    p.vz = approach(p.vz, ahead ? (input.jump ? THIRD_DEPTH_SPEED : -THIRD_DEPTH_SPEED) : 0);
+    p.x = Math.max(-220, Math.min(220, p.x + p.vx * DT));
+    p.z = Math.max(20, Math.min(THIRD_DEPTH - 40, p.z + p.vz * DT));
+    if (sideways) this.player.setDirection(input.left ? -90 : 90);
+    this.walkTime = sideways || ahead ? this.walkTime + DT : 0;
+    this.hitTime += DT;
+    this.player.setCostume(this.playerCostume(noInput, sideways || ahead));
+    this.moveThirdVirus();
+  }
+
+  private moveThirdVirus(): void {
+    if (this.powers.freeze > 0) return;
+    const { player: p, virus: v } = this.third!;
+    if (v.warning > 0) {
+      const aim = () => {
+        const [dx, dy, dz] = [p.x - v.x, THIRD_CHEST - v.y, p.z - v.z];
+        const length = Math.hypot(dx, dy, dz) || 1;
+        Object.assign(v, { dx: dx / length, dy: dy / length, dz: dz / length });
+      };
+      if (v.warning > AIM_LOCK + 1e-9) aim();
+      v.warning -= DT;
+      if (v.warning > 1e-9) return;
+      v.warning = 0;
+      this.events.push({ type: "launch", x: v.x, y: v.y });
+    }
+    const distance = this.speed * DT;
+    const steps = Math.ceil(distance / VIRUS_STEP);
+    for (let i = 0; i < steps; i++) {
+      const step = distance / steps;
+      v.x += v.dx * step;
+      v.y += v.dy * step;
+      v.z += v.dz * step;
+      if (this.invincible === 0 && Math.hypot(v.x - p.x, v.y - THIRD_CHEST, v.z - p.z) < THIRD_HIT) {
+        this.takeHit();
+        this.respawnThirdVirus();
+        return;
+      }
+      if (v.z < -60 || Math.abs(v.x) > 320 || v.y < -20) {
+        this.respawnThirdVirus();
+        return;
+      }
+    }
+  }
+
+  /** With the red pill, time slows down while the flying virus is close. */
+  private updateBulletTime(): void {
+    const { virus } = this;
+    const close =
+      this.powers.pill > 0 && !this.third && virus.visible && this.warning === 0 && this.powers.freeze === 0 &&
+      gap(virus.bounds(), this.player.bounds()) <= BULLET_TIME_RANGE;
+    const wanted = close ? BULLET_TIME : 1;
+    // Eases in and out over about a tenth of a second.
+    this.timeScale += (wanted - this.timeScale) * Math.min(1, DT * 12);
+    if (Math.abs(this.timeScale - wanted) < 1e-3) this.timeScale = wanted;
   }
 
   /**
@@ -588,12 +742,18 @@ export class Game {
   /** Takes a heart if this touches the player, and says whether it did. */
   private hurts(thing: Sprite): boolean {
     if (this.invincible > 0 || !thing.isTouching(this.player)) return false;
+    this.takeHit();
+    return true;
+  }
+
+  /** Takes a heart, or the shield. */
+  private takeHit(): void {
     if (this.powers.shield > 0) {
       // The shield takes the hit instead of a heart.
       this.powers.shield = 0;
       this.invincible = INVINCIBLE;
       this.events.push({ type: "shield", x: this.player.x, y: this.player.y });
-      return true;
+      return;
     }
     this.health -= 1;
     this.hitTime = 0;
@@ -601,7 +761,6 @@ export class Game {
     this.frozen = HIT_STOP;
     this.player.setCostume("hit");
     this.events.push({ type: "hit", x: this.player.x, y: this.player.y, last: this.health < 1 });
-    return true;
   }
 
   /** Speeds the virus up little by little, forever. */
@@ -618,6 +777,7 @@ export class Game {
       const tick = TICKS.find((mark) => before > mark + 1e-9 && left <= mark + 1e-9);
       if (tick !== undefined) this.events.push({ type: "ending", kind, left: tick });
     }
+    if (this.third) return;
     const powerUp = this.powerUp;
     if (powerUp.visible) {
       this.powerUpShown += DT;
@@ -678,8 +838,10 @@ export class Game {
     this.health = 0;
     this.dying = 0;
     this.invincible = 0;
-    this.powers = { jetpack: 0, shield: 0, freeze: 0 };
+    this.powers = { jetpack: 0, shield: 0, freeze: 0, pill: 0 };
     this.flying = false;
+    this.third = null;
+    this.timeScale = 1;
     this.endEscape();
     this.phase = "over";
     this.events.push({ type: "music", playing: false });

@@ -12,8 +12,13 @@ import {
   replayFrame,
   SCREEN,
   SCREEN_ROOM,
+  THIRD_DEPTH,
+  THIRD_IN,
+  THIRD_OUT,
+  THIRD_TIME,
   type Game,
   type SpriteShot,
+  type ThirdDimension,
 } from "./game.ts";
 
 export const colors = {
@@ -139,7 +144,8 @@ export class RemasterRenderer {
     const [dx, dy] = effects.shakeOffset();
     const shaken = { ...steady, x: steady.x + Math.round(dx * steady.scale), y: steady.y + Math.round(dy * steady.scale) };
     const playing = game.phase === "playing";
-    const zoom = playing ? escapeZoom(game.escapeTime) : 1;
+    const third = playing ? game.third : null;
+    const zoom = third ? (third.time < THIRD_IN ? diveZoom(third.time) : 1) : playing ? escapeZoom(game.escapeTime) : 1;
     this.view = zoom === 1 ? shaken : zoomView(shaken, zoom);
     this.direct = zoom !== 1;
     this.drawBackdrop("#000");
@@ -150,39 +156,12 @@ export class RemasterRenderer {
       ctx.rect(shaken.x, shaken.y, Math.round(STAGE_WIDTH * shaken.scale), Math.round(STAGE_HEIGHT * shaken.scale));
       ctx.clip();
     }
-    if (game.phase !== "over") this.drawStage();
-    if (game.phase === "title") this.drawTitle();
-
-    // Bursting out of the screen, the player is in front of the monitor.
-    const bursting = playing && game.escapeTime <= ESCAPE_BURST;
-    const layers = bursting ? [...game.layers.filter((s) => s !== game.player), game.player] : game.layers;
-    for (const sprite of layers) {
-      if (!sprite.visible) continue;
-      let [x, y] = interpolate(sprite, game.previous.get(sprite), between);
-      // Power-ups bob up and down, so they read as things to grab.
-      if (sprite === game.powerUp) y += Math.sin(game.time * 5) * 3;
-      const grown = sprite.size / sprite.initial.size;
-      // Wrapping around the sides, the player shows on both at once.
-      const wraps = playing && sprite === game.player && game.powers.jetpack > 0;
-      const copies = wraps ? wrapCopies(x, this.playerReach(game)) : [x];
-      for (const x of copies) {
-        if (playing && sprite === game.player && game.powers.jetpack > 0) {
-          this.drawJetpack(x, y, sprite.flipX, game.powers.jetpack < 1 ? blink(game.powers.jetpack) : 1, game.flying, game.time, grown);
-        }
-        ctx.globalAlpha = playing ? this.alphaOf(game, sprite) : 1;
-        if (playing && sprite === game.virus && game.powers.freeze > 0) ctx.filter = "hue-rotate(160deg) saturate(1.5)";
-        if (ctx.globalAlpha > 0) this.drawSprite(sprite, x, y);
-        ctx.filter = "none";
-        ctx.globalAlpha = 1;
-        if (playing && sprite === game.player && game.powers.shield > 0) {
-          this.drawShield(x, y, 0.7 * (game.powers.shield < 1.5 ? blink(game.powers.shield) : 1), grown);
-        }
-      }
-      if (playing && sprite === game.monitor && game.inside.length > 0) {
-        this.drawScreenRoom(game.inside, game.monitor.currentCostume, SCREEN_DEPTH);
-        const flash = 0.7 * (1 - game.escapeTime / ESCAPE_FLASH);
-        if (flash > 0) this.fillScreen(`rgba(255, 255, 255, ${flash})`);
-      }
+    if (third && third.time >= THIRD_IN) this.drawThird(game, third);
+    else this.drawRoom(game, between, playing);
+    const white = whiteOut(game);
+    if (white > 0) {
+      ctx.fillStyle = `rgba(255, 255, 255, ${white})`;
+      ctx.fillRect(shaken.x, shaken.y, STAGE_WIDTH * shaken.scale, STAGE_HEIGHT * shaken.scale);
     }
     ctx.restore();
     this.direct = false;
@@ -201,6 +180,257 @@ export class RemasterRenderer {
       ctx.fillStyle = `rgba(0, 0, 0, ${Math.min(1, this.fade)})`;
       ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     }
+  }
+
+  /** The 2D room and everything in it, or the title or game over screen. */
+  private drawRoom(game: Game, between: number, playing: boolean): void {
+    const ctx = this.ctx;
+    if (game.phase !== "over") this.drawStage();
+    if (game.phase === "title") this.drawTitle();
+    // The red pill: the room is code.
+    const matrix = playing ? matrixAmount(game.powers.pill) : 0;
+    if (matrix > 0) {
+      ctx.fillStyle = `rgba(0, 0, 0, ${matrix})`;
+      ctx.fillRect(this.view.x, this.view.y, STAGE_WIDTH * this.view.scale, STAGE_HEIGHT * this.view.scale);
+      this.drawCodeRain(game.time, matrix);
+    }
+
+    // Bursting out of the screen or diving into it, the player is in front of the monitor.
+    const bursting = playing && (game.escapeTime <= ESCAPE_BURST || game.third !== null);
+    const layers = bursting ? [...game.layers.filter((s) => s !== game.player), game.player] : game.layers;
+    for (const sprite of layers) {
+      if (!sprite.visible) continue;
+      let [x, y] = interpolate(sprite, game.previous.get(sprite), between);
+      // Power-ups bob up and down, so they read as things to grab.
+      if (sprite === game.powerUp) y += Math.sin(game.time * 5) * 3;
+      const grown = sprite.size / sprite.initial.size;
+      // Bullet time: the virus leaves a trail of itself.
+      if (sprite === game.virus && game.timeScale < 0.99) {
+        const radians = (sprite.direction * Math.PI) / 180;
+        for (let k = 3; k >= 1; k--) {
+          ctx.globalAlpha = 0.18 * (4 - k) * (1 - game.timeScale);
+          ctx.filter = matrix > 0.5 ? CODE_RED : "none";
+          this.drawSprite(sprite, x - Math.sin(radians) * k * 16, y - Math.cos(radians) * k * 16);
+        }
+        ctx.filter = "none";
+        ctx.globalAlpha = 1;
+      }
+      // Wrapping around the sides, the player shows on both at once.
+      const wraps = playing && sprite === game.player && game.powers.jetpack > 0;
+      const copies = wraps ? wrapCopies(x, this.playerReach(game)) : [x];
+      for (const x of copies) {
+        if (playing && sprite === game.player && game.powers.jetpack > 0) {
+          this.drawJetpack(x, y, sprite.flipX, game.powers.jetpack < 1 ? blink(game.powers.jetpack) : 1, game.flying, game.time, grown);
+        }
+        ctx.globalAlpha = playing ? this.alphaOf(game, sprite) : 1;
+        if (matrix > 0.5) ctx.filter = sprite === game.virus ? CODE_RED : CODE_GREEN;
+        if (playing && sprite === game.virus && game.powers.freeze > 0) ctx.filter = "hue-rotate(160deg) saturate(1.5)";
+        if (ctx.globalAlpha > 0) this.drawSprite(sprite, x, y);
+        ctx.filter = "none";
+        ctx.globalAlpha = 1;
+        if (playing && sprite === game.player && game.powers.shield > 0) {
+          this.drawShield(x, y, 0.7 * (game.powers.shield < 1.5 ? blink(game.powers.shield) : 1), grown);
+        }
+      }
+      if (playing && sprite === game.monitor && game.inside.length > 0) {
+        this.drawScreenRoom(game.inside, game.monitor.currentCostume, SCREEN_DEPTH);
+        const flash = 0.7 * (1 - game.escapeTime / ESCAPE_FLASH);
+        if (flash > 0) this.fillScreen(`rgba(255, 255, 255, ${flash})`);
+      }
+    }
+  }
+
+  /** Green code falling down the stage, and the floor made of it. */
+  private drawCodeRain(time: number, alpha: number): void {
+    const ctx = this.ctx;
+    const { x, y, scale } = this.view;
+    const columns = STAGE_WIDTH / CODE_CELL;
+    const rows = STAGE_HEIGHT / CODE_CELL;
+    ctx.save();
+    ctx.font = `${Math.round(CODE_CELL * scale)}px monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    const glyph = (column: number, row: number) => CODE_GLYPHS[(hash(column * 977 + row) + Math.floor(time * 5)) % CODE_GLYPHS.length]!;
+    const put = (column: number, row: number, text: string) =>
+      ctx.fillText(text, x + (column + 0.5) * CODE_CELL * scale, y + row * CODE_CELL * scale);
+    for (let column = 0; column < columns; column++) {
+      const seed = hash(column);
+      const speed = 6 + (seed % 9);
+      const length = 8 + (seed % 12);
+      const head = Math.floor((time * speed + (seed % 97)) % (rows + length + 12));
+      for (let k = 0; k < length; k++) {
+        const row = head - k;
+        if (row < 0 || row >= rows) continue;
+        ctx.globalAlpha = alpha * (k === 0 ? 1 : 0.85 * (1 - k / length));
+        ctx.fillStyle = k === 0 ? "#d8ffd8" : "#00ff41";
+        put(column, row, glyph(column, row));
+      }
+    }
+    // The floor, as a wall of code.
+    ctx.fillStyle = "#00b32d";
+    for (let row = Math.floor(CODE_FLOOR / CODE_CELL); row < rows; row++) {
+      for (let column = 0; column < columns; column++) {
+        ctx.globalAlpha = alpha * (0.35 + 0.4 * ((hash(column * 31 + row * 7 + Math.floor(time * 3)) % 100) / 100));
+        put(column, row, glyph(column, row));
+      }
+    }
+    ctx.restore();
+  }
+
+  /**
+   * The 3D world inside the monitor, like Homer³: a glowing grid floor going
+   * off into the dark, a few wireframe shapes, and the room left behind
+   * standing at the far end as a flat card. The player and the virus are flat
+   * cutouts too, which shows as the camera sways.
+   */
+  private drawThird(game: Game, third: ThirdDimension): void {
+    const ctx = this.ctx;
+    const { x: left, y: top, scale } = this.view;
+    const t = third.time - THIRD_IN;
+    const sway = Math.sin(t * 0.9) * 0.45 * Math.min(1, t);
+    const cos = Math.cos(sway);
+    const sin = Math.sin(sway);
+    const pivot = THIRD_DEPTH / 2;
+    const camera = { y: 170, z: -330, focal: 420, horizon: 120 };
+    /** World point to canvas point, and how much things shrink there. */
+    const project = (x: number, y: number, z: number): [number, number, number] => {
+      const rx = x * cos - (z - pivot) * sin;
+      const rz = Math.max(20, x * sin + (z - pivot) * cos + pivot - camera.z);
+      const k = camera.focal / rz;
+      return [left + (STAGE_WIDTH / 2 + rx * k) * scale, top + (camera.horizon - (y - camera.y) * k) * scale, k];
+    };
+    const line = (a: [number, number, number], b: [number, number, number]) => {
+      ctx.moveTo(a[0], a[1]);
+      ctx.lineTo(b[0], b[1]);
+    };
+
+    const sky = ctx.createLinearGradient(0, top, 0, top + STAGE_HEIGHT * scale);
+    sky.addColorStop(0, "#000010");
+    sky.addColorStop(0.45, "#001a4d");
+    sky.addColorStop(1, "#000010");
+    ctx.fillStyle = sky;
+    ctx.fillRect(left, top, STAGE_WIDTH * scale, STAGE_HEIGHT * scale);
+
+    // The grid floor.
+    ctx.save();
+    ctx.strokeStyle = "#1e90ff";
+    ctx.lineWidth = Math.max(1, scale);
+    ctx.shadowColor = "#66ccff";
+    ctx.shadowBlur = 6 * scale;
+    ctx.beginPath();
+    for (let x = -360; x <= 360; x += 40) line(project(x, 0, -100), project(x, 0, THIRD_DEPTH + 300));
+    for (let z = -100; z <= THIRD_DEPTH + 300; z += 50) line(project(-360, 0, z), project(360, 0, z));
+    ctx.stroke();
+    ctx.restore();
+
+    // The room left behind, standing at the far end as a flat card, monitor and all.
+    const card = THIRD_DEPTH + 120;
+    this.cutout(project, this.backdrops.stage, 0, 0, card, STAGE_WIDTH, STAGE_HEIGHT, 1, 0.9);
+    const monitor = game.monitor.currentCostume;
+    const monitorSize = game.monitor.size / 100;
+    const monitorHeight = monitor.height * monitorSize;
+    this.cutout(project, monitor, 0, game.monitor.y + STAGE_HEIGHT / 2 - monitorHeight / 2, card - 1, monitor.width * monitorSize, monitorHeight, 1, 0.9);
+
+    // A spinning cube and a cone, in wireframe.
+    ctx.save();
+    ctx.lineWidth = Math.max(1, scale);
+    ctx.shadowColor = "#66ccff";
+    ctx.shadowBlur = 6 * scale;
+    ctx.strokeStyle = "#66ffff";
+    ctx.beginPath();
+    const spin = t * 0.8;
+    const cube = [-1, 1].flatMap((a) => [-1, 1].flatMap((b) => [-1, 1].map((c) => [a, b, c] as const)));
+    const corner = ([a, b, c]: readonly [number, number, number]) => {
+      const [ca, sa] = [Math.cos(spin), Math.sin(spin)];
+      return project(190 + 32 * (a * ca - c * sa), 95 + 32 * b, 470 + 32 * (a * sa + c * ca));
+    };
+    for (const [i, p] of cube.entries()) {
+      for (const [j, q] of cube.entries()) {
+        const differ = (p[0] !== q[0] ? 1 : 0) + (p[1] !== q[1] ? 1 : 0) + (p[2] !== q[2] ? 1 : 0);
+        if (j > i && differ === 1) line(corner(p), corner(q));
+      }
+    }
+    const apex = project(-190, 110, 430);
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2 + spin;
+      const b = ((i + 1) / 12) * Math.PI * 2 + spin;
+      const rim = (angle: number) => project(-190 + 38 * Math.cos(angle), 0, 430 + 38 * Math.sin(angle));
+      line(rim(a), rim(b));
+      if (i % 3 === 0) line(rim(a), apex);
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    // Flat things standing on the floor, far ones first.
+    const p = third.player;
+    const v = third.virus;
+    const player = game.player.currentCostume;
+    const virus = game.virus.currentCostume;
+    const cards: { z: number; draw: () => void }[] = [
+      {
+        z: p.z,
+        draw: () => {
+          this.shadow(project, p.x, p.z, 26);
+          const size = game.player.size / 100;
+          ctx.globalAlpha = this.alphaOf(game, game.player);
+          this.cutout(project, player, p.x, 0, p.z, player.width * size, player.height * size, game.player.flipX, 1);
+          ctx.globalAlpha = 1;
+        },
+      },
+      {
+        z: v.z,
+        draw: () => {
+          this.shadow(project, v.x, v.z, 18);
+          const size = game.virus.size / 100;
+          const height = virus.height * size;
+          ctx.globalAlpha = v.warning > 0 ? (Math.floor(v.warning / 0.08) % 2 === 0 ? 1 : 0.3) : 1;
+          if (game.powers.freeze > 0) ctx.filter = "hue-rotate(160deg) saturate(1.5)";
+          this.cutout(project, virus, v.x, v.y - height / 2, v.z, virus.width * size, height, 1, 1);
+          ctx.filter = "none";
+          ctx.globalAlpha = 1;
+        },
+      },
+    ];
+    for (const card of cards.sort((a, b) => b.z - a.z)) card.draw();
+  }
+
+  /** A flat picture standing up in the 3D world, facing where the camera starts. */
+  private cutout(
+    project: (x: number, y: number, z: number) => [number, number, number],
+    costume: Costume,
+    x: number,
+    bottom: number,
+    z: number,
+    width: number,
+    height: number,
+    flipX: number,
+    alpha: number,
+  ): void {
+    const image = this.images.get(costume);
+    if (!image) return;
+    const a = project(x - width / 2, bottom, z);
+    const b = project(x + width / 2, bottom, z);
+    const pixels = height * ((a[2] + b[2]) / 2) * this.view.scale;
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    ctx.imageSmoothingEnabled = costume.smooth;
+    const [from, to] = flipX < 0 ? [b, a] : [a, b];
+    ctx.translate(from[0], (a[1] + b[1]) / 2 - pixels);
+    ctx.drawImage(image, 0, 0, to[0] - from[0], pixels);
+    ctx.restore();
+  }
+
+  /** A soft glow on the floor under something, so it's clear how far away it is. */
+  private shadow(project: (x: number, y: number, z: number) => [number, number, number], x: number, z: number, radius: number): void {
+    const [cx, cy, k] = project(x, 0, z);
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.fillStyle = "rgba(102, 204, 255, 0.35)";
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, radius * k * this.view.scale, radius * 0.3 * k * this.view.scale, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
 
   /**
@@ -457,6 +687,45 @@ export function wrapCopies(x: number, reach: number): number[] {
   if (x + reach > STAGE_WIDTH / 2) return [x, x - STAGE_WIDTH];
   if (x - reach < -STAGE_WIDTH / 2) return [x, x + STAGE_WIDTH];
   return [x];
+}
+
+/** Code rain: the size of a glyph, in stage pixels, where the floor starts, and the glyphs. */
+const CODE_CELL = 12;
+const CODE_FLOOR = 296;
+const CODE_GLYPHS = [..."ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ0123456789Z:=*+<>|"];
+/** Sprites as green code, and the virus as a red agent. */
+const CODE_GREEN = "grayscale(1) sepia(1) hue-rotate(70deg) saturate(6) brightness(1.1)";
+const CODE_RED = "grayscale(1) sepia(1) hue-rotate(-40deg) saturate(8)";
+
+/** How much the room is code with this much red pill left: it fades in and out. */
+export function matrixAmount(left: number): number {
+  if (left <= 0) return 0;
+  return Math.max(0, Math.min(1, (POWER_UP_TIME.pill - left) / 0.4, left / 0.5));
+}
+
+/** Diving into the screen: the camera zooms in until the screen fills the stage. */
+export function diveZoom(seconds: number): number {
+  const t = Math.min(1, Math.max(0, seconds / THIRD_IN));
+  return (1 / SCREEN_ROOM.scale) ** (t * t * (3 - 2 * t));
+}
+
+/** White over the stage when going into and out of the 3D world. */
+export function whiteOut(game: Game): number {
+  const third = game.phase === "playing" ? game.third : null;
+  if (!third) return game.phase === "playing" ? Math.max(0, 1 - game.sinceThird / 0.3) : 0;
+  const t = third.time;
+  if (t < THIRD_IN) return Math.max(0, (t - (THIRD_IN - 0.25)) / 0.25);
+  if (t < THIRD_IN + 0.3) return 1 - (t - THIRD_IN) / 0.3;
+  if (t >= THIRD_TIME) return Math.min(1, (t - THIRD_TIME) / THIRD_OUT);
+  return 0;
+}
+
+/** A well mixed whole number from another, for the code rain. */
+function hash(n: number): number {
+  let h = Math.imul(n ^ 0x9e3779b9, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  return (h ^ (h >>> 16)) >>> 0;
 }
 
 /** Full and half see-through in turn, as a warning that something is about to end. */

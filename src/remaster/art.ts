@@ -63,6 +63,22 @@ export const freeze = [
   ".....kk.....",
 ];
 
+/** The red pill, lying at an angle. */
+export const pill = [
+  "............",
+  "......kkk...",
+  ".....krrwk..",
+  "....krrrrrk.",
+  "...krrrrrrk.",
+  "..kRrrrrrk..",
+  ".kRRRrrrk...",
+  ".kRRRRrk....",
+  ".kRRRRk.....",
+  "..kRRk......",
+  "...kk.......",
+  "............",
+];
+
 /** Flame out of the jetpack's two nozzles, two frames so it flickers. */
 export const flame = [
   [".yoy....yoy.", ".yoy....yoy.", "..o......o..", "..r......r.."],
@@ -97,6 +113,7 @@ export function artFiles(): Map<string, string> {
     ["jetpack.svg", toSvg(jetpack)],
     ["shield.svg", toSvg(shield)],
     ["freeze.svg", toSvg(freeze)],
+    ["pill.svg", toSvg(pill)],
     ["flame1.svg", toSvg(flame[0]!)],
     ["flame2.svg", toSvg(flame[1]!)],
   ]);

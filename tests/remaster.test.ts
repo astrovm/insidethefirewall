@@ -1040,11 +1040,11 @@ describe("power-ups", () => {
     game.powers.shield = 3;
     game.powers.freeze = 0;
     die(game);
-    expect(game.powers).toEqual({ jetpack: 0, shield: 0, freeze: 0 });
+    expect(game.powers).toEqual({ jetpack: 0, shield: 0, freeze: 0, pill: 0 });
     expect(game.powerUp.visible).toBe(false);
 
     game.start();
-    expect([game.powers, game.powerUp.visible, game.flying]).toEqual([{ jetpack: 0, shield: 0, freeze: 0 }, false, false]);
+    expect([game.powers, game.powerUp.visible, game.flying]).toEqual([{ jetpack: 0, shield: 0, freeze: 0, pill: 0 }, false, false]);
     expect(game.layers.map((s) => s.name)).toEqual(["pickup", "powerUp", "player", "monitor", "virus"]);
   });
 });
