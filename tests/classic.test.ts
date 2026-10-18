@@ -1,8 +1,39 @@
 import { describe, expect, test } from "bun:test";
 import fc from "fast-check";
+import { World } from "../src/engine/world.ts";
+import { createClassic } from "../src/game/classic.ts";
 import { newWorld, press, run, runUntil, soundsPlayed, startGame, touchPlayer } from "./support.ts";
 
+/** A world where every "pick random" gives the same share of its range. */
+function fixedWorld(share: number): World {
+  const world = new World(createClassic(), () => share);
+  world.greenFlag();
+  world.step();
+  return world;
+}
+
+/** Plays until the virus ends the game. */
+function gameOver(world = newWorld()): World {
+  startGame(world);
+  run(world, 31);
+  touchPlayer(world);
+  runUntil(world, () => world.sprite("gameOver").visible, 20);
+  return world;
+}
+
+/** Holds R for a frame, which is how long Scratch needs to notice it. */
+function holdR(world: World): void {
+  world.keyDown("r");
+  world.step();
+  world.keyUp("r");
+  world.step();
+}
+
 describe("title screen", () => {
+  test("before the green flag, the monitors are hidden as saved", () => {
+    expect(new World(createClassic()).monitors).toEqual({ health: false, time: false });
+  });
+
   test("shows the title and the Play button, with the monitors hidden", () => {
     const world = newWorld();
     expect(world.sprite("title").visible).toBe(true);
@@ -63,14 +94,18 @@ describe("playing", () => {
     startGame(world);
     const start = world.tick;
     // Keep the virus away so the game keeps going.
-    const seen: number[] = [];
+    const seen: number[][] = [];
     for (let i = 0; i < 100; i++) {
       world.sprite("virus").setXY(-1, 134);
       const before = world.vars.time;
       world.step();
-      if (world.vars.time !== before) seen.push(world.tick - start);
+      if (world.vars.time !== before) seen.push([world.tick - start, world.vars.time!]);
     }
-    expect(seen).toEqual([30, 61, 92]);
+    expect(seen).toEqual([
+      [30, 1],
+      [61, 2],
+      [92, 3],
+    ]);
   });
 
   test("the virus waits 0.2 seconds, then flies at the player at 5.5 per frame", () => {
@@ -151,15 +186,9 @@ describe("playing", () => {
   });
 
   test("R on the game over screen starts a new game", () => {
-    const world = newWorld();
-    startGame(world);
-    run(world, 31);
-    touchPlayer(world);
-    runUntil(world, () => world.sprite("gameOver").visible, 20);
-    world.keyDown("r");
-    world.step();
-    world.keyUp("r");
-    world.step();
+    const world = gameOver();
+    world.vars.speed = 9;
+    holdR(world);
     expect(world.vars).toMatchObject({ health: 1, time: 0, speed: 5.5 });
     expect(world.sprite("gameOver").visible).toBe(false);
     expect(world.sprite("player").y).toBe(-100);
@@ -282,15 +311,6 @@ describe("health pickup", () => {
 });
 
 describe("game over screen", () => {
-  function gameOver() {
-    const world = newWorld();
-    startGame(world);
-    run(world, 31);
-    touchPlayer(world);
-    runUntil(world, () => world.sprite("gameOver").visible, 20);
-    return world;
-  }
-
   test("you can still walk and jump around, like in 2013", () => {
     const world = gameOver();
     const player = world.sprite("player");
@@ -338,4 +358,207 @@ test("stop freezes everything", () => {
   run(world, 20);
   expect(world.sprite("virus").snapshot()).toEqual(virus);
   expect(world.scheduler.threads).toEqual([]);
+});
+
+describe("controls", () => {
+  test("the arrow keys work as the first key pressed too", () => {
+    const right = newWorld();
+    startGame(right);
+    const x = right.sprite("player").x;
+    right.keyDown("right arrow");
+    right.step();
+    expect(right.sprite("player").x).toBe(Math.min(x + 20, 249));
+
+    const down = newWorld();
+    startGame(down);
+    down.keyDown("down arrow");
+    down.step();
+    expect(down.sprite("player").currentCostume.name).toBe("crouch");
+
+    const up = newWorld();
+    startGame(up);
+    press(up, "up arrow");
+    run(up, 3);
+    expect(up.sprite("player").y).toBeGreaterThan(-100);
+  });
+
+  test("crouching while already walking crouches", () => {
+    const world = newWorld();
+    startGame(world);
+    const player = world.sprite("player");
+    world.keyDown("d");
+    world.step();
+    expect(player.currentCostume.name).toBe("walk1");
+    world.keyDown("s");
+    world.step();
+    expect(player.currentCostume.name).toBe("crouch");
+  });
+
+  test("Space during a game jumps, it doesn't restart the game", () => {
+    const world = newWorld();
+    startGame(world);
+    // Let the Space that started the game finish first.
+    run(world, 5);
+    world.soundEvents = [];
+    press(world, "space");
+    run(world, 3);
+    expect(soundsPlayed(world)).not.toContain("laser");
+    expect(world.sprite("player").y).toBeGreaterThan(-100);
+  });
+});
+
+describe("random spots", () => {
+  test("the player starts anywhere from x -205 to 205", () => {
+    for (const [share, x] of [
+      [0, -205],
+      [0.99999, 205],
+    ] as const) {
+      const world = fixedWorld(share);
+      startGame(world);
+      expect([world.sprite("player").x, world.sprite("player").y]).toEqual([x, -100]);
+    }
+  });
+
+  test("the penguin shows up from x -120, and bounces back in near the right edge", () => {
+    const show = (share: number) => {
+      const world = fixedWorld(share);
+      startGame(world);
+      const pickup = world.sprite("pickup");
+      runUntil(world, () => {
+        world.sprite("virus").setXY(-1, 134);
+        return pickup.visible;
+      });
+      return pickup;
+    };
+    const left = show(0);
+    expect([left.x, left.direction]).toEqual([-120, 90]);
+    const right = show(0.99999);
+    expect(right.direction).toBe(-90);
+  });
+});
+
+describe("the virus", () => {
+  const towards = (from: [number, number], to: { x: number; y: number }) => {
+    const direction = 90 - (Math.atan2(to.y - from[1], to.x - from[0]) * 180) / Math.PI;
+    return direction > 180 ? direction - 360 : direction;
+  };
+
+  test("after reaching the edge it aims at where the player is now", () => {
+    const world = newWorld();
+    startGame(world);
+    run(world, 40);
+    const player = world.sprite("player");
+    player.x = player.x > 0 ? -150 : 150;
+    const virus = world.sprite("virus");
+    virus.setXY(-300, 0);
+    world.step();
+    expect(virus.direction).toBeCloseTo(towards([-1, 134], player), 9);
+  });
+
+  test("after a hit it flies back to the top and aims again", () => {
+    const world = newWorld();
+    startGame(world);
+    run(world, 31);
+    touchPlayer(world);
+    run(world, 3);
+    const virus = world.sprite("virus");
+    expect(Math.hypot(virus.x + 1, virus.y - 134)).toBeLessThanOrEqual(2 * world.vars.speed! + 1e-9);
+    expect(virus.direction).toBeCloseTo(towards([-1, 134], world.sprite("player")), 9);
+  });
+});
+
+describe("game over details", () => {
+  test("plays the death sound, keeps the music stopped and draws the right things on top", () => {
+    const world = newWorld();
+    startGame(world);
+    run(world, 31);
+    world.soundEvents = [];
+    touchPlayer(world);
+    runUntil(world, () => world.sprite("gameOver").visible, 20);
+    run(world, 10);
+    expect(soundsPlayed(world)).toEqual(["stop", "death"]);
+    expect(world.layers).toEqual(["gameOver", "title", "play", "virus", "monitor", "player", "pickup", "hl3"]);
+  });
+
+  test("the virus can't take more health once the game is over", () => {
+    const world = gameOver();
+    for (let i = 0; i < 20; i++) {
+      touchPlayer(world);
+      world.step();
+    }
+    expect(world.vars.health).toBe(0);
+  });
+
+  test("the penguin sits next to the player, facing right", () => {
+    const world = newWorld();
+    world.sprite("pickup").direction = -90;
+    gameOver(world);
+    const pickup = world.sprite("pickup");
+    expect([pickup.visible, pickup.x, pickup.y, pickup.direction]).toEqual([true, -124, -115, 90]);
+  });
+
+  test("the HL3 logo shows up at 10 and 14 seconds, then every 14 seconds, for 2 seconds each", () => {
+    const world = gameOver();
+    const start = world.tick;
+    const hl3 = world.sprite("hl3");
+    const shows: number[] = [];
+    const hides: number[] = [];
+    let visible = false;
+    for (let i = 0; i < 1000; i++) {
+      world.step();
+      if (hl3.visible !== visible) (hl3.visible ? shows : hides).push(world.tick - start);
+      visible = hl3.visible;
+    }
+    expect(shows).toEqual([300, 421, 723, 844]);
+    expect(hides).toEqual([360, 481, 783, 904]);
+  });
+
+  test("the HL3 logo jumps to random spots and turns 30 degrees each time", () => {
+    const spots = (share: number) => {
+      const world = gameOver(fixedWorld(share));
+      const hl3 = world.sprite("hl3");
+      const seen: number[][] = [];
+      let visible = false;
+      for (let i = 0; i < 500; i++) {
+        world.step();
+        if (hl3.visible && !visible) seen.push([hl3.x, hl3.y, Math.round(hl3.direction)]);
+        visible = hl3.visible;
+      }
+      return seen;
+    };
+    expect(spots(0.5)).toEqual([
+      [0, 0, -45],
+      [0, 0, -15],
+    ]);
+    expect(spots(0)[0]).toEqual([-200, -150, -45]);
+    // Near the top it would point off the stage, so it bounces down.
+    expect(spots(0.99999)[0]).toEqual([200, 150, -135]);
+  });
+
+  test("R starts clean: no game over sounds, logo or second restart", () => {
+    const world = gameOver();
+    const hl3 = world.sprite("hl3");
+    runUntil(world, () => hl3.visible, 400);
+    holdR(world);
+    expect(hl3.visible).toBe(false);
+    world.soundEvents = [];
+    for (let i = 0; i < 400; i++) {
+      world.sprite("virus").setXY(-1, 134);
+      world.step();
+      expect(hl3.visible).toBe(false);
+    }
+    expect(soundsPlayed(world)).not.toContain("glados");
+    const time = world.vars.time!;
+    holdR(world);
+    expect(world.vars.time).toBeGreaterThanOrEqual(time);
+  });
+
+  test("the green flag clears the game over screen", () => {
+    const world = gameOver();
+    world.greenFlag();
+    world.step();
+    expect(world.sprite("gameOver").visible).toBe(false);
+    expect(world.sprite("pickup").visible).toBe(false);
+    expect(world.layers.slice(-2)).toEqual(["title", "play"]);
+  });
 });
