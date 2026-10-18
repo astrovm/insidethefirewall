@@ -145,7 +145,7 @@ export class RemasterRenderer {
     const ending = game.powers.jetpack < 1;
     this.ctx.globalAlpha = ending ? blink(game.powers.jetpack) : 1;
     this.drawCostume(powerUpCostumes[0]!, back, y + 4, 0, 3, 3);
-    if (game.thrusting) {
+    if (game.flying) {
       const frame = flameCostumes[Math.floor(game.time / 0.08) % 2]!;
       this.drawCostume(frame, back, y - 20, 0, 3, 3);
     }

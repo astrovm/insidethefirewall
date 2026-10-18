@@ -70,9 +70,9 @@ export const POWER_UP_SHOWN = 5;
 const POWER_UP_LOWEST = GROUND_Y;
 const POWER_UP_HIGHEST = GROUND_Y + 60;
 const POWER_UP_AWAY = 80;
-/** Holding jump with a jetpack pushes up hard, up to a steady climb. */
-export const JET_THRUST = GRAVITY * 2;
-export const JET_RISE = 320;
+/** With a jetpack there's no gravity: up and down fly at this speed, reached in 0.1 s, and letting go hovers. */
+export const FLY_SPEED = 300;
+const FLY_ACCELERATION = FLY_SPEED * 10;
 /** The jetpack can't fly the player off the top of the stage. */
 export const CEILING_Y = 180 - 58;
 const GLADOS_AFTER = 6;
@@ -181,8 +181,8 @@ export class Game {
   frozen = 0;
   /** Seconds left of each power-up the player has. */
   powers: Record<PowerUpKind, number> = { jetpack: 0, shield: 0, freeze: 0 };
-  /** Flying up with the jetpack this update. */
-  thrusting = false;
+  /** In the air with a jetpack. */
+  flying = false;
   private powerUpTimer = POWER_UP_FIRST;
   private powerUpShown = 0;
   private dying = 0;
@@ -244,7 +244,7 @@ export class Game {
     this.frozen = 0;
     this.dying = 0;
     this.powers = { jetpack: 0, shield: 0, freeze: 0 };
-    this.thrusting = false;
+    this.flying = false;
     this.powerUpTimer = POWER_UP_FIRST;
     this.powerUpShown = 0;
     for (const s of this.allSprites()) s.visible = false;
@@ -305,6 +305,19 @@ export class Game {
     this.vx = Math.abs(wanted - this.vx) <= change ? wanted : this.vx + Math.sign(wanted - this.vx) * change;
     if (sideways) player.setDirection(input.left ? -90 : 90);
 
+    const jetpack = this.powers.jetpack > 0;
+    if (jetpack) {
+      // Free flight: up takes off and climbs, down sinks and lands, nothing hovers.
+      const wantedVy = input.jump === input.down ? 0 : input.jump ? FLY_SPEED : -FLY_SPEED;
+      if (!this.onGround || wantedVy > 0) {
+        this.onGround = false;
+        const lift = FLY_ACCELERATION * DT;
+        this.vy = Math.abs(wantedVy - this.vy) <= lift ? wantedVy : this.vy + Math.sign(wantedVy - this.vy) * lift;
+      }
+      this.jumpBuffer = 0;
+      this.jumpCut = true;
+    }
+    this.flying = jetpack && !this.onGround;
     if (this.jumpBuffer > 0 && this.onGround) {
       this.vy = JUMP_SPEED;
       this.onGround = false;
@@ -313,13 +326,6 @@ export class Game {
       this.events.push({ type: "jump", x: player.x, y: player.y });
     }
     this.jumpBuffer = Math.max(0, this.jumpBuffer - DT);
-    this.thrusting = this.powers.jetpack > 0 && input.jump;
-    if (this.thrusting) {
-      this.onGround = false;
-      // No short hops while flying.
-      this.jumpCut = true;
-      this.vy = Math.max(this.vy, Math.min(JET_RISE, this.vy + JET_THRUST * DT));
-    }
     if (!this.onGround) {
       if (!input.jump && this.vy > 0 && !this.jumpCut) {
         this.vy *= JUMP_CUT;
@@ -328,7 +334,7 @@ export class Game {
     }
     // Average the speed over the step, so the jump reaches its full height.
     const vy = this.vy;
-    if (!this.onGround) this.vy -= (input.down ? DIVE_GRAVITY : this.vy > 0 ? GRAVITY : FALL_GRAVITY) * DT;
+    if (!this.onGround && !jetpack) this.vy -= (input.down ? DIVE_GRAVITY : this.vy > 0 ? GRAVITY : FALL_GRAVITY) * DT;
 
     const x = player.x + this.vx * DT;
     let y = player.y + ((vy + this.vy) / 2) * DT;
@@ -353,6 +359,7 @@ export class Game {
 
   private playerCostume(input: Input, sideways: boolean): string {
     if (this.hitTime < HIT_FACE) return "hit";
+    if (this.flying) return "jump";
     if (input.down) return "crouch";
     if (!this.onGround) return "jump";
     if (sideways) return Math.floor(this.walkTime / WALK_FRAME) % 2 === 0 ? "walk1" : "walk2";
@@ -476,7 +483,7 @@ export class Game {
     this.dying = 0;
     this.invincible = 0;
     this.powers = { jetpack: 0, shield: 0, freeze: 0 };
-    this.thrusting = false;
+    this.flying = false;
     this.phase = "over";
     this.events.push({ type: "music", playing: false });
     this.events.push({ type: "sound", sound: "death" });

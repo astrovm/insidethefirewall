@@ -21,7 +21,7 @@ import {
   VIRUS_FAST,
   VIRUS_SPEEDUP,
   CEILING_Y,
-  JET_RISE,
+  FLY_SPEED,
   POWER_UP_FIRST,
   POWER_UP_SHOWN,
   POWER_UP_TIME,
@@ -816,32 +816,65 @@ describe("power-ups", () => {
     }
   });
 
-  test("with a jetpack, holding jump flies up to the top and no higher", () => {
+  test("with a jetpack, up flies to the top and no higher, and letting go hovers", () => {
     const game = withPowerUp("jetpack");
     parkVirus(game);
     grab(game);
     run(game, 0.3, { jump: true, jumpPressed: true });
-    expect(game.onGround).toBe(false);
-    expect(game.thrusting).toBe(true);
-    expect(game.vy).toBeGreaterThan(0);
+    expect(game.flying).toBe(true);
+    expect(game.vy).toBe(FLY_SPEED);
     run(game, 1.5, { jump: true });
     expect(game.player.y).toBe(CEILING_Y);
-    // Letting go falls back down.
-    run(game, 1.5);
-    expect(game.thrusting).toBe(false);
-    expect(game.onGround).toBe(true);
+    // No gravity: it stays put.
+    run(game, 1);
+    expect(game.player.y).toBe(CEILING_Y);
+    expect([game.vy, game.flying]).toEqual([0, true]);
   });
 
-  test("the jetpack climbs at a steady speed, and a normal jump still starts at full speed", () => {
+  test("with a jetpack, down sinks to the floor and lands", () => {
+    const game = withPowerUp("jetpack");
+    parkVirus(game);
+    grab(game);
+    run(game, 0.5, { jump: true, jumpPressed: true });
+    const high = game.player.y;
+    run(game, 0.2, { down: true });
+    expect(game.player.y).toBeLessThan(high);
+    expect(game.vy).toBe(-FLY_SPEED);
+    run(game, 2, { down: true });
+    expect([game.player.y, game.onGround, game.flying]).toEqual([GROUND_Y, true, false]);
+    expect(game.player.currentCostume.name).toBe("crouch");
+  });
+
+  test("flying speeds up and slows down in a tenth of a second", () => {
     const game = withPowerUp("jetpack");
     parkVirus(game);
     grab(game);
     game.update(hold({ jump: true, jumpPressed: true }));
-    // The jump's own speed, minus a little gravity.
-    expect(game.vy).toBeGreaterThan(JET_RISE);
-    run(game, 0.5, { jump: true });
-    expect(game.vy).toBeLessThanOrEqual(JET_RISE);
-    expect(game.vy).toBeGreaterThan(JET_RISE - 100);
+    expect(game.vy).toBeCloseTo(FLY_SPEED / 6, 6);
+    run(game, 0.1, { jump: true });
+    expect(game.vy).toBe(FLY_SPEED);
+    game.update(noInput);
+    expect(game.vy).toBeCloseTo(FLY_SPEED * (5 / 6), 6);
+    run(game, 0.1);
+    expect(game.vy).toBe(0);
+  });
+
+  test("up and down together hover, and the jetpack shows the jump pose", () => {
+    const game = withPowerUp("jetpack");
+    parkVirus(game);
+    grab(game);
+    run(game, 0.3, { jump: true, jumpPressed: true });
+    run(game, 0.2, { jump: true, down: true });
+    expect(game.vy).toBe(0);
+    expect(game.player.currentCostume.name).toBe("jump");
+  });
+
+  test("on the floor with a jetpack, down crouches instead of flying", () => {
+    const game = withPowerUp("jetpack");
+    parkVirus(game);
+    grab(game);
+    run(game, 0.5, { down: true });
+    expect([game.player.y, game.onGround, game.flying]).toEqual([GROUND_Y, true, false]);
   });
 
   test("without a jetpack, holding jump doesn't fly", () => {
@@ -849,7 +882,7 @@ describe("power-ups", () => {
     parkVirus(game);
     game.update(hold({ jump: true, jumpPressed: true }));
     run(game, 2, { jump: true });
-    expect(game.thrusting).toBe(false);
+    expect(game.flying).toBe(false);
     expect(game.player.y).toBe(GROUND_Y);
   });
 
@@ -860,7 +893,7 @@ describe("power-ups", () => {
     run(game, 1, { jump: true, jumpPressed: true });
     game.powers.jetpack = DT;
     run(game, 2, { jump: true });
-    expect(game.thrusting).toBe(false);
+    expect(game.flying).toBe(false);
     expect(game.player.y).toBe(GROUND_Y);
   });
 
@@ -916,7 +949,7 @@ describe("power-ups", () => {
     expect(game.powers).toEqual({ jetpack: 0, shield: 0, freeze: 0 });
     expect(game.powerUp.visible).toBe(false);
     game.start();
-    expect([game.powers, game.powerUp.visible, game.thrusting]).toEqual([{ jetpack: 0, shield: 0, freeze: 0 }, false, false]);
+    expect([game.powers, game.powerUp.visible, game.flying]).toEqual([{ jetpack: 0, shield: 0, freeze: 0 }, false, false]);
     expect(game.layers.map((s) => s.name)).toEqual(["pickup", "powerUp", "player", "monitor", "virus"]);
   });
 });

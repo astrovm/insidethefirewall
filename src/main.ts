@@ -15,7 +15,7 @@ const MAX_UPDATES_PER_FRAME = 8;
 
 /** What the screen reader says when the player grabs a power-up. */
 const powerUpMessages: Record<PowerUpKind, (seconds: number) => string> = {
-  jetpack: (seconds) => `Jetpack for ${seconds} seconds. Hold jump to fly.`,
+  jetpack: (seconds) => `Jetpack for ${seconds} seconds. Fly with up and down.`,
   shield: (seconds) => `Shield for ${seconds} seconds`,
   freeze: (seconds) => `Virus frozen for ${seconds} seconds`,
 };
