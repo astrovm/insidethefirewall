@@ -1,6 +1,7 @@
 import { STAGE_HEIGHT, STAGE_WIDTH, type Costume, type Sprite } from "../engine/sprite.ts";
 import { interpolate, type CostumeImages } from "../render.ts";
-import type { Game } from "./game.ts";
+import type { Effects } from "./effects.ts";
+import { PICKUP_BLINK, type Game } from "./game.ts";
 
 export const colors = {
   green: "#00cc44",
@@ -79,10 +80,13 @@ export class RemasterRenderer {
     this.wall = null;
   }
 
-  draw(game: Game, between: number): void {
+  draw(game: Game, between: number, effects: Effects): void {
     const ctx = this.ctx;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = true;
+    const steady = this.view;
+    const [dx, dy] = effects.shakeOffset();
+    this.view = { ...steady, x: steady.x + Math.round(dx * steady.scale), y: steady.y + Math.round(dy * steady.scale) };
     if (game.phase === "title") this.drawTitle();
     else if (game.phase === "over") this.drawBackdrop("#000");
     else this.drawFirewall();
@@ -95,19 +99,76 @@ export class RemasterRenderer {
       ctx.rect(this.view.x, 0, Math.round(STAGE_WIDTH * this.view.scale), this.canvas.height);
       ctx.clip();
     }
+    if (game.phase === "playing" && game.warning > 0) this.drawAim(game, effects.calm);
     for (const sprite of game.layers) {
       if (!sprite.visible) continue;
       const [x, y] = interpolate(sprite, game.previous.get(sprite), between);
-      this.drawSprite(sprite, x, y);
+      ctx.globalAlpha = game.phase === "playing" ? this.alphaOf(game, sprite, effects.calm) : 1;
+      if (ctx.globalAlpha > 0) this.drawSprite(sprite, x, y);
+      ctx.globalAlpha = 1;
     }
+    this.drawParticles(effects);
     ctx.restore();
+    this.view = steady;
     if (game.phase === "playing") this.drawHud(game);
+
+    if (effects.flash > 0 && !effects.calm) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = `rgba(255, 0, 0, ${0.3 * effects.flash})`;
+      ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    }
 
     if (this.fade > 0) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.fillStyle = `rgba(0, 0, 0, ${Math.min(1, this.fade)})`;
       ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     }
+  }
+
+  /**
+   * Blinking, as a warning: the player while invincible, the penguin before it
+   * goes and the virus before it flies. Calm mode dims them instead.
+   */
+  private alphaOf(game: Game, sprite: Sprite, calm: boolean): number {
+    const blink = (seconds: number, every: number) => (Math.floor(seconds / every) % 2 === 0 ? 1 : 0.25);
+    if (sprite === game.player && game.invincible > 0) return calm ? 0.6 : blink(game.invincible, 0.08);
+    if (sprite === game.pickup && game.pickupLeft < PICKUP_BLINK) return calm ? 0.6 : blink(game.pickupLeft, 0.1);
+    if (sprite === game.virus && game.warning > 0) return calm ? 1 : blink(game.warning, 0.06);
+    return 1;
+  }
+
+  /** A dotted line from the monitor to where the virus is about to fly. */
+  private drawAim(game: Game, calm: boolean): void {
+    const ctx = this.ctx;
+    const s = this.view.scale;
+    const [x1, y1] = toCanvas(this.view, game.virus.x, game.virus.y);
+    const [x2, y2] = toCanvas(this.view, game.target.x, game.target.y);
+    const length = Math.hypot(x2 - x1, y2 - y1);
+    if (length < 1) return;
+    const step = 9 * s;
+    const dot = Math.max(1, Math.round(3 * s));
+    ctx.save();
+    ctx.globalAlpha = calm ? 0.5 : 0.35 + 0.35 * Math.abs(Math.sin(game.warning * 25));
+    ctx.fillStyle = colors.red;
+    for (let d = 20 * s; d < length; d += step) {
+      const x = x1 + ((x2 - x1) * d) / length;
+      const y = y1 + ((y2 - y1) * d) / length;
+      ctx.fillRect(Math.round(x - dot / 2), Math.round(y - dot / 2), dot, dot);
+    }
+    ctx.restore();
+  }
+
+  private drawParticles(effects: Effects): void {
+    const ctx = this.ctx;
+    const s = this.view.scale;
+    for (const p of effects.particles) {
+      const [x, y] = toCanvas(this.view, p.x, p.y);
+      const size = Math.max(1, Math.round(p.size * s));
+      ctx.globalAlpha = Math.min(1, (p.life / p.lifetime) * 2);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(Math.round(x - size / 2), Math.round(y - size / 2), size, size);
+    }
+    ctx.globalAlpha = 1;
   }
 
   private drawBackdrop(color: string): void {

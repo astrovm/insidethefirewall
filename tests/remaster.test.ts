@@ -2,14 +2,25 @@ import { describe, expect, test } from "bun:test";
 import { Controls, moveForKey } from "../src/input.ts";
 import { Fader } from "../src/remaster/fader.ts";
 import {
+  AIM_LOCK,
+  DEATH_PAUSE,
   DT,
   Game,
   GROUND_Y,
+  HIT_STOP,
   hl3Shown,
+  INVINCIBLE,
+  JUMP_BUFFER,
+  JUMP_HEIGHT,
   noInput,
+  PICKUP_BLINK,
+  PICKUP_SHOWN,
   PLAYER_SPEED,
   VIRUS_SPAWN,
   VIRUS_START_SPEED,
+  VIRUS_TOP_SPEED,
+  WARNING_LONGEST,
+  WARNING_SHORTEST,
   type GameEvent,
   type Input,
 } from "../src/remaster/game.ts";
@@ -32,9 +43,22 @@ function run(game: Game, seconds: number, input: Partial<Input> = {}): void {
 /** Keeps the virus away so tests can look at one thing at a time. */
 function parkVirus(game: Game): void {
   game.virus.visible = false;
+  game.warning = Infinity;
 }
 
 const types = (events: GameEvent[]) => events.map((event) => event.type);
+
+/** Takes the last heart and waits out the pause before the game over screen. */
+function die(game: Game): void {
+  game.health = 0;
+  run(game, DT + DEATH_PAUSE);
+}
+
+/** Lets the virus out of the monitor. */
+function launch(game: Game): void {
+  run(game, game.warning);
+  game.events.length = 0;
+}
 
 describe("starting", () => {
   test("the game opens on the title screen with nothing on stage", () => {
@@ -73,8 +97,7 @@ describe("starting", () => {
   test("a new game after game over puts the penguin back at jump height", () => {
     const game = started();
     parkVirus(game);
-    game.health = 0;
-    game.update(noInput);
+    die(game);
     expect(game.pickup.y).toBe(-115);
     game.start();
     parkVirus(game);
@@ -98,8 +121,10 @@ describe("starting", () => {
     expect(game.previous.get(game.player)).toEqual({ x: 0, y: GROUND_Y });
     expect(game.previous.has(game.virus)).toBe(false);
     expect(game.previous.has(game.pickup)).toBe(false);
+    const x = game.player.x;
+    expect(x).toBeGreaterThan(0);
     game.update(noInput);
-    expect(game.previous.get(game.player)?.x).toBeCloseTo(PLAYER_SPEED * DT, 6);
+    expect(game.previous.get(game.player)?.x).toBe(x);
   });
 
   test("random spots stay inside the range the 2013 game used", () => {
@@ -115,15 +140,44 @@ describe("starting", () => {
 });
 
 describe("moving", () => {
-  test("the player runs 600 pixels a second, like 20 per Scratch frame", () => {
+  test("the player speeds up to 600 pixels a second, like 20 per Scratch frame", () => {
     const game = started();
     parkVirus(game);
     game.player.setXY(0, GROUND_Y);
+    game.update(hold({ right: true }));
+    expect(game.vx).toBeCloseTo(PLAYER_SPEED / 6, 6);
+    run(game, 0.1 - DT, { right: true });
+    expect(game.vx).toBe(PLAYER_SPEED);
     run(game, 0.1, { right: true });
-    expect(game.player.x).toBeCloseTo(PLAYER_SPEED * 0.1, 6);
+    expect(game.vx).toBe(PLAYER_SPEED);
     expect(game.player.direction).toBe(90);
-    run(game, 0.1, { left: true });
-    expect(game.player.x).toBeCloseTo(0, 6);
+  });
+
+  test("letting go stops the player in a few frames", () => {
+    const game = started();
+    parkVirus(game);
+    game.player.setXY(-100, GROUND_Y);
+    run(game, 0.2, { right: true });
+    game.update(noInput);
+    expect(game.vx).toBe(PLAYER_SPEED - PLAYER_SPEED / 4);
+    run(game, 3 * DT);
+    expect(game.vx).toBe(0);
+    const x = game.player.x;
+    run(game, 0.2);
+    expect(game.player.x).toBe(x);
+  });
+
+  test("turning around brakes first, then speeds up the other way", () => {
+    const game = started();
+    parkVirus(game);
+    game.player.setXY(-100, GROUND_Y);
+    run(game, 0.2, { right: true });
+    const speeds: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      game.update(hold({ left: true }));
+      speeds.push(game.vx);
+    }
+    expect(speeds.map((v) => Math.round(v))).toEqual([450, 300, 150, 0, -100, -200]);
     expect(game.player.direction).toBe(-90);
   });
 
@@ -150,6 +204,7 @@ describe("moving", () => {
     run(game, 3, { right: true });
     const x = game.player.x;
     expect(x).toBeLessThan(240 + 60);
+    expect(game.vx).toBe(0);
     run(game, 0.5, { right: true });
     expect(game.player.x).toBe(x);
   });
@@ -191,106 +246,237 @@ describe("moving", () => {
 });
 
 describe("jumping", () => {
-  test("a jump goes up 75 pixels in 0.15 s and lands 0.15 s later", () => {
+  /** Highest point of a jump, and how long until landing. */
+  function jump(game: Game, holdFor: number): { top: number; air: number } {
+    game.update(hold({ jump: true, jumpPressed: true }));
+    let top = game.player.y;
+    let air = DT;
+    while (!game.onGround) {
+      game.update(hold({ jump: air < holdFor }));
+      top = Math.max(top, game.player.y);
+      air += DT;
+    }
+    return { top, air };
+  }
+
+  test("holding jump goes 80 pixels up and lands in about half a second", () => {
+    const game = started();
+    parkVirus(game);
+    const { top, air } = jump(game, Infinity);
+    expect(top - GROUND_Y).toBeGreaterThan(JUMP_HEIGHT - 3);
+    expect(top - GROUND_Y).toBeLessThanOrEqual(JUMP_HEIGHT);
+    expect(air).toBeGreaterThan(0.3);
+    expect(air).toBeLessThan(0.45);
+    expect(game.player.y).toBe(GROUND_Y);
+  });
+
+  test("a tap is a short hop, and holding longer goes higher", () => {
+    const heights = [0, 0.08, 0.15, Infinity].map((holdFor) => {
+      const game = started();
+      parkVirus(game);
+      return jump(game, holdFor).top - GROUND_Y;
+    });
+    expect(heights[0]).toBeLessThan(30);
+    expect(heights[0]).toBeGreaterThan(15);
+    for (let i = 1; i < heights.length; i++) expect(heights[i]!).toBeGreaterThan(heights[i - 1]!);
+  });
+
+  test("a short hop still reaches the penguin", () => {
+    const game = started();
+    parkVirus(game);
+    run(game, 10);
+    game.player.setXY(game.pickup.x, GROUND_Y);
+    jump(game, 0);
+    expect(game.health).toBe(2);
+  });
+
+  test("shows the jump costume in the air and kicks up dust", () => {
     const game = started();
     parkVirus(game);
     game.update(hold({ jump: true, jumpPressed: true }));
-    expect(game.onGround).toBe(false);
     expect(game.player.currentCostume.name).toBe("jump");
-    run(game, 0.15 - DT, { jump: true });
-    expect(game.player.y).toBeCloseTo(-25, 6);
-    run(game, 0.15 - DT);
-    expect(game.player.y).toBeGreaterThan(GROUND_Y);
-    run(game, DT);
-    expect(game.player.y).toBe(GROUND_Y);
-    expect(game.onGround).toBe(true);
+    expect(types(game.events)).toEqual(["jump"]);
+    run(game, 1, { jump: true });
+    expect(types(game.events)).toEqual(["jump", "land"]);
+    expect(game.player.currentCostume.name).toBe("normal");
   });
 
-  test("pressing jump in the air does nothing", () => {
+  test("down in the air falls faster", () => {
+    const falls = [false, true].map((down) => {
+      const game = started();
+      parkVirus(game);
+      game.update(hold({ jump: true, jumpPressed: true }));
+      let air = DT;
+      while (!game.onGround) {
+        game.update(hold({ jump: true, down }));
+        air += DT;
+      }
+      return air;
+    });
+    expect(falls[1]!).toBeLessThan(falls[0]!);
+  });
+
+  test("jump pressed just before landing jumps again on landing", () => {
     const game = started();
     parkVirus(game);
+    const first = jump(game, Infinity).air;
+    game.update(noInput);
+    expect(game.onGround).toBe(true);
+    // Press again a little before the next landing.
+    game.update(hold({ jump: true, jumpPressed: true }));
+    run(game, first - JUMP_BUFFER + 2 * DT, { jump: true });
     game.update(hold({ jumpPressed: true }));
-    run(game, 0.1);
-    const y = game.player.y;
-    game.update(hold({ jumpPressed: true }));
-    run(game, 0.2 - DT);
-    expect(game.player.y).toBe(GROUND_Y);
-    expect(y).toBeGreaterThan(GROUND_Y);
+    run(game, JUMP_BUFFER - DT);
+    expect(game.onGround).toBe(false);
+  });
+
+  test("jump pressed too early in the air does nothing", () => {
+    const game = started();
+    parkVirus(game);
+    game.update(hold({ jump: true, jumpPressed: true }));
+    run(game, 0.1, { jump: true });
+    game.update(hold({ jump: true, jumpPressed: true }));
+    run(game, 1, { jump: true });
+    expect(game.onGround).toBe(true);
+    expect(types(game.events).filter((t) => t === "jump")).toHaveLength(1);
   });
 
   test("holding jump doesn't jump again", () => {
     const game = started();
     parkVirus(game);
     game.update(hold({ jump: true, jumpPressed: true }));
-    run(game, 0.5, { jump: true });
+    run(game, 1, { jump: true });
     expect(game.onGround).toBe(true);
   });
 });
 
 describe("the virus", () => {
-  test("waits 0.2 s in the monitor, then flies at the player", () => {
+  test("flashes in the monitor first, aiming at the player, then flies", () => {
     const game = started();
+    expect(game.warning).toBe(WARNING_LONGEST);
     game.player.setXY(150, GROUND_Y);
-    run(game, 0.2 - DT);
+    run(game, WARNING_LONGEST - AIM_LOCK - DT);
+    expect(game.target).toEqual({ x: 150, y: GROUND_Y });
     expect([game.virus.x, game.virus.y]).toEqual([VIRUS_SPAWN.x, VIRUS_SPAWN.y]);
+    // The aim locks just before it flies, so moving away then dodges it.
+    run(game, 2 * DT);
+    game.player.setXY(-150, GROUND_Y);
+    run(game, AIM_LOCK - 2 * DT);
+    expect(game.target).toEqual({ x: 150, y: GROUND_Y });
+    expect(game.events).toEqual([]);
     run(game, DT);
+    expect(game.events).toEqual([{ type: "launch", x: VIRUS_SPAWN.x, y: VIRUS_SPAWN.y }]);
+    expect(game.warning).toBe(0);
     const flown = Math.hypot(game.virus.x - VIRUS_SPAWN.x, game.virus.y - VIRUS_SPAWN.y);
     expect(flown).toBeCloseTo(VIRUS_START_SPEED * DT, 6);
     expect(game.virus.x).toBeGreaterThan(VIRUS_SPAWN.x);
-    expect(game.virus.y).toBeLessThan(VIRUS_SPAWN.y);
   });
 
   test("keeps flying once it leaves the monitor", () => {
     const game = started();
     game.player.setXY(200, GROUND_Y);
-    run(game, 0.2 + 0.25);
+    launch(game);
+    run(game, 0.25);
     const flown = Math.hypot(game.virus.x - VIRUS_SPAWN.x, game.virus.y - VIRUS_SPAWN.y);
     expect(flown).toBeCloseTo(VIRUS_START_SPEED * (0.25 + DT), 6);
   });
 
-  test("goes back to the monitor and aims again when it reaches an edge", () => {
+  test("goes back to the monitor and warns again when it reaches an edge", () => {
     const game = started();
-    run(game, 0.2);
+    launch(game);
     game.player.setXY(-200, GROUND_Y);
     game.virus.setXY(239, 0);
     game.virus.setDirection(90);
     run(game, DT);
     expect([game.virus.x, game.virus.y]).toEqual([VIRUS_SPAWN.x, VIRUS_SPAWN.y]);
-    expect(game.virus.direction).toBeLessThan(0);
+    expect(game.warning).toBe(WARNING_LONGEST);
+    expect(game.target.x).toBe(-200);
+  });
+
+  test("warns for less time as it gets faster", () => {
+    const game = started();
+    launch(game);
+    game.speed = VIRUS_TOP_SPEED;
+    game.virus.setXY(239, 0);
+    game.virus.setDirection(90);
+    run(game, DT);
+    expect(game.warning).toBeCloseTo(WARNING_SHORTEST, 6);
   });
 
   test("a hit takes a heart, shows the hit face and sends the virus back", () => {
     const game = started();
     game.health = 2;
-    run(game, 0.2);
+    launch(game);
     game.virus.setXY(game.player.x, game.player.y);
     run(game, DT);
     expect(game.health).toBe(1);
     expect(game.player.currentCostume.name).toBe("hit");
     expect([game.virus.x, game.virus.y]).toEqual([VIRUS_SPAWN.x, VIRUS_SPAWN.y]);
-    expect(types(game.events)).toEqual(["hit"]);
+    expect(game.events).toEqual([{ type: "hit", x: game.player.x, y: game.player.y, last: false }]);
     expect(game.phase).toBe("playing");
+    expect([game.invincible, game.frozen]).toEqual([INVINCIBLE, HIT_STOP]);
+  });
+
+  test("a hit freezes everything for a moment", () => {
+    const game = started();
+    game.health = 2;
+    launch(game);
+    game.virus.setXY(game.player.x, game.player.y);
+    run(game, DT);
+    const time = game.time;
+    const x = game.player.x;
+    run(game, HIT_STOP, { right: true });
+    expect([game.time, game.player.x]).toEqual([time, x]);
+    run(game, DT, { right: true });
+    expect(game.time).toBeGreaterThan(time);
+    expect(game.player.x).toBeGreaterThan(x);
+  });
+
+  test("the hit face lasts 0.3 s", () => {
+    const game = started();
+    game.health = 2;
+    launch(game);
+    game.virus.setXY(game.player.x, game.player.y);
+    run(game, DT + HIT_STOP);
     run(game, 0.3 - 2 * DT);
     expect(game.player.currentCostume.name).toBe("hit");
     run(game, 2 * DT);
     expect(game.player.currentCostume.name).toBe("normal");
   });
 
-  test("gets faster every 5 to 10 seconds", () => {
+  test("the player can't be hit again while blinking", () => {
+    const game = started();
+    game.health = 3;
+    launch(game);
+    game.virus.setXY(game.player.x, game.player.y);
+    run(game, DT + HIT_STOP);
+    game.warning = 0;
+    game.virus.setXY(game.player.x, game.player.y);
+    run(game, DT);
+    expect(game.health).toBe(2);
+    run(game, INVINCIBLE);
+    expect(game.invincible).toBe(0);
+    game.warning = 0;
+    game.virus.setXY(game.player.x, game.player.y);
+    run(game, DT);
+    expect(game.health).toBe(1);
+  });
+
+  test("gets faster every 5 to 10 seconds, up to a top speed", () => {
     const game = started();
     parkVirus(game);
     let changes = 0;
     let last = game.speed;
-    for (let i = 0; i < Math.round(60 / DT); i++) {
+    for (let i = 0; i < Math.round(300 / DT); i++) {
       game.update(noInput);
       if (game.speed !== last) {
-        expect(game.speed - last).toBeCloseTo(27, 6);
+        if (game.speed < VIRUS_TOP_SPEED) expect(game.speed - last).toBeCloseTo(27, 6);
         last = game.speed;
         changes++;
       }
     }
-    expect(changes).toBeGreaterThanOrEqual(6);
-    expect(changes).toBeLessThanOrEqual(12);
+    expect(changes).toBe(Math.ceil((VIRUS_TOP_SPEED - VIRUS_START_SPEED) / 27));
+    expect(game.speed).toBe(VIRUS_TOP_SPEED);
   });
 });
 
@@ -310,6 +496,17 @@ describe("the penguin", () => {
     expect(game.pickup.visible).toBe(false);
   });
 
+  test("tells how long it has left, so it can blink before it goes", () => {
+    const game = started();
+    parkVirus(game);
+    game.player.setXY(-205, GROUND_Y);
+    expect(game.pickupLeft).toBe(0);
+    run(game, 10);
+    expect(game.pickupLeft).toBeCloseTo(PICKUP_SHOWN, 6);
+    run(game, PICKUP_SHOWN - PICKUP_BLINK);
+    expect(game.pickupLeft).toBeCloseTo(PICKUP_BLINK, 6);
+  });
+
   test("standing under it isn't enough, jumping into it gives a heart", () => {
     const game = started();
     parkVirus(game);
@@ -322,22 +519,25 @@ describe("the penguin", () => {
     run(game, 0.15);
     expect(game.health).toBe(2);
     expect(game.pickup.visible).toBe(false);
-    expect(types(game.events)).toEqual(["pickup"]);
+    expect(types(game.events).slice(0, 2)).toEqual(["jump", "pickup"]);
   });
 });
 
 describe("the penguin's spot", () => {
-  test("is picked between x -120 and 295, and turned around at the right edge, like 2013", () => {
-    for (const [share, x, direction] of [
-      [0, -120, 90],
-      [0.99999, null, -90],
+  test("is picked between x -120 and 260, so all of it is on stage", () => {
+    for (const [share, x] of [
+      [0, -120],
+      [0.99999, 260],
     ] as const) {
       const game = new Game(() => share);
       game.start();
       parkVirus(game);
       run(game, 10);
-      if (x !== null) expect(game.pickup.x).toBe(x);
-      expect(game.pickup.direction).toBe(direction);
+      expect(game.pickup.x).toBe(x);
+      expect(game.pickup.direction).toBe(90);
+      const bounds = game.pickup.bounds();
+      expect(bounds.left).toBeGreaterThanOrEqual(-240);
+      expect(bounds.right).toBeLessThanOrEqual(240);
     }
   });
 });
@@ -347,11 +547,22 @@ describe("game over", () => {
     const game = started();
     parkVirus(game);
     run(game, 3);
-    game.health = 0;
     game.events.length = 0;
-    game.update(noInput);
+    die(game);
     return game;
   }
+
+  test("the last hit holds a moment before the game over screen", () => {
+    const game = started();
+    launch(game);
+    game.virus.setXY(game.player.x, game.player.y);
+    run(game, DT);
+    expect(game.events.at(-1)).toMatchObject({ type: "hit", last: true });
+    run(game, DEATH_PAUSE - DT);
+    expect(game.phase).toBe("playing");
+    run(game, DT);
+    expect(game.phase).toBe("over");
+  });
 
   test("losing the last heart shows the 2013 game over screen", () => {
     const game = lost();
@@ -370,13 +581,10 @@ describe("game over", () => {
   });
 
   test("the penguin faces right on the game over screen, wherever it was", () => {
-    const game = new Game(() => 0.99999);
-    game.start();
+    const game = started();
     parkVirus(game);
-    run(game, 10);
-    expect(game.pickup.direction).toBe(-90);
-    game.health = 0;
-    game.update(noInput);
+    game.pickup.setDirection(-90);
+    die(game);
     expect(game.pickup.direction).toBe(90);
   });
 
@@ -386,8 +594,7 @@ describe("game over", () => {
     expect(game.hl3.visible).toBe(true);
     game.start();
     parkVirus(game);
-    game.health = 0;
-    game.update(noInput);
+    die(game);
     expect(game.hl3.visible).toBe(false);
   });
 
@@ -395,6 +602,7 @@ describe("game over", () => {
     const game = lost();
     run(game, 2);
     expect(game.time).toBeCloseTo(3 + DT, 6);
+    expect(game.invincible).toBe(0);
   });
 
   test("GLaDOS talks after 6 s, then again after each line", () => {
@@ -416,8 +624,7 @@ describe("game over", () => {
       const game = new Game(() => share);
       game.start();
       game.virus.visible = false;
-      game.health = 0;
-      game.update(noInput);
+      die(game);
       const seen: number[][] = [];
       for (let i = 0; i < Math.round(16 / DT); i++) {
         game.update(noInput);

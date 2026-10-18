@@ -4,6 +4,7 @@ import { ClassicMode } from "./classic-mode.ts";
 import { costumes, createClassic, sounds } from "./game/classic.ts";
 import { Controls, moveForKey } from "./input.ts";
 import type { CostumeImages } from "./render.ts";
+import { Effects } from "./remaster/effects.ts";
 import { Fader } from "./remaster/fader.ts";
 import { DT, Game, type GameEvent } from "./remaster/game.ts";
 import { formatTime, RemasterRenderer, toStage } from "./remaster/render.ts";
@@ -52,6 +53,7 @@ async function main(): Promise<void> {
   const game = new Game();
   const controls = new Controls();
   const fader = new Fader();
+  const effects = new Effects();
   const canvas = $<HTMLCanvasElement>("game");
   const renderer = new RemasterRenderer(canvas, images, { stage: costumes.stage, title: costumes.title[0]! });
   const ui = $("ui");
@@ -116,6 +118,7 @@ async function main(): Promise<void> {
     audio.unlock();
     fader.to(() => {
       game.start();
+      effects.clear();
       status.textContent = "";
       showMenus();
     });
@@ -159,6 +162,7 @@ async function main(): Promise<void> {
   };
 
   const handle = (event: GameEvent) => {
+    effects.handle(event);
     switch (event.type) {
       case "sound":
         audio.play(event.sound);
@@ -167,6 +171,7 @@ async function main(): Promise<void> {
         audio.setMusic(event.playing ? "music" : null);
         break;
       case "lost":
+        effects.clear();
         fader.fadeIn();
         status.textContent = `Game over. You lasted ${formatTime(event.time)} seconds.`;
         $("over-time").textContent = formatTime(event.time);
@@ -297,8 +302,9 @@ async function main(): Promise<void> {
         updates++;
       }
       if (updates === MAX_UPDATES_PER_FRAME) pending = 0;
+      if (!paused) effects.update(elapsed / 1000);
       renderer.fade = fader.value;
-      renderer.draw(game, paused ? 1 : Math.min(1, pending / DT));
+      renderer.draw(game, paused || game.frozen > 0 ? 1 : Math.min(1, pending / DT), effects);
     }
     fader.update(elapsed / 1000);
     requestAnimationFrame(frame);

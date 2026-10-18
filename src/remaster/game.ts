@@ -1,5 +1,6 @@
-// The remastered game. Same rules as the 2013 one, written as a normal game
-// loop instead of Scratch scripts, and updated 60 times a second.
+// The remastered game: the 2013 rules, written as a normal game loop instead
+// of Scratch scripts and updated 60 times a second, with smoother movement,
+// real jumps and a fairer virus.
 
 import { Sprite, type Costume, type RotationStyle } from "../engine/sprite.ts";
 import { costumes, sounds } from "../game/classic.ts";
@@ -10,19 +11,50 @@ export const DT = 1 / HZ;
 /** The 2013 game moved things once per Scratch frame, 30 times a second. */
 const SCRATCH_FPS = 30;
 
+/** Top running speed: 20 pixels per Scratch frame, as in 2013. */
 export const PLAYER_SPEED = 20 * SCRATCH_FPS;
+/** Reaches top speed in 0.1 s and stops in under 0.07 s. */
+export const RUN_ACCELERATION = PLAYER_SPEED * 10;
+export const RUN_BRAKING = PLAYER_SPEED * 15;
 export const GROUND_Y = -100;
-const JUMP_TOP_Y = -25;
-const JUMP_HALF = 0.15;
+/** A held jump goes 80 px up in 0.2 s. The 2013 one went 75 px in 0.15 s. */
+export const JUMP_HEIGHT = 80;
+const JUMP_RISE = 0.2;
+export const JUMP_SPEED = (2 * JUMP_HEIGHT) / JUMP_RISE;
+export const GRAVITY = JUMP_SPEED / JUMP_RISE;
+/** Falling is faster than rising, and faster still holding down. */
+const FALL_GRAVITY = GRAVITY * 1.5;
+const DIVE_GRAVITY = GRAVITY * 3;
+/** Letting go of jump early cuts the rise, for short hops. */
+const JUMP_CUT = 0.45;
+/** A jump pressed just before landing still happens. */
+export const JUMP_BUFFER = 0.12;
 const WALK_FRAME = 0.15;
 const HIT_FACE = 0.3;
+/** After a hit the player blinks and can't be hit again for a moment. */
+export const INVINCIBLE = 1.25;
+/** Everything stops for a moment on a hit, so it lands. */
+export const HIT_STOP = 4 * DT;
+/** The last hit holds a little longer before the game over screen. */
+export const DEATH_PAUSE = 0.7;
 export const VIRUS_SPAWN = { x: -1, y: 134 } as const;
 export const VIRUS_START_SPEED = 5.5 * SCRATCH_FPS;
 const VIRUS_SPEEDUP = 0.9 * SCRATCH_FPS;
-const VIRUS_FIRST_AIM = 0.2;
+/** The 2013 virus kept speeding up forever. This one stops at 14 px per Scratch frame. */
+export const VIRUS_TOP_SPEED = 14 * SCRATCH_FPS;
+/** The virus flashes in the monitor before it flies out, less as it speeds up. */
+export const WARNING_LONGEST = 0.6;
+export const WARNING_SHORTEST = 0.3;
+/** Its aim follows the player until this long before it flies. */
+export const AIM_LOCK = 0.15;
 const PICKUP_EVERY = 10;
-const PICKUP_SHOWN = 2;
+export const PICKUP_SHOWN = 2;
+/** The penguin blinks before it goes. */
+export const PICKUP_BLINK = 0.6;
 const PICKUP_Y = -25;
+/** Penguin spots where all of it is on stage. The 2013 game could put half of it off the right edge. */
+const PICKUP_LEFTMOST = -120;
+const PICKUP_RIGHTMOST = 260;
 const GLADOS_AFTER = 6;
 const HL3_AFTER = 10;
 
@@ -42,8 +74,11 @@ export const noInput: Input = { left: false, right: false, down: false, jump: fa
 export type GameEvent =
   | { type: "sound"; sound: "laser" | "death" | "glados" | "meow" }
   | { type: "music"; playing: boolean }
-  | { type: "hit"; x: number; y: number }
+  | { type: "hit"; x: number; y: number; last: boolean }
   | { type: "pickup"; x: number; y: number }
+  | { type: "jump"; x: number; y: number }
+  | { type: "land"; x: number; y: number }
+  | { type: "launch"; x: number; y: number }
   | { type: "lost"; time: number };
 
 function sprite(
@@ -93,10 +128,23 @@ export class Game {
   /** Where sprites were before the last update, for drawing between updates. */
   previous = new Map<Sprite, { x: number; y: number }>();
 
-  private jumpTime = -1;
+  /** Player speed in stage pixels per second. */
+  vx = 0;
+  vy = 0;
+  onGround = true;
+  /** Seconds of invincibility left after a hit. */
+  invincible = 0;
+  /** Seconds until the virus flies out of the monitor, or 0 while it flies. */
+  warning = 0;
+  /** Where the virus will fly to. */
+  target = { x: 0, y: 0 };
+  /** Seconds the game stays frozen after a hit. */
+  frozen = 0;
+  private dying = 0;
+  private jumpCut = false;
+  private jumpBuffer = 0;
   private walkTime = 0;
   private hitTime = Infinity;
-  private virusWait = 0;
   private speedup = new Timer(0);
   private pickupTimer = new Timer(PICKUP_EVERY);
   private pickupShown = 0;
@@ -113,8 +161,9 @@ export class Game {
     return from + Math.floor(this.random() * (to + 1 - from));
   }
 
-  get onGround(): boolean {
-    return this.jumpTime < 0;
+  /** Seconds the penguin has left on stage, while it's shown. */
+  get pickupLeft(): number {
+    return this.pickup.visible ? PICKUP_SHOWN - this.pickupShown : 0;
   }
 
   toTitle(): void {
@@ -132,9 +181,16 @@ export class Game {
     this.speedup = new Timer(this.randomInt(5, 10));
     this.pickupTimer = new Timer(PICKUP_EVERY);
     this.pickupShown = 0;
-    this.jumpTime = -1;
+    this.vx = 0;
+    this.vy = 0;
+    this.onGround = true;
+    this.jumpCut = false;
+    this.jumpBuffer = 0;
     this.walkTime = 0;
     this.hitTime = Infinity;
+    this.invincible = 0;
+    this.frozen = 0;
+    this.dying = 0;
     for (const s of this.allSprites()) s.visible = false;
 
     const { player, virus, monitor, pickup } = this;
@@ -146,8 +202,7 @@ export class Game {
     monitor.visible = true;
     monitor.setXY(0, 110);
     virus.visible = true;
-    virus.setXY(VIRUS_SPAWN.x, VIRUS_SPAWN.y);
-    this.virusWait = VIRUS_FIRST_AIM;
+    this.respawnVirus();
     pickup.setXY(pickup.x, PICKUP_Y);
     this.layers = [pickup, player, monitor, virus];
     this.events.push({ type: "music", playing: true });
@@ -161,38 +216,71 @@ export class Game {
   }
 
   private updatePlaying(input: Input): void {
+    if (input.jumpPressed) this.jumpBuffer = JUMP_BUFFER;
+    if (this.dying > 0) {
+      this.dying -= DT;
+      if (this.dying <= 1e-9) this.lose();
+      return;
+    }
+    if (this.frozen > 1e-9) {
+      this.frozen -= DT;
+      return;
+    }
     this.time += DT;
+    this.invincible = Math.max(0, this.invincible - DT);
     this.movePlayer(input);
     this.moveVirus();
     this.updatePickup();
     if (this.speedup.tick()) {
-      this.speed += VIRUS_SPEEDUP;
+      this.speed = Math.min(VIRUS_TOP_SPEED, this.speed + VIRUS_SPEEDUP);
       this.speedup.every = this.randomInt(5, 10);
       this.speedup.left = this.speedup.every;
     }
-    if (this.health < 1) this.lose();
+    if (this.health < 1) {
+      this.health = 0;
+      this.dying = DEATH_PAUSE;
+    }
   }
 
   private movePlayer(input: Input): void {
     const player = this.player;
     const sideways = input.left !== input.right;
-    if (input.right) player.setXY(player.x + PLAYER_SPEED * DT, player.y);
-    if (input.left) player.setXY(player.x - PLAYER_SPEED * DT, player.y);
+    const wanted = sideways ? (input.left ? -PLAYER_SPEED : PLAYER_SPEED) : 0;
+    // Speed up toward the held direction. Stopping and turning brake harder.
+    const braking = wanted === 0 || Math.sign(wanted) === -Math.sign(this.vx);
+    const change = (braking ? RUN_BRAKING : RUN_ACCELERATION) * DT;
+    this.vx = Math.abs(wanted - this.vx) <= change ? wanted : this.vx + Math.sign(wanted - this.vx) * change;
     if (sideways) player.setDirection(input.left ? -90 : 90);
 
-    if (input.jumpPressed && this.onGround) this.jumpTime = 0;
+    if (this.jumpBuffer > 0 && this.onGround) {
+      this.vy = JUMP_SPEED;
+      this.onGround = false;
+      this.jumpCut = false;
+      this.jumpBuffer = 0;
+      this.events.push({ type: "jump", x: player.x, y: player.y });
+    }
+    this.jumpBuffer = Math.max(0, this.jumpBuffer - DT);
     if (!this.onGround) {
-      this.jumpTime += DT;
-      const t = this.jumpTime;
-      const rise = JUMP_TOP_Y - GROUND_Y;
-      const y = t < JUMP_HALF ? GROUND_Y + rise * (t / JUMP_HALF) : JUMP_TOP_Y - rise * ((t - JUMP_HALF) / JUMP_HALF);
-      if (t >= JUMP_HALF * 2) {
-        this.jumpTime = -1;
-        player.setXY(player.x, GROUND_Y);
-      } else {
-        player.setXY(player.x, y);
+      if (!input.jump && this.vy > 0 && !this.jumpCut) {
+        this.vy *= JUMP_CUT;
+        this.jumpCut = true;
       }
     }
+    // Average the speed over the step, so the jump reaches its full height.
+    const vy = this.vy;
+    if (!this.onGround) this.vy -= (input.down ? DIVE_GRAVITY : this.vy > 0 ? GRAVITY : FALL_GRAVITY) * DT;
+
+    const x = player.x + this.vx * DT;
+    let y = player.y + ((vy + this.vy) / 2) * DT;
+    if (!this.onGround && y <= GROUND_Y) {
+      y = GROUND_Y;
+      this.vy = 0;
+      this.onGround = true;
+      this.events.push({ type: "land", x, y });
+    }
+    player.setXY(x, y);
+    // The edge of the stage stops the player.
+    if (player.x !== x) this.vx = 0;
 
     this.walkTime = sideways ? this.walkTime + DT : 0;
     this.hitTime += DT;
@@ -207,28 +295,35 @@ export class Game {
     return "normal";
   }
 
-  private aimVirus(): void {
+  /** Back in the monitor, flashing, about to fly out. */
+  private respawnVirus(): void {
     this.virus.setXY(VIRUS_SPAWN.x, VIRUS_SPAWN.y);
-    this.virus.pointTowards(this.player.x, this.player.y);
+    const progress = (this.speed - VIRUS_START_SPEED) / (VIRUS_TOP_SPEED - VIRUS_START_SPEED);
+    this.warning = WARNING_LONGEST - (WARNING_LONGEST - WARNING_SHORTEST) * progress;
+    this.target = { x: this.player.x, y: this.player.y };
   }
 
   private moveVirus(): void {
     const virus = this.virus;
-    if (this.virusWait > 0) {
-      this.virusWait -= DT;
-      if (this.virusWait > 1e-9) return;
-      this.virusWait = 0;
-      this.aimVirus();
+    if (this.warning > 0) {
+      if (this.warning > AIM_LOCK + 1e-9) this.target = { x: this.player.x, y: this.player.y };
+      this.warning -= DT;
+      if (this.warning > 1e-9) return;
+      this.warning = 0;
+      virus.pointTowards(this.target.x, this.target.y);
+      this.events.push({ type: "launch", x: virus.x, y: virus.y });
     }
     virus.move(this.speed * DT);
-    if (virus.isTouching(this.player)) {
+    if (this.invincible <= 0 && virus.isTouching(this.player)) {
       this.health -= 1;
       this.hitTime = 0;
+      this.invincible = INVINCIBLE;
+      this.frozen = HIT_STOP;
       this.player.setCostume("hit");
-      this.events.push({ type: "hit", x: this.player.x, y: this.player.y });
-      this.aimVirus();
+      this.events.push({ type: "hit", x: this.player.x, y: this.player.y, last: this.health < 1 });
+      this.respawnVirus();
     } else if (virus.isTouchingEdge()) {
-      this.aimVirus();
+      this.respawnVirus();
     }
   }
 
@@ -245,7 +340,7 @@ export class Game {
       }
     }
     if (this.pickupTimer.tick()) {
-      pickup.setXY(this.randomInt(-120, 295), pickup.y);
+      pickup.setXY(this.randomInt(PICKUP_LEFTMOST, PICKUP_RIGHTMOST), pickup.y);
       pickup.ifOnEdgeBounce();
       pickup.visible = true;
       this.pickupShown = 0;
@@ -255,6 +350,8 @@ export class Game {
   /** The 2013 game over screen: the computer is infected, press R to repair. */
   private lose(): void {
     this.health = 0;
+    this.dying = 0;
+    this.invincible = 0;
     this.phase = "over";
     this.events.push({ type: "music", playing: false });
     this.events.push({ type: "sound", sound: "death" });

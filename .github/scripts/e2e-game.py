@@ -165,6 +165,17 @@ try:
         assert state(page)["health"] == 1 and state(page)["time"] < 1
         print("R starts a new game")
 
+        # Arrow keys run and jump.
+        start_x = page.evaluate("insideTheFirewall.game.player.x")
+        page.keyboard.down("ArrowLeft" if start_x > 0 else "ArrowRight")
+        page.keyboard.press("ArrowUp")
+        page.wait_for_function("() => !insideTheFirewall.game.onGround", timeout=2000)
+        page.wait_for_timeout(200)
+        page.keyboard.up("ArrowLeft" if start_x > 0 else "ArrowRight")
+        moved = page.evaluate("insideTheFirewall.game.player.x") - start_x
+        assert abs(moved) > 30, f"Player only moved {moved} px"
+        print("The player runs and jumps")
+
         # The pause menu goes back to the title.
         page.click("#pause-game")
         page.get_by_role("button", name="Menu").click()
