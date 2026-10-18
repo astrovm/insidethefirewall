@@ -81,8 +81,6 @@ export class Game {
   /** Virus speed in stage pixels per second. */
   speed = VIRUS_START_SPEED;
   events: GameEvent[] = [];
-  /** Seconds since the current phase started. */
-  phaseTime = 0;
 
   readonly player = sprite("player", costumes.player, 0, GROUND_Y, 180.6111234669416, "left-right");
   readonly virus = sprite("virus", costumes.virus, VIRUS_SPAWN.x, VIRUS_SPAWN.y, 222.1289005570158, "left-right");
@@ -121,7 +119,6 @@ export class Game {
 
   toTitle(): void {
     this.phase = "title";
-    this.phaseTime = 0;
     this.events.push({ type: "music", playing: false });
     for (const s of this.allSprites()) s.visible = false;
     this.layers = [];
@@ -129,7 +126,6 @@ export class Game {
 
   start(): void {
     this.phase = "playing";
-    this.phaseTime = 0;
     this.time = 0;
     this.health = 1;
     this.speed = VIRUS_START_SPEED;
@@ -160,7 +156,6 @@ export class Game {
   update(input: Input): void {
     this.previous.clear();
     for (const s of this.layers) if (s.visible) this.previous.set(s, { x: s.x, y: s.y });
-    this.phaseTime += DT;
     if (this.phase === "playing") this.updatePlaying(input);
     else if (this.phase === "over") this.updateOver();
   }
@@ -261,7 +256,6 @@ export class Game {
   private lose(): void {
     this.health = 0;
     this.phase = "over";
-    this.phaseTime = 0;
     this.events.push({ type: "music", playing: false });
     this.events.push({ type: "sound", sound: "death" });
     this.events.push({ type: "lost", time: Math.floor(this.time) });

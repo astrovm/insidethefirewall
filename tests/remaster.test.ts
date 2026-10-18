@@ -62,9 +62,44 @@ describe("starting", () => {
     const game = started();
     game.health = 4;
     game.speed = 999;
-    run(game, 3);
+    run(game, 3, { left: true });
     game.start();
     expect([game.health, game.time, game.speed]).toEqual([1, 0, VIRUS_START_SPEED]);
+    expect(game.player.direction).toBe(90);
+    expect([game.virus.x, game.virus.y]).toEqual([VIRUS_SPAWN.x, VIRUS_SPAWN.y]);
+    expect([game.monitor.visible, game.monitor.x, game.monitor.y]).toEqual([true, 0, 110]);
+  });
+
+  test("a new game after game over puts the penguin back at jump height", () => {
+    const game = started();
+    parkVirus(game);
+    game.health = 0;
+    game.update(noInput);
+    expect(game.pickup.y).toBe(-115);
+    game.start();
+    parkVirus(game);
+    run(game, 10);
+    expect([game.pickup.visible, game.pickup.y]).toEqual([true, -25]);
+  });
+
+  test("nothing happens on the title screen", () => {
+    const game = new Game(seeded(1));
+    game.events.length = 0;
+    run(game, 20);
+    expect(game.events).toEqual([]);
+    expect(game.time).toBe(0);
+  });
+
+  test("remembers where visible sprites were before each update", () => {
+    const game = started();
+    parkVirus(game);
+    game.player.setXY(0, GROUND_Y);
+    game.update(hold({ right: true }));
+    expect(game.previous.get(game.player)).toEqual({ x: 0, y: GROUND_Y });
+    expect(game.previous.has(game.virus)).toBe(false);
+    expect(game.previous.has(game.pickup)).toBe(false);
+    game.update(noInput);
+    expect(game.previous.get(game.player)?.x).toBeCloseTo(PLAYER_SPEED * DT, 6);
   });
 
   test("random spots stay inside the range the 2013 game used", () => {
@@ -92,6 +127,14 @@ describe("moving", () => {
     expect(game.player.direction).toBe(-90);
   });
 
+  test("the player keeps facing the last way they walked", () => {
+    const game = started();
+    parkVirus(game);
+    run(game, 0.1, { left: true });
+    run(game, 0.1);
+    expect(game.player.direction).toBe(-90);
+  });
+
   test("holding both directions stands still", () => {
     const game = started();
     parkVirus(game);
@@ -109,6 +152,19 @@ describe("moving", () => {
     expect(x).toBeLessThan(240 + 60);
     run(game, 0.5, { right: true });
     expect(game.player.x).toBe(x);
+  });
+
+  test("walking starts on the first walking costume and swaps every 0.15 s", () => {
+    const game = started();
+    parkVirus(game);
+    const costumes: string[] = [];
+    for (let i = 0; i < 20; i++) {
+      game.update(hold({ right: true }));
+      costumes.push(game.player.currentCostume.name);
+    }
+    expect(costumes.slice(0, 8)).toEqual(Array(8).fill("walk1"));
+    expect(costumes.slice(9, 17)).toEqual(Array(8).fill("walk2"));
+    expect(costumes.at(-1)).toBe("walk1");
   });
 
   test("walking swaps between both walking costumes", () => {
@@ -214,7 +270,9 @@ describe("the virus", () => {
     expect([game.virus.x, game.virus.y]).toEqual([VIRUS_SPAWN.x, VIRUS_SPAWN.y]);
     expect(types(game.events)).toEqual(["hit"]);
     expect(game.phase).toBe("playing");
-    run(game, 0.3, {});
+    run(game, 0.3 - 2 * DT);
+    expect(game.player.currentCostume.name).toBe("hit");
+    run(game, 2 * DT);
     expect(game.player.currentCostume.name).toBe("normal");
   });
 
@@ -268,6 +326,22 @@ describe("the penguin", () => {
   });
 });
 
+describe("the penguin's spot", () => {
+  test("is picked between x -120 and 295, and turned around at the right edge, like 2013", () => {
+    for (const [share, x, direction] of [
+      [0, -120, 90],
+      [0.99999, null, -90],
+    ] as const) {
+      const game = new Game(() => share);
+      game.start();
+      parkVirus(game);
+      run(game, 10);
+      if (x !== null) expect(game.pickup.x).toBe(x);
+      expect(game.pickup.direction).toBe(direction);
+    }
+  });
+});
+
 describe("game over", () => {
   function lost(): Game {
     const game = started();
@@ -290,8 +364,31 @@ describe("game over", () => {
     ]);
     expect(game.layers.map((s) => s.name)).toEqual(["gameOver", "virus", "monitor", "player", "pickup", "hl3"]);
     expect(game.gameOver.visible).toBe(true);
-    expect([game.player.x, game.player.y, game.player.direction]).toEqual([208, -115, -90]);
+    expect([game.player.visible, game.player.x, game.player.y, game.player.direction]).toEqual([true, 208, -115, -90]);
     expect([game.pickup.visible, game.pickup.x, game.pickup.y]).toEqual([true, -124, -115]);
+    expect(game.hl3.visible).toBe(false);
+  });
+
+  test("the penguin faces right on the game over screen, wherever it was", () => {
+    const game = new Game(() => 0.99999);
+    game.start();
+    parkVirus(game);
+    run(game, 10);
+    expect(game.pickup.direction).toBe(-90);
+    game.health = 0;
+    game.update(noInput);
+    expect(game.pickup.direction).toBe(90);
+  });
+
+  test("the Half-Life 3 logo starts hidden on every game over", () => {
+    const game = lost();
+    run(game, 10.5);
+    expect(game.hl3.visible).toBe(true);
+    game.start();
+    parkVirus(game);
+    game.health = 0;
+    game.update(noInput);
+    expect(game.hl3.visible).toBe(false);
   });
 
   test("time stops on the game over screen", () => {
@@ -307,6 +404,35 @@ describe("game over", () => {
     expect(game.events).toEqual([]);
     run(game, DT);
     expect(game.events).toEqual([{ type: "sound", sound: "glados" }]);
+    game.events.length = 0;
+    run(game, 6 + 8506221 / 48000 - 2 * DT);
+    expect(game.events).toEqual([]);
+    run(game, 2 * DT);
+    expect(game.events).toEqual([{ type: "sound", sound: "glados" }]);
+  });
+
+  test("the Half-Life 3 logo turns 30 degrees and moves each time it shows up", () => {
+    const spots = (share: number) => {
+      const game = new Game(() => share);
+      game.start();
+      game.virus.visible = false;
+      game.health = 0;
+      game.update(noInput);
+      const seen: number[][] = [];
+      for (let i = 0; i < Math.round(16 / DT); i++) {
+        game.update(noInput);
+        const last = seen.at(-1);
+        const now = [game.hl3.x, game.hl3.y, game.hl3.direction];
+        if (game.hl3.visible && (!last || last.join() !== now.join())) seen.push(now);
+      }
+      return seen;
+    };
+    expect(spots(0.5)).toEqual([
+      [0, 0, -45],
+      [0, 0, -15],
+    ]);
+    expect(spots(0)[0]).toEqual([-200, -150, -45]);
+    expect(spots(0.99999)[0]).toEqual([200, 150, -135]);
   });
 
   test("the Half-Life 3 logo shows up after 10 s, and clicking it meows", () => {
@@ -325,10 +451,19 @@ describe("game over", () => {
     expect(game.hl3.visible).toBe(true);
   });
 
-  test("clicks elsewhere, or outside game over, do nothing", () => {
-    const game = started();
-    game.click(0, 0);
+  test("clicks elsewhere, on a hidden logo, or outside game over, do nothing", () => {
+    const game = lost();
+    run(game, 10.5);
+    game.events.length = 0;
+    game.click(game.hl3.x + 100, game.hl3.y + 100);
+    expect(game.hl3.visible).toBe(true);
+    run(game, 2);
+    game.click(game.hl3.x, game.hl3.y);
     expect(game.events).toEqual([]);
+    const playing = started();
+    playing.hl3.visible = true;
+    playing.click(playing.hl3.x, playing.hl3.y);
+    expect(playing.events).toEqual([]);
   });
 
   test("the Half-Life 3 logo keeps the 2013 timing", () => {
@@ -361,6 +496,14 @@ describe("controls", () => {
       null,
       null,
     ]);
+  });
+
+  test("nothing is held at first, and only jumps count as jump presses", () => {
+    const controls = new Controls();
+    expect(controls.read()).toEqual(noInput);
+    controls.press("key:KeyD", "right");
+    controls.press("key:KeyS", "down");
+    expect(controls.read()).toEqual({ ...noInput, right: true, down: true });
   });
 
   test("a quick tap between updates still jumps once", () => {
@@ -412,7 +555,7 @@ describe("screen", () => {
     const fader = new Fader();
     let changed = 0;
     fader.to(() => changed++);
-    fader.to(() => changed++);
+    fader.to(() => (changed += 10));
     expect(fader.busy).toBe(true);
     fader.update(0.1);
     expect([changed, fader.value]).toEqual([0, 0.5]);
