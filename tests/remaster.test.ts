@@ -1239,6 +1239,19 @@ describe("near misses", () => {
     expect(game.health).toBe(1);
   });
 
+  test("each flight counts on its own, after a near miss or a hit", () => {
+    const close = started();
+    flyOver(close, NEAR_MISS / 2);
+    flyOver(close, NEAR_MISS + 30);
+    expect(types(close.events)).not.toContain("nearMiss");
+    const hit = started();
+    hit.health = 3;
+    flyOver(hit, -20);
+    hit.invincible = 0;
+    flyOver(hit, NEAR_MISS + 30);
+    expect(types(hit.events)).not.toContain("nearMiss");
+  });
+
   test("right at the near miss distance still counts, a little further doesn't", () => {
     const close = started();
     flyOver(close, NEAR_MISS - 0.5);
@@ -1312,6 +1325,7 @@ describe("the replay", () => {
     parkVirus(game);
     run(game, 0.5);
     expect(game.replay).toHaveLength(30);
+    expect([game.replay.at(-1)!.shield, game.replay.at(-1)!.jetpack]).toEqual([false, false]);
     game.powers.shield = 5;
     run(game, 3);
     expect(game.replay).toHaveLength(REPLAY_SECONDS * 60);
@@ -1319,6 +1333,12 @@ describe("the replay", () => {
     expect(last.sprites[last.player]!.costume.name).toBe(game.player.currentCostume.name);
     expect(last.sprites[last.player]!.x).toBe(game.player.x);
     expect([last.shield, last.jetpack, last.flying]).toEqual([true, false, false]);
+    // Only what's on stage: the hidden penguin, power-up and virus aren't in it.
+    expect(last.sprites.map((s) => s.costume.name)).toEqual([game.player.currentCostume.name, "monitor"]);
+    game.powers.jetpack = 5;
+    run(game, 0.5, { jump: true });
+    const flying = game.replay.at(-1)!;
+    expect([flying.jetpack, flying.flying]).toEqual([true, true]);
     game.start();
     expect(game.replay).toEqual([]);
   });
