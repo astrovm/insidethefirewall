@@ -106,7 +106,6 @@ export class RemasterRenderer {
       if (ctx.globalAlpha > 0) this.drawSprite(sprite, x, y);
       ctx.globalAlpha = 1;
     }
-    this.drawParticles(effects);
     ctx.restore();
     this.view = steady;
     if (game.phase === "playing") this.drawHud(game);
@@ -187,19 +186,6 @@ export class RemasterRenderer {
       ctx.fillRect(Math.round(x - dot / 2), Math.round(y - dot / 2), dot, dot);
     }
     ctx.restore();
-  }
-
-  private drawParticles(effects: Effects): void {
-    const ctx = this.ctx;
-    const s = this.view.scale;
-    for (const p of effects.particles) {
-      const [x, y] = toCanvas(this.view, p.x, p.y);
-      const size = Math.max(1, Math.round(p.size * s));
-      ctx.globalAlpha = Math.min(1, (p.life / p.lifetime) * 2);
-      ctx.fillStyle = p.color;
-      ctx.fillRect(Math.round(x - size / 2), Math.round(y - size / 2), size, size);
-    }
-    ctx.globalAlpha = 1;
   }
 
   private drawBackdrop(color: string): void {
