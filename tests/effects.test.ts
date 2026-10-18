@@ -14,6 +14,12 @@ test("the last hit is bigger", () => {
   expect([effects.shakeTime, effects.shakeStrength, effects.flash]).toEqual([0.3, 4, 0.6]);
 });
 
+test("a blocked hit only shakes a little, with no flash", () => {
+  const effects = new Effects(seeded(1));
+  effects.handle({ type: "shield", x: 0, y: 0 });
+  expect([effects.shakeTime, effects.shakeStrength, effects.flash]).toEqual([0.1, 2, 0]);
+});
+
 test("only hits shake or flash", () => {
   const effects = new Effects(seeded(5));
   for (const type of ["pickup", "land", "jump", "launch"] as const) effects.handle({ type, x: 0, y: 0 });

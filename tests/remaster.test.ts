@@ -791,6 +791,41 @@ describe("power-ups", () => {
     expect(Math.max(...gaps)).toBeLessThanOrEqual(45 + 1e-6);
   });
 
+  test("one that would show up on the player moves 160 px away, staying on stage", () => {
+    // Random numbers for: the next wait, the kind, x, then y.
+    const place = (playerX: number, x: number) => {
+      const game = started();
+      parkVirus(game);
+      game.player.setXY(playerX, GROUND_Y);
+      const queue = [0, 0, (x + 200 + 0.5) / 401, 0];
+      (game as unknown as { random: () => number }).random = () => queue.shift() ?? 0;
+      (game as unknown as { powerUpTimer: number }).powerUpTimer = DT;
+      game.update(noInput);
+      expect(game.powerUp.visible).toBe(true);
+      return game.powerUp.x;
+    };
+    expect(place(0, 150)).toBe(150);
+    expect(place(100, 60)).toBe(-100);
+    expect(place(-100, -60)).toBe(100);
+    expect(place(0, 50)).toBe(-110);
+    expect(place(0, -50)).toBe(110);
+    expect(place(0, -80)).toBe(-80);
+  });
+
+  test("the wait for the next one is spread over 30 to 45 s", () => {
+    const waits = [0, 0.5, 0.99].map((share) => {
+      const game = started();
+      parkVirus(game);
+      (game as unknown as { random: () => number }).random = () => share;
+      (game as unknown as { powerUpTimer: number }).powerUpTimer = DT;
+      game.update(noInput);
+      return (game as unknown as { powerUpTimer: number }).powerUpTimer;
+    });
+    expect(waits[0]).toBeCloseTo(30, 6);
+    expect(waits[1]).toBeCloseTo(37.5, 6);
+    expect(waits[2]).toBeCloseTo(44.85, 6);
+  });
+
   test("goes away after 5 s if nobody grabs it", () => {
     const game = withPowerUp("shield");
     parkVirus(game);
@@ -825,10 +860,31 @@ describe("power-ups", () => {
     expect(game.vy).toBe(FLY_SPEED);
     run(game, 1.5, { jump: true });
     expect(game.player.y).toBe(CEILING_Y);
+    expect(game.vy).toBe(0);
     // No gravity: it stays put.
     run(game, 1);
     expect(game.player.y).toBe(CEILING_Y);
     expect([game.vy, game.flying]).toEqual([0, true]);
+  });
+
+  test("letting go in mid-air hovers at that height", () => {
+    const game = withPowerUp("jetpack");
+    parkVirus(game);
+    grab(game);
+    run(game, 0.3, { jump: true, jumpPressed: true });
+    run(game, 0.2);
+    const y = game.player.y;
+    expect(y).toBeLessThan(CEILING_Y);
+    run(game, 1);
+    expect(game.player.y).toBe(y);
+  });
+
+  test("standing still with a jetpack stays on the floor", () => {
+    const game = withPowerUp("jetpack");
+    parkVirus(game);
+    grab(game);
+    run(game, 0.5);
+    expect([game.player.y, game.onGround, game.flying]).toEqual([GROUND_Y, true, false]);
   });
 
   test("with a jetpack, down sinks to the floor and lands", () => {
