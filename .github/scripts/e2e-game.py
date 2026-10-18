@@ -157,6 +157,8 @@ try:
         page.wait_for_function("() => insideTheFirewall.game.phase === 'over'", timeout=30000)
         assert state(page)["health"] == 0 and visible(page, "#repair")
         assert page.locator("#status").text_content().startswith("Game over")
+        assert page.locator("#over-rank").text_content() == "Script kiddie"
+        assert visible(page, "#new-best"), "The first game should be a new best"
         print("Started the game and got hit")
 
         # R repairs the computer and starts over.
@@ -182,7 +184,8 @@ try:
         page.wait_for_function("() => insideTheFirewall.game.phase === 'title'", timeout=5000)
         page.wait_for_timeout(400)
         assert visible(page, "#play")
-        print("Menu goes back to the title")
+        assert page.locator("#title-best").text_content().startswith("Best "), "Best time missing on the title"
+        print("Menu goes back to the title, which shows the best time")
 
         assert not errors, "\n".join(errors)
         browser.close()

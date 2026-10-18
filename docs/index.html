@@ -221,7 +221,28 @@
     #over-menu .stat {
       left: calc(12 * var(--s));
       top: calc(8 * var(--s));
+      font-size: calc(16 * var(--s));
+      line-height: 1.25;
+    }
+    #over-menu .stat p {
+      margin: 0;
+    }
+    #over-menu .stat p:first-child {
       font-size: calc(20 * var(--s));
+    }
+    #new-best {
+      font-weight: 500;
+      color: #fff;
+      background: #ff0000;
+      border-radius: calc(4 * var(--s));
+      padding: 0 calc(5 * var(--s));
+      font-size: calc(13 * var(--s));
+      vertical-align: middle;
+    }
+    #title-best {
+      right: calc(24 * var(--s));
+      top: calc(250 * var(--s));
+      font-size: calc(16 * var(--s));
     }
     #over-menu .pill {
       right: calc(12 * var(--s));
@@ -276,6 +297,7 @@
       <section id="title-menu" hidden>
         <button id="play" type="button" aria-label="Play"><img class="normal" src="assets/costumes/play.svg" alt=""><img class="hover" src="assets/costumes/play-hover.svg" alt=""></button>
         <button id="open-classic" class="pill dark" type="button">Play the 2013 original</button>
+        <p id="title-best" class="stat" hidden></p>
       </section>
       <section id="pause-menu" hidden>
         <h2>Paused</h2>
@@ -285,7 +307,11 @@
         <button class="pill" type="button" data-action="menu">Menu</button>
       </section>
       <section id="over-menu" hidden>
-        <p class="stat">Time <span id="over-time">0</span></p>
+        <div class="stat">
+          <p>Time <span id="over-time">0</span> <strong id="new-best" hidden>New best!</strong></p>
+          <p>Best <span id="over-best">0</span></p>
+          <p>Rank <span id="over-rank"></span></p>
+        </div>
         <button class="pill dark" type="button" data-action="menu">Menu</button>
         <button id="repair" type="button" data-action="restart">Repair (R)</button>
       </section>

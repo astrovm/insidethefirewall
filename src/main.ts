@@ -6,7 +6,8 @@ import { Controls, moveForKey } from "./input.ts";
 import type { CostumeImages } from "./render.ts";
 import { Effects } from "./remaster/effects.ts";
 import { Fader } from "./remaster/fader.ts";
-import { DT, Game, type GameEvent } from "./remaster/game.ts";
+import { DT, Game, threatCostumes, type GameEvent } from "./remaster/game.ts";
+import { Best, rankFor } from "./remaster/progress.ts";
 import { formatTime, RemasterRenderer, toStage } from "./remaster/render.ts";
 
 const MAX_UPDATES_PER_FRAME = 8;
@@ -27,7 +28,11 @@ async function loadFont(): Promise<void> {
 
 async function main(): Promise<void> {
   const project = createClassic();
-  const allCostumes = [project.stage, ...project.sprites.flatMap(({ sprite }) => sprite.costumes)];
+  const allCostumes = [
+    project.stage,
+    ...project.sprites.flatMap(({ sprite }) => sprite.costumes),
+    ...Object.values(threatCostumes).flat(),
+  ];
   const soundFiles = Object.keys(sounds).map((name) => `sounds/${name}.${name === "laser" || name === "meow" ? "wav" : "mp3"}`);
   const [files] = await Promise.all([
     fetchAll([...allCostumes.map((c) => `costumes/${c.file}`), ...soundFiles], (fraction) => {
@@ -60,6 +65,12 @@ async function main(): Promise<void> {
   const status = $("status");
   const menus = { title: $("title-menu"), pause: $("pause-menu"), over: $("over-menu") };
   const pauseButton = $<HTMLButtonElement>("pause-game");
+  const best = new Best(storage());
+  const showBest = () => {
+    $("title-best").hidden = best.value === 0;
+    $("title-best").textContent = `Best ${formatTime(best.value)} · ${rankFor(best.value)}`;
+  };
+  showBest();
   const corner = $("corner");
   let paused = false;
 
@@ -170,13 +181,20 @@ async function main(): Promise<void> {
       case "music":
         audio.setMusic(event.playing ? "music" : null);
         break;
-      case "lost":
+      case "lost": {
         effects.clear();
         fader.fadeIn();
-        status.textContent = `Game over. You lasted ${formatTime(event.time)} seconds.`;
+        const isBest = best.record(event.time);
+        const rank = rankFor(event.time);
+        status.textContent = `Game over. You lasted ${formatTime(event.time)} seconds. Rank: ${rank}.${isBest ? " New best!" : ""}`;
         $("over-time").textContent = formatTime(event.time);
+        $("over-best").textContent = formatTime(best.value);
+        $("over-rank").textContent = rank;
+        $("new-best").hidden = !isBest;
+        showBest();
         showMenus();
         break;
+      }
     }
   };
 
@@ -310,6 +328,15 @@ async function main(): Promise<void> {
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);
+}
+
+/** localStorage, or nothing when the browser blocks it. */
+function storage(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
 }
 
 function toggleFullscreen(): void {

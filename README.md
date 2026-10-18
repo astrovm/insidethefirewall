@@ -14,7 +14,7 @@ There are two versions of the game in the page:
 
 Both use the original art and sounds.
 
-- `src/remaster/`: the remaster's rules, drawing and fades.
+- `src/remaster/`: the remaster's rules, stages, drawing and effects. The new threats' pixel art is in `src/remaster/art.ts`. Run `bun tools/pixel-art.ts` after changing it.
 - `src/engine/`: a small Scratch-like runtime (sprites, threads, timing) for Classic mode.
 - `src/game/classic.ts`: the 2013 game's scripts.
 - `src/`: loading, sound, controls and the page.

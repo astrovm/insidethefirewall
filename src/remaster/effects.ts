@@ -10,6 +10,7 @@ const palette = {
   penguin: ["#ff9900", "#ffffff", "#000000"],
   dust: ["#b51000", "#7a0b00", "#000008"],
   spark: ["#ff0000", "#ff9900"],
+  window: ["#c0c0c0", "#0044cc", "#ffffff", "#000008"],
 };
 
 export interface Particle {
@@ -57,6 +58,10 @@ export class Effects {
         break;
       case "jump":
         this.burst(event.x, event.y - 40, palette.dust, 4, 70, 900, Math.PI / 2);
+        break;
+      case "shatter":
+        this.burst(event.x, event.y, palette.window, 26, 240, 900);
+        this.shake(0.12, 3);
         break;
       case "launch":
         this.burst(event.x, event.y, palette.spark, 8, 140);
