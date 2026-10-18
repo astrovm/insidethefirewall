@@ -162,16 +162,20 @@ export class RemasterRenderer {
       // Power-ups bob up and down, so they read as things to grab.
       if (sprite === game.powerUp) y += Math.sin(game.time * 5) * 3;
       const grown = sprite.size / sprite.initial.size;
-      if (playing && sprite === game.player && game.powers.jetpack > 0) {
-        this.drawJetpack(x, y, sprite.flipX, game.powers.jetpack < 1 ? blink(game.powers.jetpack) : 1, game.flying, game.time, grown);
-      }
-      ctx.globalAlpha = playing ? this.alphaOf(game, sprite) : 1;
-      if (playing && sprite === game.virus && game.powers.freeze > 0) ctx.filter = "hue-rotate(160deg) saturate(1.5)";
-      if (ctx.globalAlpha > 0) this.drawSprite(sprite, x, y);
-      ctx.filter = "none";
-      ctx.globalAlpha = 1;
-      if (playing && sprite === game.player && game.powers.shield > 0) {
-        this.drawShield(x, y, 0.7 * (game.powers.shield < 1.5 ? blink(game.powers.shield) : 1), grown);
+      // Wrapping around the sides, the player shows on both at once.
+      const copies = playing && sprite === game.player ? wrapCopies(x) : [x];
+      for (const x of copies) {
+        if (playing && sprite === game.player && game.powers.jetpack > 0) {
+          this.drawJetpack(x, y, sprite.flipX, game.powers.jetpack < 1 ? blink(game.powers.jetpack) : 1, game.flying, game.time, grown);
+        }
+        ctx.globalAlpha = playing ? this.alphaOf(game, sprite) : 1;
+        if (playing && sprite === game.virus && game.powers.freeze > 0) ctx.filter = "hue-rotate(160deg) saturate(1.5)";
+        if (ctx.globalAlpha > 0) this.drawSprite(sprite, x, y);
+        ctx.filter = "none";
+        ctx.globalAlpha = 1;
+        if (playing && sprite === game.player && game.powers.shield > 0) {
+          this.drawShield(x, y, 0.7 * (game.powers.shield < 1.5 ? blink(game.powers.shield) : 1), grown);
+        }
       }
       if (playing && sprite === game.monitor && game.inside.length > 0) {
         this.drawScreenRoom(game.inside, game.monitor.currentCostume, SCREEN_DEPTH);
@@ -438,6 +442,16 @@ export class RemasterRenderer {
       this.drawCostume(costume, -240 + 12 + i * 44 + 18, 180 - 78, 0, 2.5, 2.5);
     });
   }
+}
+
+/** How far from its middle the player, with a jetpack and a shield, can reach. */
+const PLAYER_REACH = 60;
+
+/** Where to draw the player: once, or twice while it's partly off a side and wraps around to the other. */
+export function wrapCopies(x: number): number[] {
+  if (x > STAGE_WIDTH / 2 - PLAYER_REACH) return [x, x - STAGE_WIDTH];
+  if (x < PLAYER_REACH - STAGE_WIDTH / 2) return [x, x + STAGE_WIDTH];
+  return [x];
 }
 
 /** Full and half see-through in turn, as a warning that something is about to end. */

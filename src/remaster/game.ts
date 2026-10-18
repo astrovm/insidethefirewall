@@ -90,6 +90,8 @@ const POWER_UP_AWAY = 80;
 /** With a jetpack there's no gravity: up and down fly at this speed, reached in 0.1 s, and letting go hovers. */
 export const FLY_SPEED = 300;
 const FLY_ACCELERATION = FLY_SPEED * 10;
+/** With a jetpack the sides of the stage wrap around: off one side, back on the other. */
+const STAGE_HALF_WIDTH = 240;
 /** The jetpack can't fly the player off the top of the stage, except to escape. */
 export const CEILING_Y = 180 - 58;
 /**
@@ -457,9 +459,14 @@ export class Game {
       this.onGround = true;
       this.events.push({ type: "land", x, y });
     }
-    player.setXY(x, y);
-    // The edge of the stage stops the player.
-    if (player.x !== x) this.vx = 0;
+    if (jetpack) {
+      player.x = wrapAround(x);
+      player.y = y;
+    } else {
+      player.setXY(x, y);
+      // The edge of the stage stops the player.
+      if (player.x !== x) this.vx = 0;
+    }
 
     this.walkTime = sideways ? this.walkTime + DT : 0;
     this.hitTime += DT;
@@ -729,6 +736,12 @@ export class Game {
 
 function shot(s: Sprite): SpriteShot {
   return { costume: s.currentCostume, x: s.x, y: s.y, rotation: s.rotation, flipX: s.flipX, size: s.size };
+}
+
+/** Off one side of the stage and back on the other. */
+export function wrapAround(x: number): number {
+  const width = 2 * STAGE_HALF_WIDTH;
+  return ((((x + STAGE_HALF_WIDTH) % width) + width) % width) - STAGE_HALF_WIDTH;
 }
 
 /** Where a point of the room on the monitor's screen is in the real room. */

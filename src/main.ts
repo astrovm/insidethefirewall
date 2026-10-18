@@ -1,5 +1,5 @@
 import { buildMask, fetchAll, loadImage } from "./assets.ts";
-import { Audio } from "./audio.ts";
+import { Audio, shuffled } from "./audio.ts";
 import { costumes, createClassic, sounds } from "./game/classic.ts";
 import { bindKey, canBind, Controls, defaultKeys, keyLabel, MOVES, moveForKey, type Move } from "./input.ts";
 import type { Costume } from "./engine/sprite.ts";
@@ -23,7 +23,7 @@ import { formatTime, RemasterRenderer, toStage } from "./remaster/render.ts";
 import { gameSpeed, loadSettings, saveSettings, showTouch, type TouchControls } from "./remaster/settings.ts";
 
 const MAX_UPDATES_PER_FRAME = 8;
-/** The 2013 song, then nightcore songs in the same spirit. Each game starts with the next one. */
+/** The 2013 song and nightcore songs in the same spirit, in a random order each game. */
 const SONGS = ["music", "how-do-you-do", "bad-boy", "monster"];
 
 /** What the screen reader says when the player grabs a power-up. */
@@ -91,7 +91,8 @@ async function main(): Promise<void> {
     }),
   ]);
 
-  let nextSong = 0;
+  /** The song the last run started with. */
+  let firstSong: string | null = null;
 
   const game = new Game();
   const controls = new Controls();
@@ -339,8 +340,12 @@ async function main(): Promise<void> {
         status.textContent = "The shield blocked a hit";
         break;
       case "music":
-        audio.setMusic(event.playing ? SONGS : null, nextSong);
-        if (event.playing) nextSong = (nextSong + 1) % SONGS.length;
+        if (event.playing) {
+          // Each run plays the songs in a new random order.
+          const playlist = shuffled(SONGS, firstSong);
+          firstSong = playlist[0]!;
+          audio.setMusic(playlist);
+        } else audio.setMusic(null);
         break;
       case "lost": {
         effects.clear();

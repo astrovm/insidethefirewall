@@ -89,6 +89,11 @@ export class Audio {
     if (this.songs.length > 0) this.song = this.startSong((first % this.songs.length + this.songs.length) % this.songs.length, false);
   }
 
+  /** The songs in the order they play. */
+  get playlist(): readonly string[] {
+    return this.songs;
+  }
+
   /** The song playing, if any. */
   get songName(): string | null {
     return this.song ? this.songs[this.song.index]! : null;
@@ -225,4 +230,15 @@ export function audibleRange(samples: Float32Array, sampleRate: number): { start
   while (last > first && Math.abs(samples[last]!) < SILENCE) last--;
   if (first >= samples.length) return { start: 0, end: samples.length / sampleRate };
   return { start: first / sampleRate, end: (last + 1) / sampleRate };
+}
+
+/** The songs in a random order. It never starts with `notFirst`, so two runs in a row start differently. */
+export function shuffled(songs: readonly string[], notFirst: string | null, random = Math.random): string[] {
+  const order = [...songs];
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [order[i], order[j]] = [order[j]!, order[i]!];
+  }
+  if (order.length > 1 && order[0] === notFirst) [order[0], order[1]] = [order[1]!, order[0]!];
+  return order;
 }
