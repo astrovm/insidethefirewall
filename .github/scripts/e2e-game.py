@@ -114,14 +114,14 @@ try:
         assert touches == SCRATCH_PICKUP_TOUCHES, touches
         print("Collision masks match Scratch")
 
-        # The title screen sits inside the room like the 2013 one. Only the credit changed, and the Daily button is new.
+        # The title screen sits inside the room like the 2013 one. Only the credit changed.
         page.wait_for_timeout(500)
         view = page.evaluate("""() => {
           const { x, y, scale } = insideTheFirewall.view;
           const ratio = devicePixelRatio;
           return { x: x / ratio, y: y / ratio, width: 480 * scale / ratio, height: 360 * scale / ratio };
         }""")
-        title = page.screenshot(clip=view, style="#corner, #daily { visibility: hidden }")
+        title = page.screenshot(clip=view, style="#corner { visibility: hidden }")
         # The credit starts at row 320. Text edges are smoothed a little differently than in Scratch.
         difference = page.evaluate(DIFF_SCRIPT, [as_data_url(title), as_data_url(classic_title), 320])
         assert difference < 0.03, f"Title screen differs from the original in {difference:.1%} of pixels"
@@ -316,7 +316,7 @@ try:
         pad.close()
         print("Gamepads start, move, jump and pause")
 
-        # The daily run: cues, faster music, the run summary, the replay, sharing and instant retry.
+        # Cues, faster music, the run summary, the replay, sharing and instant retry.
         context.grant_permissions(["clipboard-read", "clipboard-write"], origin=base)
         day = context.new_page()
         watch_errors(day, errors)
@@ -329,12 +329,8 @@ try:
           audio.synth = (name) => { synths.push(name); synth(name); };
           delete Navigator.prototype.share;
         }""")
-        assert day.locator("#daily").text_content().startswith("Daily #")
-        day.click("#daily")
+        day.click("#play")
         day.wait_for_function("() => insideTheFirewall.game.phase === 'playing'", timeout=5000)
-        number = day.evaluate("insideTheFirewall.daily")
-        assert day.locator("#daily").text_content() == f"Daily #{number}"
-        first_x = day.evaluate("insideTheFirewall.game.player.x")
         day.evaluate("() => { insideTheFirewall.game.invincible = Infinity; insideTheFirewall.game.pickupTimer = 0.05 }")
         day.wait_for_function("() => synths.includes('appear')", timeout=2000)
         day.evaluate("() => { insideTheFirewall.game.powers.freeze = 1.05 }")
@@ -343,9 +339,13 @@ try:
         day.wait_for_function("() => synths.includes('whoosh')", timeout=2000)
         print("Cues sound when things show up, end, and fly close")
 
+        # The song loops before its fade out, and speeds up on long runs.
+        loop = day.evaluate("[insideTheFirewall.audio.music.loopStart, insideTheFirewall.audio.music.loopEnd]")
+        assert abs(loop[0] - 98.2286) < 1e-3 and loop[1] == 186, loop
+        assert day.evaluate("insideTheFirewall.audio.music.playbackRate.value") == 1
         day.evaluate("() => { insideTheFirewall.game.time = 300 }")
-        day.wait_for_function("() => Math.abs(insideTheFirewall.audio.music.playbackRate.value - 1.3) < 1e-6", timeout=2000)
-        print("The music speeds up with the virus")
+        day.wait_for_function("() => Math.abs(insideTheFirewall.audio.music.playbackRate.value - 2 ** (4 / 12)) < 1e-3", timeout=5000)
+        print("The music loops before its fade out and speeds up on long runs")
 
         day.evaluate("""() => {
           const g = insideTheFirewall.game;
@@ -360,7 +360,6 @@ try:
         day.keyboard.press("Space")
         day.wait_for_timeout(100)
         assert state(day)["phase"] == "over", "Jump skipped the game over screen right away"
-        assert day.locator("#over-daily").text_content() == f"Daily #{number}"
         assert day.locator('#over-grabs img[alt="Shields"]').is_visible()
         assert day.locator("#over-grabs").text_content() == "1"
         day.wait_for_timeout(500)
@@ -383,15 +382,13 @@ try:
         day.click("#share")
         day.wait_for_function("() => document.querySelector('#share').textContent === 'Copied'", timeout=2000)
         shared = day.evaluate("navigator.clipboard.readText()")
-        assert shared.startswith(f"Inside the firewall daily #{number} · ") and "🛡️" in shared, shared
+        assert shared.startswith("Inside the firewall · ") and "🛡️" in shared, shared
         print("Share copies the result")
 
         # Focus is still on Share, so Space would share again. Up jumps.
         day.keyboard.press("ArrowUp")
         day.wait_for_function("() => insideTheFirewall.game.phase === 'playing'", timeout=5000)
-        assert day.evaluate("insideTheFirewall.daily") == number
-        assert day.evaluate("insideTheFirewall.game.player.x") == first_x, "The daily run started differently"
-        print("Jump starts the same daily run again")
+        print("Jump starts again")
 
         # Settings: a slower game speed, and a new jump key.
         day.click("#pause-game")

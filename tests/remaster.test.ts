@@ -29,7 +29,7 @@ import {
   WARNING_LONGEST,
   WARNING_SHORTEST,
   MAX_HEALTH,
-  MUSIC_FASTEST,
+  MUSIC_SPEEDUP_FROM,
   NEAR_MISS,
   PENGUIN_SHIELD,
   REPLAY_SECONDS,
@@ -1181,16 +1181,16 @@ describe("hearts", () => {
 });
 
 describe("music", () => {
-  test("speeds up with the virus, up to its fastest, and starts over each game", () => {
+  test("speeds up a semitone a minute from 2:00, four times at most, and starts over each game", () => {
     const game = started();
     parkVirus(game);
-    expect(game.musicRate).toBe(1);
-    game.speed = (VIRUS_START_SPEED + VIRUS_FAST) / 2;
-    expect(game.musicRate).toBeCloseTo((1 + MUSIC_FASTEST) / 2, 6);
-    game.speed = VIRUS_FAST;
-    expect(game.musicRate).toBeCloseTo(MUSIC_FASTEST, 6);
-    game.speed = VIRUS_FAST * 3;
-    expect(game.musicRate).toBeCloseTo(MUSIC_FASTEST, 6);
+    const rateAt = (time: number) => {
+      game.time = time;
+      return game.musicRate;
+    };
+    expect([0, 60, MUSIC_SPEEDUP_FROM - DT].map(rateAt)).toEqual([1, 1, 1]);
+    const semitones = (rate: number) => Math.round(12 * Math.log2(rate) * 1e6) / 1e6;
+    expect([120, 179.9, 180, 240, 300, 600, 6000].map((t) => semitones(rateAt(t)))).toEqual([1, 1, 2, 3, 4, 4, 4]);
     game.start();
     expect(game.musicRate).toBe(1);
   });
@@ -1377,25 +1377,3 @@ describe("the run summary", () => {
   });
 });
 
-describe("the same seed", () => {
-  test("gives everyone the same penguins and power-ups, however they play", () => {
-    const appearances = (input: Partial<Input>) => {
-      const game = new Game(seeded(9));
-      game.start();
-      parkVirus(game);
-      game.invincible = Infinity;
-      const seen: string[] = [];
-      for (let i = 0; i < 120 * 60; i++) {
-        game.update(hold(input));
-        for (const event of game.events.splice(0)) {
-          if (event.type === "appear") seen.push(event.thing === "penguin" ? `penguin ${game.pickup.x}` : event.thing);
-        }
-        game.health = 3;
-      }
-      return seen;
-    };
-    const still = appearances({});
-    expect(still.length).toBeGreaterThan(5);
-    expect(appearances({ right: true, jump: true, jumpPressed: true })).toEqual(still);
-  });
-});

@@ -3,30 +3,24 @@
 import { formatTime } from "./render.ts";
 
 const KEY = "insidethefirewall.best";
-export const DAILY_KEY = "insidethefirewall.daily";
 
 /**
  * The longest time survived, kept in the browser, with the game speed it was
- * played at. Works without storage too, it just forgets. A daily best only
- * counts for its own day.
+ * played at. Works without storage too, it just forgets.
  */
 export class Best {
   private seconds = 0;
   private playedAt = 1;
 
-  constructor(
-    private readonly storage: Pick<Storage, "getItem" | "setItem"> | null,
-    private readonly key = KEY,
-    private readonly day: number | null = null,
-  ) {
+  constructor(private readonly storage: Pick<Storage, "getItem" | "setItem"> | null) {
     try {
-      this.load(storage?.getItem(key) ?? null);
+      this.load(storage?.getItem(KEY) ?? null);
     } catch {
       // Storage can be blocked. Start from zero.
     }
   }
 
-  /** Saved as {"seconds", "speed", "day"}. Older versions saved only the seconds. */
+  /** Saved as {"seconds", "speed"}. Older versions saved only the seconds. */
   private load(saved: string | null): void {
     let data: unknown = null;
     try {
@@ -34,10 +28,10 @@ export class Best {
     } catch {
       return;
     }
-    if (typeof data === "number") data = { seconds: data, speed: 1, day: null };
+    if (typeof data === "number") data = { seconds: data, speed: 1 };
     if (!data || typeof data !== "object") return;
-    const { seconds, speed, day = null } = data as Record<string, unknown>;
-    if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds <= 0 || day !== this.day) return;
+    const { seconds, speed } = data as Record<string, unknown>;
+    if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds <= 0) return;
     this.seconds = Math.floor(seconds);
     this.playedAt = typeof speed === "number" && speed > 0 && speed < 1 ? speed : 1;
   }
@@ -64,7 +58,7 @@ export class Best {
     this.seconds = whole;
     this.playedAt = speed;
     try {
-      this.storage?.setItem(this.key, JSON.stringify({ seconds: whole, speed, day: this.day }));
+      this.storage?.setItem(KEY, JSON.stringify({ seconds: whole, speed }));
     } catch {
       // Keep it for this visit at least.
     }

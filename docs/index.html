@@ -306,13 +306,6 @@
       font-size: calc(13 * var(--s));
       vertical-align: middle;
     }
-    #daily {
-      left: calc(186.8 * var(--s));
-      top: calc(205 * var(--s));
-      width: calc(100 * var(--s));
-      height: calc(28 * var(--s));
-      font-size: calc(15 * var(--s));
-    }
     #title-best {
       right: calc(24 * var(--s));
       top: calc(250 * var(--s));
@@ -398,7 +391,6 @@
     <div id="ui">
       <section id="title-menu" hidden>
         <button id="play" type="button" aria-label="Play"><img class="normal" src="assets/costumes/play.svg" alt=""><img class="hover" src="assets/costumes/play-hover.svg" alt=""></button>
-        <button id="daily" class="pill" type="button">Daily</button>
         <p id="title-best" class="stat" hidden></p>
       </section>
       <section id="pause-menu" hidden>
@@ -438,7 +430,6 @@
         <div class="stat">
           <p>Time <span id="over-time">0</span> <strong id="new-best" hidden>New best!</strong></p>
           <p>Best <span id="over-best">0</span></p>
-          <p id="over-daily" hidden></p>
           <p id="over-grabs" class="grabs"></p>
         </div>
         <span id="replay-label">Replay</span>

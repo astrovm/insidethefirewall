@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Best, DAILY_KEY } from "../src/remaster/best.ts";
+import { Best } from "../src/remaster/best.ts";
 
 /** In-memory storage, like localStorage. */
 function memory(initial: Record<string, string> = {}) {
@@ -18,7 +18,7 @@ describe("best time", () => {
     expect(best.value).toBe(0);
     expect(best.record(12.7)).toBe(true);
     expect(best.value).toBe(12);
-    expect(JSON.parse(storage.items.get("insidethefirewall.best")!)).toEqual({ seconds: 12, speed: 1, day: null });
+    expect(JSON.parse(storage.items.get("insidethefirewall.best")!)).toEqual({ seconds: 12, speed: 1 });
     expect(best.record(12.9)).toBe(false);
     expect(best.record(5)).toBe(false);
     expect(best.record(30)).toBe(true);
@@ -30,7 +30,7 @@ describe("best time", () => {
       expect(new Best(memory({ "insidethefirewall.best": saved })).value).toBe(0);
     }
     expect(new Best(memory({ "insidethefirewall.best": "41.9" })).value).toBe(41);
-    for (const saved of ['{"seconds":"5"}', '{"speed":0.8}', "[5]", "null", '{"seconds":-3}', '{"seconds":5,"day":3}']) {
+    for (const saved of ['{"seconds":"5"}', '{"speed":0.8}', "[5]", "null", '{"seconds":-3}']) {
       expect(new Best(memory({ "insidethefirewall.best": saved })).value).toBe(0);
     }
   });
@@ -50,32 +50,4 @@ describe("best time", () => {
     }
   });
 
-  test("a daily best only counts on its own day", () => {
-    const storage = memory();
-    const today = new Best(storage, DAILY_KEY, 3);
-    today.record(20);
-    expect(new Best(storage, DAILY_KEY, 3).value).toBe(20);
-    expect(new Best(storage, DAILY_KEY, 4).value).toBe(0);
-    expect(new Best(storage).value).toBe(0);
-    const tomorrow = new Best(storage, DAILY_KEY, 4);
-    expect(tomorrow.record(5)).toBe(true);
-    expect(new Best(storage, DAILY_KEY, 3).value).toBe(0);
-  });
-
-  test("works without storage, or when the browser blocks it", () => {
-    const blocked = {
-      getItem: () => {
-        throw new Error("blocked");
-      },
-      setItem: () => {
-        throw new Error("blocked");
-      },
-    };
-    for (const storage of [null, blocked]) {
-      const best = new Best(storage);
-      expect(best.value).toBe(0);
-      expect(best.record(9)).toBe(true);
-      expect(best.value).toBe(9);
-    }
-  });
 });

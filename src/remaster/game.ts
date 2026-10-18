@@ -54,8 +54,13 @@ export const WARNING_SHORTEST = 0.3;
 export const AIM_LOCK = 0.15;
 /** A virus that flies by this close, in stage pixels, without a hit is a near miss. */
 export const NEAR_MISS = 8;
-/** The music speeds up with the virus, up to this fast. */
-export const MUSIC_FASTEST = 1.3;
+/**
+ * The music speeds up one semitone a minute from 2:00, four times at most, so
+ * it stays in tune and only long runs hear it.
+ */
+export const MUSIC_SPEEDUP_FROM = 120;
+const MUSIC_STEP_EVERY = 60;
+const MUSIC_STEPS = 4;
 /** The penguin, an extra life, comes after 20 s, then every 20 to 30 s. In 2013 it came every 10 s. */
 export const PICKUP_FIRST = 20;
 const PICKUP_EVERY = [20, 30] as const;
@@ -246,7 +251,7 @@ export class Game {
   private gladosTimer = new Timer(GLADOS_AFTER);
   private hl3Clicked = false;
 
-  constructor(public random: () => number = Math.random) {
+  constructor(readonly random: () => number = Math.random) {
     this.toTitle();
   }
 
@@ -447,12 +452,14 @@ export class Game {
 
   /** Seconds a virus shows where it's aiming. Shorter as it gets faster. */
   private aimWarning(): number {
-    return WARNING_LONGEST - (WARNING_LONGEST - WARNING_SHORTEST) * speedUp(this.speed);
+    const progress = Math.min(1, (this.speed - VIRUS_START_SPEED) / (VIRUS_FAST - VIRUS_START_SPEED));
+    return WARNING_LONGEST - (WARNING_LONGEST - WARNING_SHORTEST) * progress;
   }
 
-  /** How fast the music plays: faster with the virus. */
+  /** How fast the music plays: a semitone faster each minute from 2:00. */
   get musicRate(): number {
-    return 1 + (MUSIC_FASTEST - 1) * speedUp(this.speed);
+    const steps = Math.floor((this.time - MUSIC_SPEEDUP_FROM) / MUSIC_STEP_EVERY + 1e-9) + 1;
+    return 2 ** (Math.min(MUSIC_STEPS, Math.max(0, steps)) / 12);
   }
 
   private moveVirus(): void {
@@ -631,11 +638,6 @@ export class Game {
   private allSprites(): Sprite[] {
     return [this.player, this.virus, this.monitor, this.pickup, this.gameOver, this.hl3, this.powerUp];
   }
-}
-
-/** From 0 at the starting virus speed to 1 once it's fast. */
-function speedUp(speed: number): number {
-  return Math.min(1, (speed - VIRUS_START_SPEED) / (VIRUS_FAST - VIRUS_START_SPEED));
 }
 
 /** Stage pixels between two boxes, 0 when they overlap. */

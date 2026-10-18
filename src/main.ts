@@ -17,12 +17,15 @@ import {
   type Grab,
   type PowerUpKind,
 } from "./remaster/game.ts";
-import { Best, DAILY_KEY } from "./remaster/best.ts";
-import { dayNumber, seeded, shareText } from "./remaster/daily.ts";
+import { Best } from "./remaster/best.ts";
+import { shareText } from "./remaster/share.ts";
 import { formatTime, RemasterRenderer, toStage } from "./remaster/render.ts";
 import { gameSpeed, loadSettings, saveSettings, showTouch, type TouchControls } from "./remaster/settings.ts";
 
 const MAX_UPDATES_PER_FRAME = 8;
+/** Measured by comparing the song with itself: 4213027 samples at 48 kHz. */
+const MUSIC_LOOP_LENGTH = 4213027 / 48000;
+const MUSIC_LOOP_END = 186;
 
 /** What the screen reader says when the player grabs a power-up. */
 const powerUpMessages: Record<PowerUpKind, (seconds: number) => string> = {
@@ -86,6 +89,10 @@ async function main(): Promise<void> {
     }),
   ]);
 
+  // The 2013 song fades out at the end. The part from 98 s comes back at 186 s,
+  // so it loops there, before the fade, and keeps playing on beat.
+  audio.setLoop("music", MUSIC_LOOP_END - MUSIC_LOOP_LENGTH, MUSIC_LOOP_END);
+
   const game = new Game();
   const controls = new Controls();
   const fader = new Fader();
@@ -109,7 +116,6 @@ async function main(): Promise<void> {
   const showBest = () => {
     $("title-best").hidden = best.value === 0;
     $("title-best").textContent = `Best ${best.label}`;
-    $("daily").textContent = `Daily #${dayNumber(new Date())}`;
   };
   showBest();
   let paused = false;
@@ -117,8 +123,6 @@ async function main(): Promise<void> {
   let keysOpen = false;
   /** The move waiting for a key in the Keys panel. */
   let binding: Move | null = null;
-  /** Today's daily run number while playing it. */
-  let daily: number | null = null;
   /** The slowest game speed used this run, for the best time. */
   let runSpeed = 1;
   let lastTime = 0;
@@ -136,9 +140,6 @@ async function main(): Promise<void> {
     settings,
     get view() {
       return renderer.view;
-    },
-    get daily() {
-      return daily;
     },
   };
 
@@ -285,9 +286,6 @@ async function main(): Promise<void> {
     paused = false;
     audio.unlock();
     fader.to(() => {
-      // The daily run starts from the same seed for everyone, every try.
-      if (daily !== null) daily = dayNumber(new Date());
-      game.random = daily === null ? Math.random : seeded(daily);
       runSpeed = settings.speed;
       game.start();
       effects.clear();
@@ -296,9 +294,8 @@ async function main(): Promise<void> {
     });
     showMenus();
   };
-  const play = (dailyRun = false) => {
+  const play = () => {
     if (game.phase !== "title" || fader.busy || settingsOpen) return;
-    daily = dailyRun ? dayNumber(new Date()) : null;
     audio.unlock();
     audio.play("laser");
     startGame();
@@ -347,14 +344,11 @@ async function main(): Promise<void> {
         effects.clear();
         fader.fadeIn();
         lastTime = event.time;
-        const runBest = daily === null ? best : new Best(storage(), DAILY_KEY, daily);
-        const isBest = runBest.record(event.time, runSpeed);
+        const isBest = best.record(event.time, runSpeed);
         status.textContent = `Game over. You lasted ${formatTime(event.time)} seconds.${isBest ? " New best!" : ""}`;
         $("over-time").textContent = formatTime(event.time);
-        $("over-best").textContent = runBest.label;
+        $("over-best").textContent = best.label;
         $("new-best").hidden = !isBest;
-        $("over-daily").hidden = daily === null;
-        $("over-daily").textContent = `Daily #${daily}`;
         showGrabs(game.grabbed);
         $("share").textContent = "Share";
         showBest();
@@ -381,7 +375,7 @@ async function main(): Promise<void> {
 
   // Share the run: the phone's share sheet, or the clipboard.
   $("share").addEventListener("click", async () => {
-    const text = shareText(lastTime, game.grabbed, location.origin + location.pathname, daily);
+    const text = shareText(lastTime, game.grabbed, location.origin + location.pathname);
     try {
       if (navigator.share) {
         await navigator.share({ text });
@@ -398,8 +392,7 @@ async function main(): Promise<void> {
   });
 
   // Buttons.
-  $("play").addEventListener("click", () => play());
-  $("daily").addEventListener("click", () => play(true));
+  $("play").addEventListener("click", play);
   pauseButton.addEventListener("click", () => setPaused(true));
   for (const button of document.querySelectorAll<HTMLButtonElement>("#ui [data-action]")) {
     button.addEventListener("click", () => {
