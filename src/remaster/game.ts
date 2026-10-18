@@ -96,9 +96,9 @@ export const CEILING_Y = 180 - 58;
  * The room on the monitor's screen, in stage pixels: its top left corner and
  * how big it is. The screen is wider than the room, so it's centered.
  */
-export const SCREEN_ROOM = { left: -39.5, top: 157.5, scale: 1 / 6 } as const;
+export const SCREEN_ROOM = { left: -40, top: 158, scale: 1 / 6 } as const;
 /** The monitor's screen, in stage pixels. */
-export const SCREEN = { left: -50.5, top: 157.5, width: 102, height: 60 } as const;
+export const SCREEN = { left: -51, top: 158, width: 102, height: 60 } as const;
 /**
  * Holding up against the ceiling with a jetpack bursts the player out of the
  * monitor's screen into the real room: they grow from the screen to full size

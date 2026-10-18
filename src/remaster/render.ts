@@ -283,8 +283,9 @@ export class RemasterRenderer {
     this.clipScreen();
     const scale = outer.scale * SCREEN_ROOM.scale;
     const [x, y] = toCanvas(outer, SCREEN_ROOM.left, SCREEN_ROOM.top);
-    for (const side of [-1, 0, 1]) {
-      this.view = { x: x + side * STAGE_WIDTH * scale, y, scale };
+    // The sides overlap the middle by a pixel, so no seam shows between them.
+    for (const side of [-1, 1, 0]) {
+      this.view = { x: x + side * (STAGE_WIDTH * scale - 1), y, scale };
       this.drawStage();
     }
     this.view = { x, y, scale };

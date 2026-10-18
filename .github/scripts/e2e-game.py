@@ -202,7 +202,7 @@ try:
         on_screen = page.evaluate("""() => {
           const { x, y, scale } = insideTheFirewall.view;
           const ctx = document.querySelector('#game').getContext('2d');
-          return [207.17, 240.5, 273.83].map((left) => [...ctx.getImageData(Math.round(x + left * scale), Math.round(y + 52.5 * scale), 1, 1).data]);
+          return [206.67, 240, 273.33].map((left) => [...ctx.getImageData(Math.round(x + left * scale), Math.round(y + 52 * scale), 1, 1).data]);
         }""")
         green = [p for p in on_screen if p[1] > 150 and p[0] < 50]
         assert len(green) >= 2, f"No room on the monitor's screen: {on_screen}"
