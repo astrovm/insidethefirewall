@@ -265,8 +265,9 @@ describe("jumping", () => {
     const { top, air } = jump(game, Infinity);
     expect(top - GROUND_Y).toBeGreaterThan(JUMP_HEIGHT - 3);
     expect(top - GROUND_Y).toBeLessThanOrEqual(JUMP_HEIGHT);
+    // 0.2 s up, and a quicker fall.
     expect(air).toBeGreaterThan(0.3);
-    expect(air).toBeLessThan(0.45);
+    expect(air).toBeLessThan(0.4);
     expect(game.player.y).toBe(GROUND_Y);
   });
 
@@ -277,7 +278,7 @@ describe("jumping", () => {
       return jump(game, holdFor).top - GROUND_Y;
     });
     expect(heights[0]).toBeLessThan(30);
-    expect(heights[0]).toBeGreaterThan(15);
+    expect(heights[0]).toBeGreaterThan(23);
     for (let i = 1; i < heights.length; i++) expect(heights[i]!).toBeGreaterThan(heights[i - 1]!);
   });
 
@@ -367,6 +368,8 @@ describe("the virus", () => {
     run(game, DT);
     expect(game.events).toEqual([{ type: "launch", x: VIRUS_SPAWN.x, y: VIRUS_SPAWN.y }]);
     expect(game.warning).toBe(0);
+    const aim = 90 - (Math.atan2(GROUND_Y - VIRUS_SPAWN.y, 150 - VIRUS_SPAWN.x) * 180) / Math.PI;
+    expect(game.virus.direction).toBeCloseTo(aim, 6);
     const flown = Math.hypot(game.virus.x - VIRUS_SPAWN.x, game.virus.y - VIRUS_SPAWN.y);
     expect(flown).toBeCloseTo(VIRUS_START_SPEED * DT, 6);
     expect(game.virus.x).toBeGreaterThan(VIRUS_SPAWN.x);
@@ -415,6 +418,10 @@ describe("the virus", () => {
     expect(game.events).toEqual([{ type: "hit", x: game.player.x, y: game.player.y, last: false }]);
     expect(game.phase).toBe("playing");
     expect([game.invincible, game.frozen]).toEqual([INVINCIBLE, HIT_STOP]);
+  });
+
+  test("a hit freezes everything for 4 frames", () => {
+    expect(HIT_STOP).toBeCloseTo(4 / 60, 9);
   });
 
   test("a hit freezes everything for a moment", () => {

@@ -184,7 +184,6 @@ export class Game {
     this.vx = 0;
     this.vy = 0;
     this.onGround = true;
-    this.jumpCut = false;
     this.jumpBuffer = 0;
     this.walkTime = 0;
     this.hitTime = Infinity;
