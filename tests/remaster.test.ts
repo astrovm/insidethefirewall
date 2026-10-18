@@ -14,6 +14,7 @@ import {
   JUMP_HEIGHT,
   noInput,
   PICKUP_BLINK,
+  PICKUP_FIRST,
   PICKUP_SHOWN,
   PLAYER_SPEED,
   VIRUS_SPAWN,
@@ -112,7 +113,7 @@ describe("starting", () => {
     expect(game.pickup.y).toBe(-115);
     game.start();
     parkVirus(game);
-    run(game, 10);
+    run(game, PICKUP_FIRST);
     expect([game.pickup.visible, game.pickup.y]).toEqual([true, -25]);
   });
 
@@ -296,7 +297,7 @@ describe("jumping", () => {
   test("a short hop still reaches the penguin", () => {
     const game = started();
     parkVirus(game);
-    run(game, 10);
+    run(game, PICKUP_FIRST);
     game.player.setXY(underPenguin(game), GROUND_Y);
     jump(game, 0);
     expect(game.health).toBe(2);
@@ -503,11 +504,11 @@ describe("the virus", () => {
 });
 
 describe("the penguin", () => {
-  test("shows up every 10 s for 2 s, at the height of a jump", () => {
+  test("shows up after 20 s for 2 s, at the height of a jump", () => {
     const game = started();
     parkVirus(game);
     game.player.setXY(-205, GROUND_Y);
-    run(game, 10 - DT);
+    run(game, PICKUP_FIRST - DT);
     expect(game.pickup.visible).toBe(false);
     run(game, DT);
     expect(game.pickup.visible).toBe(true);
@@ -518,12 +519,36 @@ describe("the penguin", () => {
     expect(game.pickup.visible).toBe(false);
   });
 
+  test("the wait for the next one is spread over 20 to 30 s", () => {
+    const waits = [0, 0.5, 0.99].map((share) => {
+      const game = started();
+      parkVirus(game);
+      (game as unknown as { random: () => number }).random = () => share;
+      (game as unknown as { pickupTimer: number }).pickupTimer = DT;
+      game.update(noInput);
+      return (game as unknown as { pickupTimer: number }).pickupTimer;
+    });
+    expect(waits[0]).toBeCloseTo(20, 6);
+    expect(waits[1]).toBeCloseTo(25, 6);
+    expect(waits[2]).toBeCloseTo(29.9, 6);
+  });
+
+  test("shows up again 20 to 30 s later, not every 10 s like 2013", () => {
+    const game = started();
+    parkVirus(game);
+    game.player.setXY(-205, GROUND_Y);
+    run(game, PICKUP_FIRST);
+    expect(game.pickup.visible).toBe(true);
+    run(game, 20 - DT);
+    expect(game.pickup.visible).toBe(false);
+  });
+
   test("tells how long it has left, so it can blink before it goes", () => {
     const game = started();
     parkVirus(game);
     game.player.setXY(-205, GROUND_Y);
     expect(game.pickupLeft).toBe(0);
-    run(game, 10);
+    run(game, PICKUP_FIRST);
     expect(game.pickupLeft).toBeCloseTo(PICKUP_SHOWN, 6);
     run(game, PICKUP_SHOWN - PICKUP_BLINK);
     expect(game.pickupLeft).toBeCloseTo(PICKUP_BLINK, 6);
@@ -532,7 +557,7 @@ describe("the penguin", () => {
   test("standing under it isn't enough, jumping into it gives a heart", () => {
     const game = started();
     parkVirus(game);
-    run(game, 10);
+    run(game, PICKUP_FIRST);
     game.player.setXY(underPenguin(game), GROUND_Y);
     run(game, 0.5);
     expect(game.health).toBe(1);
@@ -554,7 +579,7 @@ describe("the penguin's spot", () => {
       const game = new Game(() => share);
       game.start();
       parkVirus(game);
-      run(game, 10);
+      run(game, PICKUP_FIRST);
       expect(game.pickup.x).toBe(x);
       expect(game.pickup.direction).toBe(90);
       const bounds = game.pickup.bounds();

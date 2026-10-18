@@ -50,7 +50,9 @@ export const WARNING_LONGEST = 0.6;
 export const WARNING_SHORTEST = 0.3;
 /** Its aim follows the player until this long before it flies. */
 export const AIM_LOCK = 0.15;
-const PICKUP_EVERY = 10;
+/** The penguin, an extra life, comes after 20 s, then every 20 to 30 s. In 2013 it came every 10 s. */
+export const PICKUP_FIRST = 20;
+const PICKUP_EVERY = [20, 30] as const;
 export const PICKUP_SHOWN = 2;
 /** The penguin blinks before it goes. */
 export const PICKUP_BLINK = 0.6;
@@ -190,7 +192,7 @@ export class Game {
   private jumpBuffer = 0;
   private walkTime = 0;
   private hitTime = Infinity;
-  private pickupTimer = new Timer(PICKUP_EVERY);
+  private pickupTimer = PICKUP_FIRST;
   private pickupShown = 0;
   private gladosTimer = new Timer(GLADOS_AFTER);
   private hl3Time = 0;
@@ -232,7 +234,7 @@ export class Game {
     this.time = 0;
     this.health = 1;
     this.speed = VIRUS_START_SPEED;
-    this.pickupTimer = new Timer(PICKUP_EVERY);
+    this.pickupTimer = PICKUP_FIRST;
     this.pickupShown = 0;
     this.vx = 0;
     this.vy = 0;
@@ -469,11 +471,14 @@ export class Game {
         pickup.visible = false;
       }
     }
-    if (this.pickupTimer.tick()) {
+    this.pickupTimer -= DT;
+    if (this.pickupTimer <= 1e-9) {
       pickup.setXY(this.randomInt(PICKUP_LEFTMOST, PICKUP_RIGHTMOST), pickup.y);
       pickup.ifOnEdgeBounce();
       pickup.visible = true;
       this.pickupShown = 0;
+      const [low, high] = PICKUP_EVERY;
+      this.pickupTimer = low + this.random() * (high - low);
     }
   }
 
