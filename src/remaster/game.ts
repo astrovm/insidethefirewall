@@ -117,7 +117,12 @@ export const THIRD_TIME = 10;
 export const THIRD_OUT = 0.6;
 /** The 3D floor: as wide as the stage, and this deep. */
 export const THIRD_DEPTH = 600;
-const THIRD_DEPTH_SPEED = 380;
+/** How far the player can go to each side in 3D. */
+export const THIRD_SIDE = 240;
+/** Walking speed in 3D, the same every way, diagonals too. */
+const THIRD_SPEED = 300;
+/** How fast the player turns to face where they walk, in radians a second. */
+const THIRD_TURN = 14;
 /** The virus hits closer than this, in 3D. */
 const THIRD_HIT = 34;
 /** Where the player's chest is in 3D, for the virus to aim at. */
@@ -127,7 +132,8 @@ export const THIRD_CHEST = 40;
 export interface ThirdDimension {
   /** Seconds since diving in. */
   time: number;
-  player: { x: number; z: number; vx: number; vz: number };
+  /** `facing` is the way the player looks: 0 away from the camera, π towards it. `step` is how far they've walked, for the stride. */
+  player: { x: number; z: number; vx: number; vz: number; facing: number; step: number };
   virus: { x: number; y: number; z: number; dx: number; dy: number; dz: number; warning: number };
 }
 /** A power-up ticks at these seconds left, so the player hears it ending. */
@@ -527,7 +533,7 @@ export class Game {
     this.closeCall = false;
     this.third = {
       time: 0,
-      player: { x: 0, z: 120, vx: 0, vz: 0 },
+      player: { x: 0, z: 120, vx: 0, vz: 0, facing: Math.PI, step: 0 },
       virus: { x: 0, y: 0, z: 0, dx: 0, dy: 0, dz: 0, warning: 0 },
     };
     this.respawnThirdVirus();
@@ -560,20 +566,31 @@ export class Game {
     }
     if (third.time >= THIRD_TIME) return;
     const p = third.player;
-    const sideways = input.left !== input.right;
-    const ahead = input.jump !== input.down;
+    // Arrows move along the floor as seen from the camera: up goes away, down comes back.
+    const across = Number(input.right) - Number(input.left);
+    const ahead = Number(input.jump) - Number(input.down);
+    const length = Math.hypot(across, ahead) || 1;
     const approach = (value: number, wanted: number) => {
       const change = (wanted === 0 || Math.sign(wanted) === -Math.sign(value) ? RUN_BRAKING : RUN_ACCELERATION) * DT;
       return Math.abs(wanted - value) <= change ? wanted : value + Math.sign(wanted - value) * change;
     };
-    p.vx = approach(p.vx, sideways ? (input.left ? -PLAYER_SPEED : PLAYER_SPEED) : 0);
-    p.vz = approach(p.vz, ahead ? (input.jump ? THIRD_DEPTH_SPEED : -THIRD_DEPTH_SPEED) : 0);
-    p.x = Math.max(-220, Math.min(220, p.x + p.vx * DT));
-    p.z = Math.max(20, Math.min(THIRD_DEPTH - 40, p.z + p.vz * DT));
-    if (sideways) this.player.setDirection(input.left ? -90 : 90);
-    this.walkTime = sideways || ahead ? this.walkTime + DT : 0;
+    p.vx = approach(p.vx, (across / length) * THIRD_SPEED);
+    p.vz = approach(p.vz, (ahead / length) * THIRD_SPEED);
+    const x = Math.max(-THIRD_SIDE, Math.min(THIRD_SIDE, p.x + p.vx * DT));
+    const z = Math.max(20, Math.min(THIRD_DEPTH - 40, p.z + p.vz * DT));
+    p.step += Math.hypot(x - p.x, z - p.z);
+    [p.x, p.z] = [x, z];
+    const moving = across !== 0 || ahead !== 0;
+    if (moving) {
+      // Turn the short way round.
+      const turn = Math.atan2(p.vx, p.vz) - p.facing;
+      const wrapped = Math.atan2(Math.sin(turn), Math.cos(turn));
+      p.facing += Math.sign(wrapped) * Math.min(Math.abs(wrapped), THIRD_TURN * DT);
+    }
+    if (across !== 0) this.player.setDirection(across < 0 ? -90 : 90);
+    this.walkTime = moving ? this.walkTime + DT : 0;
     this.hitTime += DT;
-    this.player.setCostume(this.playerCostume(noInput, sideways || ahead));
+    this.player.setCostume(this.playerCostume(noInput, moving));
     this.moveThirdVirus();
   }
 
