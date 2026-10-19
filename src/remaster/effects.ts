@@ -8,8 +8,6 @@ export const SHARDS = 0.7;
 /** Colors of the pieces: ice for a frozen virus, the cube when it breaks. */
 const ICE = ["#ffffff", "#66ccff", "#9a9a2a"];
 const CUBE = ["#c0c0c0", "#808080", "#ff3d8b"];
-/** Seconds the HEV suit's warning stays on screen. */
-export const CRITICAL = 2.5;
 /** Seconds "HIT & RUN!" shows after running the virus over. */
 export const SMASH = 0.8;
 
@@ -25,8 +23,6 @@ export class Effects {
   /** Seconds since the virus broke. */
   shardTime = Infinity;
   shardColors = ICE;
-  /** Seconds left of the HEV suit's warning. */
-  critical = 0;
   /** Seconds left of the "HIT & RUN!" text. */
   smash = 0;
 
@@ -34,7 +30,6 @@ export class Effects {
 
   handle(event: GameEvent): void {
     if (event.type === "shield") this.shake(0.1, 2);
-    if (event.type === "critical") this.critical = CRITICAL;
     if (event.type === "smash") {
       this.smash = SMASH;
       this.shake(0.2, 4);
@@ -86,7 +81,6 @@ export class Effects {
     this.shakeTime = Math.max(0, this.shakeTime - seconds);
     if (this.shakeTime === 0) this.shakeStrength = 0;
     this.flash = Math.max(0, this.flash - seconds * 4);
-    this.critical = Math.max(0, this.critical - seconds);
     this.smash = Math.max(0, this.smash - seconds);
   }
 
@@ -95,7 +89,6 @@ export class Effects {
     this.shakeTime = 0;
     this.shakeStrength = 0;
     this.flash = 0;
-    this.critical = 0;
     this.smash = 0;
   }
 }

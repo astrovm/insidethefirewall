@@ -16,15 +16,13 @@ interface Song {
 }
 
 /** Short sounds made on the fly, for cues the 2013 game had no sound for. */
-export type Synth = "whoosh" | "appear" | "tick" | "shatter" | "zap" | "portal" | "hev" | "brick" | "honk";
+export type Synth = "whoosh" | "appear" | "tick" | "shatter" | "zap" | "portal" | "brick" | "honk";
 
 /** Square wave notes for the blip sounds: frequencies, how long each is, and how loud. */
 const blips: Partial<Record<Synth, { notes: number[]; length: number; level: number; type?: OscillatorType }>> = {
   appear: { notes: [660, 990], length: 0.07, level: 0.08 },
   tick: { notes: [1200], length: 0.04, level: 0.06 },
   brick: { notes: [880], length: 0.05, level: 0.07 },
-  // The HEV suit's warning beeps, falling.
-  hev: { notes: [1050, 1050, 790], length: 0.11, level: 0.07 },
   // Two low notes at once would be a chord; one after the other honks.
   honk: { notes: [330, 262, 330, 262], length: 0.12, level: 0.09, type: "sawtooth" },
 };

@@ -93,6 +93,8 @@ async function main(): Promise<void> {
   const soundFiles = [
     ...Object.keys(sounds).map((name) => `sounds/${name}.${name === "laser" || name === "meow" ? "wav" : "mp3"}`),
     ...SONGS.filter((name) => !(name in sounds)).map((name) => `sounds/${name}.mp3`),
+    // Half-Life's HEV suit saying "Major fracture detected".
+    "sounds/hev.mp3",
   ];
   const [files] = await Promise.all([
     fetchAll([...allCostumes.map((c) => `costumes/${c.file}`), ...soundFiles], (fraction) => {
@@ -370,9 +372,8 @@ async function main(): Promise<void> {
         status.textContent = "The Companion Cube took the hit";
         break;
       case "critical":
-        audio.synth("hev");
-        status.textContent = "Warning. Vital signs critical.";
-        say("Warning. Vital signs critical.", settings.effects * audio.volume);
+        audio.play("hev");
+        status.textContent = "Major fracture detected";
         break;
       case "breakout":
         audio.synth("appear");
@@ -697,19 +698,6 @@ async function copyText(text: string): Promise<boolean> {
     area.remove();
     return copied;
   }
-}
-
-/** Says something out loud in a flat, robotic voice, like the HEV suit, if the browser can speak. */
-function say(text: string, volume: number): void {
-  if (!("speechSynthesis" in window) || volume <= 0) return;
-  const line = new SpeechSynthesisUtterance(text);
-  line.lang = "en-US";
-  line.rate = 0.9;
-  line.pitch = 0.4;
-  line.volume = Math.min(1, volume);
-  speechSynthesis.cancel();
-  // After the beeps.
-  setTimeout(() => speechSynthesis.speak(line), 450);
 }
 
 function storage(): Storage | null {

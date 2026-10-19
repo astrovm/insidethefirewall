@@ -1,6 +1,6 @@
 import { STAGE_HEIGHT, STAGE_WIDTH, type Costume, type Sprite } from "../engine/sprite.ts";
 import { interpolate, type CostumeImages } from "../render.ts";
-import { CRITICAL, SHARDS, SMASH, type Effects } from "./effects.ts";
+import { SHARDS, SMASH, type Effects } from "./effects.ts";
 import { DIVE_ZOOM, ThirdRenderer } from "./third.ts";
 import {
   BALL_RADIUS,
@@ -181,7 +181,7 @@ export class RemasterRenderer {
     this.direct = false;
     if (game.phase === "over") this.drawReplay(game);
     this.view = steady;
-    if (game.phase === "playing") this.drawHud(game, effects);
+    if (game.phase === "playing") this.drawHud(game);
 
     if (effects.flash > 0) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -698,7 +698,7 @@ export class RemasterRenderer {
   }
 
   /** Hearts for health and the time survived, in the top left corner like the 2013 monitors. */
-  private drawHud(game: Game, effects: Effects): void {
+  private drawHud(game: Game): void {
     const ctx = this.ctx;
     const s = this.view.scale;
     ctx.save();
@@ -725,13 +725,6 @@ export class RemasterRenderer {
       ctx.fillStyle = colors.orange;
       ctx.fillRect(left + 1, 97, 34 * Math.min(1, game.powers[kind] / POWER_UP_TIME[kind]), 4);
     });
-    // The HEV suit's warning, blinking, like Half-Life.
-    if (effects.critical > 0 && Math.floor((CRITICAL - effects.critical) / 0.25) % 2 === 0) {
-      const warning = "⚠ VITAL SIGNS CRITICAL";
-      ctx.font = "700 14px 'Noto Sans', sans-serif";
-      ctx.strokeText(warning, 12, 122);
-      ctx.fillText(warning, 12, 122);
-    }
     // The song that just started: small, at the top right under the corner buttons, sliding in, then fading out.
     const age = (performance.now() - this.song.at) / 1000;
     if (age < SONG_SHOWN) {
