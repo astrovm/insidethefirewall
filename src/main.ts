@@ -91,8 +91,6 @@ async function main(): Promise<void> {
   const soundFiles = [
     ...Object.keys(sounds).map((name) => `sounds/${name}.${name === "laser" || name === "meow" ? "wav" : "mp3"}`),
     ...SONGS.filter((name) => !(name in sounds)).map((name) => `sounds/${name}.mp3`),
-    // Half-Life's HEV suit saying "Major fracture detected".
-    "sounds/hev.mp3",
   ];
   const [files] = await Promise.all([
     fetchAll([...allCostumes.map((c) => `costumes/${c.file}`), ...soundFiles], (fraction) => {
@@ -366,10 +364,6 @@ async function main(): Promise<void> {
         break;
       case "portal":
         audio.synth("portal");
-        break;
-      case "critical":
-        audio.play("hev");
-        status.textContent = "Major fracture detected";
         break;
       case "breakout":
         audio.synth("appear");

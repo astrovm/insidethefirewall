@@ -474,8 +474,7 @@ describe("the virus", () => {
     expect(game.health).toBe(1);
     expect(game.player.currentCostume.name).toBe("hit");
     expect([game.virus.x, game.virus.y]).toEqual([VIRUS_SPAWN.x, VIRUS_SPAWN.y]);
-    // Down to the last heart, the HEV suit warns.
-    expect(game.events).toEqual([{ type: "hit", x: game.player.x, y: game.player.y, last: false }, { type: "critical" }]);
+    expect(game.events).toEqual([{ type: "hit", x: game.player.x, y: game.player.y, last: false }]);
     expect(game.phase).toBe("playing");
     expect([game.invincible, game.frozen]).toEqual([INVINCIBLE, HIT_STOP]);
   });

@@ -267,7 +267,6 @@ export type GameEvent =
   | { type: "catch" }
   | { type: "fire" }
   | { type: "portal"; x: number; y: number }
-  | { type: "critical" }
   | { type: "breakout" }
   | { type: "brick"; x: number; y: number; heart: boolean }
   | { type: "paddle" }
@@ -1029,8 +1028,6 @@ export class Game {
     this.frozen = HIT_STOP;
     this.player.setCostume("hit");
     this.events.push({ type: "hit", x: this.player.x, y: this.player.y, last: this.health < 1 });
-    // Down to the last heart: the HEV suit warns, like in Half-Life.
-    if (this.health === 1) this.events.push({ type: "critical" });
   }
 
   /** Speeds the virus up little by little, forever. */
