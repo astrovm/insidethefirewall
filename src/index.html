@@ -372,7 +372,10 @@
     }
     .grabs {
       display: flex;
-      gap: calc(10 * var(--s));
+      flex-wrap: wrap;
+      gap: 0 calc(10 * var(--s));
+      /* Wraps before the 2013 computer. */
+      max-width: calc(172 * var(--s));
     }
     .grabs span {
       display: flex;

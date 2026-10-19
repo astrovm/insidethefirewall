@@ -531,7 +531,7 @@ describe("the virus", () => {
 });
 
 describe("the penguin", () => {
-  test("can show up after 15 s, for 2 s, at the height of a jump", () => {
+  test("can show up after 10 s, for 2 s, at the height of a jump", () => {
     const game = started();
     parkVirus(game);
     nextDrop(game, "penguin");
@@ -547,7 +547,7 @@ describe("the penguin", () => {
     expect(game.pickup.visible).toBe(false);
   });
 
-  test("nothing else shows up for 15 s after it, not every 10 s like 2013", () => {
+  test("nothing else shows up for 10 s after it", () => {
     const game = started();
     parkVirus(game);
     nextDrop(game, "penguin");
@@ -555,7 +555,7 @@ describe("the penguin", () => {
     run(game, DROP_FIRST);
     expect(game.pickup.visible).toBe(true);
     game.events.length = 0;
-    run(game, 15 - DT);
+    run(game, 10 - DT);
     expect(types(game.events)).not.toContain("appear");
   });
 
@@ -796,7 +796,7 @@ describe("power-ups", () => {
     game.update(noInput);
   }
 
-  test("one can show up after 15 s, within a jump of the floor and away from the player", () => {
+  test("one can show up after 10 s, within a jump of the floor and away from the player", () => {
     for (let seed = 1; seed <= 30; seed++) {
       const game = started(seed);
       parkVirus(game);
@@ -813,7 +813,7 @@ describe("power-ups", () => {
     }
   });
 
-  test("every kind shows up, sharing one turn every 15 to 22 s with the penguin", () => {
+  test("every kind shows up, sharing one turn every 10 to 15 s with the penguin", () => {
     const kinds = new Set<string>();
     const gaps: number[] = [];
     let [penguins, powerUps] = [0, 0];
@@ -836,18 +836,36 @@ describe("power-ups", () => {
       last = game.time;
     }
     expect([...kinds].sort()).toEqual([...POWER_UPS].sort());
-    expect(Math.min(...gaps)).toBeGreaterThanOrEqual(15 - 1e-6);
-    expect(Math.max(...gaps)).toBeLessThanOrEqual(22 + 1e-6);
+    expect(Math.min(...gaps)).toBeGreaterThanOrEqual(10 - 1e-6);
+    expect(Math.max(...gaps)).toBeLessThanOrEqual(15 + 1e-6);
     expect(Math.abs(penguins / (penguins + powerUps) - PENGUIN_CHANCE)).toBeLessThan(0.1);
   });
 
+  test("every kind comes once before any comes again", () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      const game = started(seed);
+      parkVirus(game);
+      const kinds: PowerUpKind[] = [];
+      for (let i = 0; i < POWER_UPS.length * 2; i++) {
+        nextDrop(game, "powerUp");
+        (game as unknown as { dropTimer: number }).dropTimer = DT;
+        game.update(noInput);
+        kinds.push(game.powerUpKind);
+        game.powerUp.visible = false;
+      }
+      expect(new Set(kinds.slice(0, POWER_UPS.length)).size).toBe(POWER_UPS.length);
+      expect(new Set(kinds.slice(POWER_UPS.length)).size).toBe(POWER_UPS.length);
+    }
+  });
+
   test("one that would show up on the player moves 160 px away, staying on stage", () => {
-    // Random numbers for: the next wait, the kind, x, then y.
+    // Random numbers for: the next wait, x, then y. The kind comes from the bag.
     const place = (playerX: number, x: number) => {
       const game = started();
       parkVirus(game);
       game.player.setXY(playerX, GROUND_Y);
-      const queue = [0, 0, (x + 200 + 0.5) / 401, 0];
+      (game as unknown as { bag: PowerUpKind[] }).bag = ["shield"];
+      const queue = [0, (x + 200 + 0.5) / 401, 0];
       (game as unknown as { random: () => number }).random = () => queue.shift() ?? 0;
       nextDrop(game, "powerUp");
       (game as unknown as { dropTimer: number }).dropTimer = DT;
@@ -863,7 +881,7 @@ describe("power-ups", () => {
     expect(place(0, -80)).toBe(-80);
   });
 
-  test("the wait for the next penguin or power-up is spread over 15 to 22 s", () => {
+  test("the wait for the next penguin or power-up is spread over 10 to 15 s", () => {
     const waits = [0, 0.5, 0.99].map((share) => {
       const game = started();
       parkVirus(game);
@@ -872,15 +890,15 @@ describe("power-ups", () => {
       game.update(noInput);
       return (game as unknown as { dropTimer: number }).dropTimer;
     });
-    expect(waits[0]).toBeCloseTo(15, 6);
-    expect(waits[1]).toBeCloseTo(18.5, 6);
-    expect(waits[2]).toBeCloseTo(21.93, 6);
+    expect(waits[0]).toBeCloseTo(10, 6);
+    expect(waits[1]).toBeCloseTo(12.5, 6);
+    expect(waits[2]).toBeCloseTo(14.95, 6);
   });
 
-  test("it's the penguin 60% of the time, and a power-up otherwise", () => {
+  test("it's the penguin half the time, and a power-up otherwise", () => {
     for (const [share, penguin] of [
-      [0.59, true],
-      [0.61, false],
+      [0.49, true],
+      [0.51, false],
     ] as const) {
       const game = started();
       parkVirus(game);

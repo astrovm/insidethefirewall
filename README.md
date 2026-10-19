@@ -13,7 +13,7 @@ The remaster is a normal game loop at 120 updates a second, drawn as big as the 
 
 It also takes ideas from classic games: hearts capped at 5 like Zelda, instant retry like Super Meat Boy, and a replay of the last 2 seconds on the game over screen. For comfort, **Settings** has a game speed slider like Celeste's Assist Mode, from 5% to 500%, and the keys can be changed.
 
-The penguin, an extra heart, and the power-ups take turns: something shows up every 15 to 22 s, the penguin 60% of the time. With full hearts, it's always a power-up.
+The penguin, an extra heart, and the power-ups take turns: something shows up every 10 to 15 s, the penguin half the time. With full hearts, it's always a power-up. Power-ups come like a shuffled deck: every kind once before any comes again.
 
 Power-ups and surprises pay tribute to other games:
 

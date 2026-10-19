@@ -56,14 +56,14 @@ export const AIM_LOCK = 0.15;
 /** A virus that flies by this close, in stage pixels, without a hit is a near miss. */
 export const NEAR_MISS = 8;
 /**
- * Hearts and power-ups share one cycle: something shows up after 15 s, then
- * every 15 to 22 s. It's the penguin, an extra life, 60% of the time, and a
- * power-up otherwise, so each comes about as often as when they had their own
- * timers. With full hearts it's always a power-up. In 2013 the penguin came every 10 s.
+ * Hearts and power-ups share one cycle: something shows up after 10 s, then
+ * every 10 to 15 s. It's the penguin, an extra life, half the time, and a
+ * power-up otherwise. With full hearts it's always a power-up. In 2013 the
+ * penguin came every 10 s.
  */
-export const DROP_FIRST = 15;
-const DROP_EVERY = [15, 22] as const;
-export const PENGUIN_CHANCE = 0.6;
+export const DROP_FIRST = 10;
+const DROP_EVERY = [10, 15] as const;
+export const PENGUIN_CHANCE = 0.5;
 /** The penguin stays 2 s. */
 export const PICKUP_SHOWN = 2;
 /** The penguin blinks before it goes. */
@@ -415,6 +415,8 @@ export class Game {
   /** Seconds until the next penguin or power-up, and which one, when a cheat asks for it. */
   private dropTimer = DROP_FIRST;
   private nextDrop: "penguin" | "powerUp" | null = null;
+  /** Power-ups still to come before any repeats, like a shuffled deck. */
+  private bag: PowerUpKind[] = [];
   private powerUpShown = 0;
   /** The flying virus came close to the player without a hit. */
   private closeCall = false;
@@ -470,6 +472,7 @@ export class Game {
     this.health = 1;
     this.speed = VIRUS_START_SPEED;
     this.dropTimer = DROP_FIRST;
+    this.bag = [];
     this.nextDrop = null;
     this.pickupShown = 0;
     this.vx = 0;
@@ -1073,7 +1076,15 @@ export class Game {
 
   private showPowerUp(): void {
     const powerUp = this.powerUp;
-    powerUp.setCostume(POWER_UPS[Math.floor(this.random() * POWER_UPS.length)]!);
+    // Every kind once, in a random order, before any comes again.
+    if (this.bag.length === 0) {
+      this.bag = [...POWER_UPS];
+      for (let i = this.bag.length - 1; i > 0; i--) {
+        const j = Math.floor(this.random() * (i + 1));
+        [this.bag[i], this.bag[j]] = [this.bag[j]!, this.bag[i]!];
+      }
+    }
+    powerUp.setCostume(this.bag.pop()!);
     let x = this.randomInt(-200, 200);
     if (Math.abs(x - this.player.x) < POWER_UP_AWAY) x += x < this.player.x ? -2 * POWER_UP_AWAY : 2 * POWER_UP_AWAY;
     if (Math.abs(x) > 200) x -= Math.sign(x) * 4 * POWER_UP_AWAY;
