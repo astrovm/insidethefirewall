@@ -76,8 +76,10 @@ async function loadFont(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  // Installed as an app, the game works offline. Only over HTTPS, so the dev server always serves fresh files.
-  if ("serviceWorker" in navigator && location.protocol === "https:") void navigator.serviceWorker.register("sw.js").catch(console.error);
+  // Installed as an app, the game works offline. Only over HTTPS, so the dev server always serves fresh files,
+  // and not inside another site, like xp, which keeps its own offline copy.
+  const embedded = window.self !== window.top;
+  if ("serviceWorker" in navigator && location.protocol === "https:" && !embedded) void navigator.serviceWorker.register("sw.js").catch(console.error);
   const project = createClassic();
   // The 2013 title, credited to @astrovm instead of the old @astrolince.
   const title: Costume = { ...costumes.title[0]!, file: "title-remaster.png" };
