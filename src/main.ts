@@ -30,7 +30,7 @@ const MAX_UPDATES_PER_FRAME = 48;
 const SONGS = ["music", "how-do-you-do", "bad-boy", "monster"];
 /** What the screen shows when each song starts. */
 const SONG_TITLES: Record<string, string> = {
-  music: "Inside the firewall (2013)",
+  music: "Tristam - Flight",
   "how-do-you-do": "Nightcore - How Do You Do",
   "bad-boy": "Nightcore - Bad Boy",
   monster: "Meg & Dia - Monster (Nightcore Dubstep Remix)",

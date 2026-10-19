@@ -44,7 +44,7 @@ describe("best time", () => {
     best.record(80);
     expect([best.speed, best.label]).toEqual([1, "1:20"]);
     expect(new Best(storage).label).toBe("1:20");
-    for (const speed of [0, -1, 2, "0.8", null]) {
+    for (const speed of [0, -1, 9, "0.8", null]) {
       const saved = memory({ "insidethefirewall.best": JSON.stringify({ seconds: 9, speed }) });
       expect(new Best(saved).label).toBe("9");
     }

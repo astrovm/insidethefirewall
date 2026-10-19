@@ -1006,13 +1006,13 @@ export class Game {
       return;
     }
     this.health -= 1;
-    // Down to the last heart: the HEV suit warns, like in Half-Life.
-    if (this.health === 1) this.events.push({ type: "critical" });
     this.hitTime = 0;
     this.invincible = INVINCIBLE;
     this.frozen = HIT_STOP;
     this.player.setCostume("hit");
     this.events.push({ type: "hit", x: this.player.x, y: this.player.y, last: this.health < 1 });
+    // Down to the last heart: the HEV suit warns, like in Half-Life.
+    if (this.health === 1) this.events.push({ type: "critical" });
   }
 
   /** Speeds the virus up little by little, forever. */
@@ -1408,7 +1408,8 @@ export function replayFrame(replay: ReplayFrame[], seconds: number): ReplayFrame
  * 2 s twice, with 2 s between, then waits 6 s and starts again.
  */
 export function hl3Shown(seconds: number): boolean {
-  const t = seconds - HL3_AFTER;
+  // A hair early, so adding up many small updates still lands on time.
+  const t = seconds - HL3_AFTER + 1e-9;
   if (t < 0) return false;
   const cycle = t % 14;
   return cycle < 2 || (cycle >= 4 && cycle < 6);

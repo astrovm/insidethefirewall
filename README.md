@@ -22,7 +22,7 @@ Power-ups and surprises pay tribute to other games:
 - From 45 s on, Homer's pink sedan from The Simpsons: Hit & Run drives across the floor. It honks first. Jump over it.
 - The red pill from The Matrix, and a Homer³ 3D world inside the monitor.
 
-The music is the 2013 song, then "Nightcore - How Do You Do" (Nightcore Lab NCL), "Nightcore - Bad boy" (AliceBloodRabbit) and "Meg & Dia - Monster (Nightcore Dubstep Remix)" (theHimeyukichan), from YouTube. Each game starts with the 2013 song, then plays the rest in a random order, and each song fades into the next. Its title shows at the bottom when it starts.
+The music is the 2013 song, "Flight" by Tristam, then "Nightcore - How Do You Do" (Nightcore Lab NCL), "Nightcore - Bad boy" (AliceBloodRabbit) and "Meg & Dia - Monster (Nightcore Dubstep Remix)" (theHimeyukichan), from YouTube. Each game starts with the 2013 song, then plays the rest in a random order, and each song fades into the next. Its title shows at the bottom when it starts.
 
 The 2013 game is also ported script by script, with the same rules as Scratch: 30 frames per second, the same collision, edge and timing quirks. Tests run it against the original project file. The remaster takes its sprites and collision from it.
 

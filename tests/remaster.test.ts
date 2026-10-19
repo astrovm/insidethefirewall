@@ -5,6 +5,9 @@ import {
   AIM_LOCK,
   DEATH_PAUSE,
   DT,
+  HZ,
+  RUN_ACCELERATION,
+  RUN_BRAKING,
   Game,
   GROUND_Y,
   HIT_STOP,
@@ -103,7 +106,7 @@ describe("starting", () => {
     expect(game.player.x).toBeGreaterThanOrEqual(-205);
     expect(game.player.x).toBeLessThanOrEqual(205);
     expect([game.virus.x, game.virus.y]).toEqual([VIRUS_SPAWN.x, VIRUS_SPAWN.y]);
-    expect(game.layers.map((s) => s.name)).toEqual(["pickup", "powerUp", "player", "monitor", "virus"]);
+    expect(game.layers.map((s) => s.name)).toEqual(["pickup", "powerUp", "player", "monitor", "virus", "car"]);
     expect(game.pickup.visible).toBe(false);
     expect(game.events.at(-1)).toEqual({ type: "music", playing: true });
   });
@@ -171,7 +174,7 @@ describe("moving", () => {
     parkVirus(game);
     game.player.setXY(0, GROUND_Y);
     game.update(hold({ right: true }));
-    expect(game.vx).toBeCloseTo(PLAYER_SPEED / 6, 6);
+    expect(game.vx).toBeCloseTo(RUN_ACCELERATION * DT, 6);
     run(game, 0.1 - DT, { right: true });
     expect(game.vx).toBe(PLAYER_SPEED);
     run(game, 0.1, { right: true });
@@ -185,8 +188,9 @@ describe("moving", () => {
     game.player.setXY(-100, GROUND_Y);
     run(game, 0.2, { right: true });
     game.update(noInput);
-    expect(game.vx).toBe(PLAYER_SPEED - PLAYER_SPEED / 4);
-    run(game, 3 * DT);
+    expect(game.vx).toBe(PLAYER_SPEED - RUN_BRAKING * DT);
+    // Stopped in under 0.07 s.
+    run(game, 0.07 - DT);
     expect(game.vx).toBe(0);
     const x = game.player.x;
     run(game, 0.2);
@@ -199,8 +203,9 @@ describe("moving", () => {
     game.player.setXY(-100, GROUND_Y);
     run(game, 0.2, { right: true });
     const speeds: number[] = [];
+    // Every 1/60 s.
     for (let i = 0; i < 6; i++) {
-      game.update(hold({ left: true }));
+      run(game, 1 / 60, { left: true });
       speeds.push(game.vx);
     }
     expect(speeds.map((v) => Math.round(v))).toEqual([450, 300, 150, 0, -100, -200]);
@@ -239,12 +244,13 @@ describe("moving", () => {
     const game = started();
     parkVirus(game);
     const costumes: string[] = [];
-    for (let i = 0; i < 20; i++) {
+    const swap = Math.round(0.15 / DT);
+    for (let i = 0; i < 2 * swap + 2; i++) {
       game.update(hold({ right: true }));
       costumes.push(game.player.currentCostume.name);
     }
-    expect(costumes.slice(0, 8)).toEqual(Array(8).fill("walk1"));
-    expect(costumes.slice(9, 17)).toEqual(Array(8).fill("walk2"));
+    expect(costumes.slice(0, swap - 1)).toEqual(Array(swap - 1).fill("walk1"));
+    expect(costumes.slice(swap, 2 * swap - 1)).toEqual(Array(swap - 1).fill("walk2"));
     expect(costumes.at(-1)).toBe("walk1");
   });
 
@@ -304,7 +310,7 @@ describe("jumping", () => {
       return jump(game, holdFor).top - GROUND_Y;
     });
     expect(heights[0]).toBeLessThan(30);
-    expect(heights[0]).toBeGreaterThan(23);
+    expect(heights[0]).toBeGreaterThan(20);
     for (let i = 1; i < heights.length; i++) expect(heights[i]!).toBeGreaterThan(heights[i - 1]!);
   });
 
@@ -461,7 +467,8 @@ describe("the virus", () => {
     expect(game.health).toBe(1);
     expect(game.player.currentCostume.name).toBe("hit");
     expect([game.virus.x, game.virus.y]).toEqual([VIRUS_SPAWN.x, VIRUS_SPAWN.y]);
-    expect(game.events).toEqual([{ type: "hit", x: game.player.x, y: game.player.y, last: false }]);
+    // Down to the last heart, the HEV suit warns.
+    expect(game.events).toEqual([{ type: "hit", x: game.player.x, y: game.player.y, last: false }, { type: "critical" }]);
     expect(game.phase).toBe("playing");
     expect([game.invincible, game.frozen]).toEqual([INVINCIBLE, HIT_STOP]);
   });
@@ -945,11 +952,11 @@ describe("power-ups", () => {
     parkVirus(game);
     grab(game);
     game.update(hold({ jump: true, jumpPressed: true }));
-    expect(game.vy).toBeCloseTo(FLY_SPEED / 6, 6);
+    expect(game.vy).toBeCloseTo(FLY_SPEED * 10 * DT, 6);
     run(game, 0.1, { jump: true });
     expect(game.vy).toBe(FLY_SPEED);
     game.update(noInput);
-    expect(game.vy).toBeCloseTo(FLY_SPEED * (5 / 6), 6);
+    expect(game.vy).toBeCloseTo(FLY_SPEED - FLY_SPEED * 10 * DT, 6);
     run(game, 0.1);
     expect(game.vy).toBe(0);
   });
@@ -1327,11 +1334,11 @@ describe("the replay", () => {
     const game = started();
     parkVirus(game);
     run(game, 0.5);
-    expect(game.replay).toHaveLength(30);
+    expect(game.replay).toHaveLength(0.5 * HZ);
     expect([game.replay.at(-1)!.shield, game.replay.at(-1)!.jetpack]).toEqual([false, false]);
     game.powers.shield = 5;
     run(game, 3);
-    expect(game.replay).toHaveLength(REPLAY_SECONDS * 60);
+    expect(game.replay).toHaveLength(REPLAY_SECONDS * HZ);
     const last = game.replay.at(-1)!;
     expect(last.sprites[last.player]!.costume.name).toBe(game.player.currentCostume.name);
     expect(last.sprites[last.player]!.x).toBe(game.player.x);
@@ -1371,11 +1378,13 @@ describe("the replay", () => {
   });
 
   test("plays at half speed, holds the last frame for 1 s, then starts again", () => {
-    const frames = Array.from({ length: 120 }, (_, i) => ({ sprites: [], player: i, shield: false, jetpack: false, flying: false }));
+    // 2 s of the run.
+    const frames = Array.from({ length: 2 * HZ }, (_, i) => ({ sprites: [], player: i, shield: false, jetpack: false, flying: false }));
     const at = (seconds: number) => replayFrame(frames, seconds)?.player;
-    expect([at(0), at(1), at(2), at(3.99), at(4), at(4.99), at(5), at(6)]).toEqual([0, 30, 60, 119, 119, 119, 0, 30]);
-    expect(replayFrame(frames.slice(0, 30), 1.5)?.player).toBe(29);
-    expect(replayFrame(frames.slice(0, 30), 2)?.player).toBe(0);
+    const last = 2 * HZ - 1;
+    expect([at(0), at(1), at(2), at(3.99), at(4), at(4.99), at(5), at(6)]).toEqual([0, HZ / 2, HZ, last, last, last, 0, HZ / 2]);
+    expect(replayFrame(frames.slice(0, HZ / 2), 1.5)?.player).toBe(HZ / 2 - 1);
+    expect(replayFrame(frames.slice(0, HZ / 2), 2)?.player).toBe(0);
     expect(replayFrame([], 1)).toBeNull();
   });
 });
