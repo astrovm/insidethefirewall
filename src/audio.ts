@@ -16,7 +16,7 @@ interface Song {
 }
 
 /** Short sounds made on the fly, for cues the 2013 game had no sound for. */
-export type Synth = "whoosh" | "appear" | "tick" | "shatter" | "zap" | "portal" | "brick" | "honk";
+export type Synth = "whoosh" | "appear" | "tick" | "shatter" | "zap" | "portal" | "brick" | "honk" | "crash" | "explode" | "coin";
 
 /** Square wave notes for the blip sounds: frequencies, how long each is, and how loud. */
 const blips: Partial<Record<Synth, { notes: number[]; length: number; level: number; type?: OscillatorType }>> = {
@@ -25,7 +25,19 @@ const blips: Partial<Record<Synth, { notes: number[]; length: number; level: num
   brick: { notes: [880], length: 0.05, level: 0.07 },
   // Two low notes at once would be a chord; one after the other honks.
   honk: { notes: [330, 262, 330, 262], length: 0.12, level: 0.09, type: "sawtooth" },
+  coin: { notes: [1319, 1760], length: 0.06, level: 0.06 },
 };
+
+/** What the car sounds like this frame: the engine's pitch, 1 for idle-ish, the gas, how hard the tires skid and how hurt it is. */
+export interface CarSound {
+  pitch: number;
+  gas: boolean;
+  skid: number;
+  damage: number;
+}
+
+/** A made-up engine: a low buzz, filtered brighter with the gas. Its pitch 1 is this many hertz. */
+const ENGINE_HERTZ = 38;
 
 /** Plays the game's sounds. Each sprite plays one copy of a sound at a time, like Scratch. */
 export class Audio {
@@ -44,6 +56,8 @@ export class Audio {
   private musicRate = 1;
   private level = 1;
   private noise: AudioBuffer | null = null;
+  /** The car's engine, tires and rattle, made once and kept. */
+  private car: { engine: OscillatorNode[]; filter: BiquadFilterNode; engineGain: GainNode; skidGain: GainNode; rattleGain: GainNode } | null = null;
 
   constructor() {
     this.output.connect(this.context.destination);
@@ -161,12 +175,92 @@ export class Audio {
     for (const song of [this.song, this.fading]) song?.source.playbackRate.setTargetAtTime(rate, this.context.currentTime, 0.3);
   }
 
-  /** Plays a short made-up sound through the sound effects volume. */
-  synth(name: Synth): void {
+  /**
+   * The car's engine, squealing tires and, once it's hurt, a rattle, playing
+   * on while driving. Null quiets them.
+   */
+  setCar(sound: CarSound | null): void {
+    if (!sound && !this.car) return;
+    const ctx = this.context;
+    const now = ctx.currentTime;
+    if (!this.car) {
+      this.noise ??= noiseBuffer(ctx, 0.3);
+      const filter = ctx.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.Q.value = 4;
+      const engineGain = ctx.createGain();
+      engineGain.gain.value = 0;
+      filter.connect(engineGain).connect(this.effectsOutput);
+      // A sawtooth and a square an octave down, a little out of tune, for a rough idle.
+      const engine = (["sawtooth", "square"] as const).map((type) => {
+        const oscillator = ctx.createOscillator();
+        oscillator.type = type;
+        oscillator.connect(filter);
+        oscillator.start();
+        return oscillator;
+      });
+      const noise = (filterType: BiquadFilterType, frequency: number, q: number) => {
+        const source = ctx.createBufferSource();
+        source.buffer = this.noise;
+        source.loop = true;
+        const band = ctx.createBiquadFilter();
+        band.type = filterType;
+        band.frequency.value = frequency;
+        band.Q.value = q;
+        const gain = ctx.createGain();
+        gain.gain.value = 0;
+        source.connect(band).connect(gain).connect(this.effectsOutput);
+        source.start();
+        return gain;
+      };
+      this.car = { engine, filter, engineGain, skidGain: noise("bandpass", 1300, 4), rattleGain: noise("lowpass", 300, 1) };
+    }
+    const { engine, filter, engineGain, skidGain, rattleGain } = this.car;
+    const hertz = ENGINE_HERTZ * (sound?.pitch ?? 1);
+    engine[0]!.frequency.setTargetAtTime(hertz, now, 0.03);
+    engine[1]!.frequency.setTargetAtTime(hertz / 2 + 0.7, now, 0.03);
+    filter.frequency.setTargetAtTime(sound?.gas ? hertz * 9 : hertz * 4, now, 0.08);
+    engineGain.gain.setTargetAtTime(sound ? (sound.gas ? 0.09 : 0.06) : 0, now, 0.06);
+    skidGain.gain.setTargetAtTime(sound ? sound.skid * 0.12 : 0, now, 0.05);
+    // Hit & Run's engine starts sounding damaged at 40% damage.
+    rattleGain.gain.setTargetAtTime(sound && sound.damage > 0.4 ? (sound.damage - 0.4) * 0.25 : 0, now, 0.1);
+  }
+
+  /** Plays a short made-up sound through the sound effects volume, as hard as `power` for crashes. */
+  synth(name: Synth, power = 1): void {
     const ctx = this.context;
     const now = ctx.currentTime;
     const gain = ctx.createGain();
     gain.connect(this.effectsOutput);
+    if (name === "crash" || name === "explode") {
+      // A crunch of noise, and a thump under it. An explosion is longer and deeper.
+      const explode = name === "explode";
+      const length = explode ? 1.4 : 0.35;
+      this.noise ??= noiseBuffer(ctx, 0.3);
+      const source = ctx.createBufferSource();
+      source.buffer = this.noise;
+      source.loop = true;
+      const filter = ctx.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.setValueAtTime(explode ? 2400 : 1800, now);
+      filter.frequency.exponentialRampToValueAtTime(explode ? 120 : 300, now + length);
+      const loud = explode ? 0.7 : 0.2 + 0.5 * power;
+      gain.gain.setValueAtTime(loud, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + length);
+      source.connect(filter).connect(gain);
+      source.start(now);
+      source.stop(now + length);
+      const thump = ctx.createOscillator();
+      thump.frequency.setValueAtTime(explode ? 90 : 120, now);
+      thump.frequency.exponentialRampToValueAtTime(30, now + length);
+      const thumpGain = ctx.createGain();
+      thumpGain.gain.setValueAtTime(loud, now);
+      thumpGain.gain.exponentialRampToValueAtTime(0.0001, now + length);
+      thump.connect(thumpGain).connect(this.effectsOutput);
+      thump.start(now);
+      thump.stop(now + length);
+      return;
+    }
     if (name === "whoosh") {
       // A burst of noise swept upward, like air rushing past.
       this.noise ??= noiseBuffer(ctx, 0.3);

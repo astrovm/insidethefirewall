@@ -4,7 +4,9 @@ import { costumes, createClassic, sounds } from "./game/classic.ts";
 import { bindKey, canBind, Controls, defaultKeys, keyLabel, MOVES, moveForKey, type Move } from "./input.ts";
 import type { Costume } from "./engine/sprite.ts";
 import type { CostumeImages } from "./render.ts";
+import { carDamage } from "./remaster/car.ts";
 import { Effects } from "./remaster/effects.ts";
+import { Motor } from "./remaster/motor.ts";
 import { Fader } from "./remaster/fader.ts";
 import {
   BRICKS_PER_HEART,
@@ -382,13 +384,20 @@ async function main(): Promise<void> {
         break;
       case "drive":
         audio.synth("honk");
-        status.textContent = "Homer's car! Steer with left and right, speed up with up, brake with down. Run over the virus.";
+        status.textContent = "Homer's car! Steer with left and right, speed up with up, brake with down, Space for the handbrake, H for the horn. Run over the virus.";
         break;
       case "smash":
         audio.synth("shatter");
         break;
-      case "bump":
-        audio.synth("brick");
+      case "crash":
+        audio.synth("crash", event.power);
+        break;
+      case "explode":
+        audio.synth("explode");
+        status.textContent = "Homer's car blew up!";
+        break;
+      case "coin":
+        audio.synth("coin");
         break;
       case "appear":
         audio.synth("appear");
@@ -446,6 +455,15 @@ async function main(): Promise<void> {
       image.src = `assets/costumes/${icon.file}`;
       image.alt = icon.name;
       item.append(image, String(count));
+      list.append(item);
+    }
+    // Coins from the 3D world.
+    if (game.coins > 0) {
+      const item = document.createElement("span");
+      const image = document.createElement("img");
+      image.src = "assets/costumes/coin.svg";
+      image.alt = "Coins";
+      item.append(image, String(game.coins));
       list.append(item);
     }
   };
@@ -560,6 +578,8 @@ async function main(): Promise<void> {
       return;
     }
     const move = moveForKey(event.key, settings.keys);
+    // H honks Homer's horn, while driving.
+    if (!move && key === "h" && !paused && !event.repeat && game.third?.car.driving) audio.synth("honk");
     if (!move || paused) return;
     event.preventDefault();
     controls.press(`key:${event.code}`, move);
@@ -645,6 +665,7 @@ async function main(): Promise<void> {
   let last = performance.now();
   let pending = 0;
   let shownSong: string | null = null;
+  const motor = new Motor();
   const frame = (now: number) => {
     const elapsed = Math.min(250, now - last);
     last = now;
@@ -663,6 +684,11 @@ async function main(): Promise<void> {
     // Speed shoes speed the music up, like in Sonic.
     if (game.phase === "playing") audio.setMusicRate(game.timeScale * (game.powers.shoes > 0 ? 1.25 : 1));
     audio.update();
+    // Homer's car's engine and tires, while driving.
+    const car = game.third?.car;
+    if (car?.driving && game.phase === "playing" && !paused) {
+      audio.setCar({ pitch: motor.update(car, car.gas, elapsed / 1000), gas: car.gas, skid: car.skid, damage: carDamage(car) });
+    } else audio.setCar(null);
     // A new song: show its title.
     if (audio.songName !== shownSong) {
       shownSong = audio.songName;

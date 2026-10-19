@@ -691,6 +691,22 @@ export class RemasterRenderer {
     ctx.textAlign = "left";
     ctx.strokeText(time, 12, 48);
     ctx.fillText(time, 12, 48);
+    // Coins grabbed in the 3D world, under the time, once there are any.
+    if (game.coins > 0 || game.third) {
+      ctx.fillStyle = colors.mortar;
+      ctx.beginPath();
+      ctx.arc(21, 74, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#ffd23c";
+      ctx.beginPath();
+      ctx.arc(21, 74, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.font = "500 16px 'Noto Sans', sans-serif";
+      ctx.fillStyle = colors.orange;
+      ctx.lineWidth = 4;
+      ctx.strokeText(String(game.coins), 34, 75);
+      ctx.fillText(String(game.coins), 34, 75);
+    }
     // Power-ups the player has, each with a bar for the time left.
     const active = POWER_UPS.filter((kind) => game.powers[kind] > 0);
     active.forEach((kind, i) => {

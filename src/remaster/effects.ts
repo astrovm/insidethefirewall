@@ -23,7 +23,9 @@ export class Effects {
   handle(event: GameEvent): void {
     if (event.type === "shield") this.shake(0.1, 2);
     if (event.type === "smash") this.shake(0.2, 4);
-    if (event.type === "bump") this.shake(0.12, 3);
+    // Hit & Run shakes the camera as hard as the crash was.
+    if (event.type === "crash" && event.power > 0) this.shake(0.12 + event.power * 0.3, 3 + event.power * 10);
+    if (event.type === "explode") this.shake(0.4, 8);
     if (event.type === "shatter") {
       this.shake(0.15, 3);
       this.shardTime = 0;
