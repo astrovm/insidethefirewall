@@ -1,18 +1,23 @@
 // How Homer's car's engine sounds, like in The Simpsons: Hit & Run: it picks
 // a gear from the speed, and the engine's pitch climbs through each gear,
 // drops at each shift, revs in the air and while sliding, and whines in
-// reverse. This works out how much faster or slower to play it, as `pitch`.
+// reverse. This works out how much faster or slower to play Hit & Run's own
+// engine loop for Homer's car, as `pitch`, with the game's settings for it.
 
 import { METER, TOP_SPEED_KMH, type Car } from "./car.ts";
 
-/** The gear shift points, as parts of top speed, and each gear's pitch range. */
-const SHIFT_POINTS = [0.01, 0.3, 0.45, 0.7, 0.85, 0.95, 1];
-/** Guesses that suit a made-up engine. */
-const GEAR_PITCH = [0.9, 2.1] as const;
-const IDLE_PITCH = 0.8;
-const REVERSE = { kmh: 50, pitch: [1.1, 2] } as const;
-const IN_AIR = { gas: 2.2, idle: 0.9 } as const;
-const POWERSLIDE = [0.9, 2.1] as const;
+/** Homer's car's gear shift points, as parts of top speed, each gear's pitch range, idling, and backing up. */
+const SHIFT_POINTS = [0.01, 0.64, 0.95, 1];
+const GEAR_PITCH: readonly (readonly [number, number])[] = [
+  [0.42, 1.67],
+  [1.17, 1.82],
+  [1.45, 1.75],
+];
+const IDLE_PITCH = 0.46;
+const REVERSE = { kmh: 50, pitch: [0.5, 1.37] } as const;
+/** Guesses: revving in the air, and sliding with the gas held. */
+const IN_AIR = { gas: 1.8, idle: 0.6 } as const;
+const POWERSLIDE = [0.6, 1.7] as const;
 /** The pitch changes at most an octave in this long. */
 const SECONDS_PER_OCTAVE = 0.5;
 
@@ -57,5 +62,6 @@ export function gearPitch(gear: number, kmh: number): number {
   const bottom = SHIFT_POINTS[gear - 1]! * TOP_SPEED_KMH;
   const top = SHIFT_POINTS[gear]! * TOP_SPEED_KMH;
   const through = Math.max(0, Math.min(1, (kmh - bottom) / (top - bottom)));
-  return GEAR_PITCH[0] + (GEAR_PITCH[1] - GEAR_PITCH[0]) * through;
+  const [low, high] = GEAR_PITCH[gear - 1]!;
+  return low + (high - low) * through;
 }

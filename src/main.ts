@@ -1,5 +1,5 @@
 import { buildMask, fetchAll, loadImage } from "./assets.ts";
-import { Audio, shuffled } from "./audio.ts";
+import { Audio, SHAR_FILES, shuffled } from "./audio.ts";
 import { costumes, createClassic, sounds } from "./game/classic.ts";
 import { bindKey, canBind, Controls, defaultKeys, keyLabel, MOVES, moveForKey, type Move } from "./input.ts";
 import type { Costume } from "./engine/sprite.ts";
@@ -91,6 +91,7 @@ async function main(): Promise<void> {
   const soundFiles = [
     ...Object.keys(sounds).map((name) => `sounds/${name}.${name === "laser" || name === "meow" ? "wav" : "mp3"}`),
     ...SONGS.filter((name) => !(name in sounds)).map((name) => `sounds/${name}.mp3`),
+    ...SHAR_FILES,
   ];
   const [files] = await Promise.all([
     fetchAll([...allCostumes.map((c) => `costumes/${c.file}`), ...soundFiles], (fraction) => {
@@ -380,26 +381,47 @@ async function main(): Promise<void> {
         }
         break;
       case "drive":
-        audio.synth("honk");
+        audio.effect("horn");
         status.textContent = "Homer's car! Steer with left and right, speed up with up, brake with down, Space for the handbrake, H for the horn. Run over the virus.";
         break;
       case "smash":
       case "splat":
-        audio.synth("shatter");
+        audio.effect("virusDestroyed");
         break;
       case "hop":
+        audio.effect("jump");
+        break;
       case "kick":
         audio.synth("whoosh");
         break;
+      case "step":
+        audio.effect("step");
+        break;
+      case "footLand":
+        audio.effect("land");
+        break;
+      case "carLand":
+        audio.effect("carLand", 0.5 + 0.5 * event.power);
+        break;
+      case "launch":
+        if (game.third) audio.effect("virusLaser");
+        break;
+      case "hit":
+        if (game.third) audio.effect("zapped");
+        break;
       case "crash":
-        audio.synth("crash", event.power);
+        // Small knocks, then medium and large crashes, as hard as they hit.
+        audio.effect(event.power === 0 ? "crashSmall" : event.power < 0.5 ? "crashMedium" : "crashLarge", 0.7 + 0.3 * event.power);
+        break;
+      case "bounce":
+        audio.synth("bounce", event.power);
         break;
       case "explode":
-        audio.synth("explode");
+        audio.effect("explode");
         status.textContent = "Homer's car blew up!";
         break;
       case "coin":
-        audio.synth("coin");
+        audio.effect("coin");
         break;
       case "appear":
         audio.synth("appear");
@@ -581,7 +603,7 @@ async function main(): Promise<void> {
     }
     const move = moveForKey(event.key, settings.keys);
     // H honks Homer's horn, while driving, and K kicks, on foot.
-    if (!move && key === "h" && !paused && !event.repeat && game.third?.car.driving) audio.synth("honk");
+    if (!move && key === "h" && !paused && !event.repeat && game.third?.car.driving) audio.effect("horn");
     if (!move && key === "k" && !paused && !event.repeat && game.third) controls.kick();
     if (!move || paused) return;
     event.preventDefault();

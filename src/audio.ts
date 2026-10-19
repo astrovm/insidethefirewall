@@ -16,16 +16,13 @@ interface Song {
 }
 
 /** Short sounds made on the fly, for cues the 2013 game had no sound for. */
-export type Synth = "whoosh" | "appear" | "tick" | "shatter" | "portal" | "brick" | "honk" | "crash" | "explode" | "coin";
+export type Synth = "whoosh" | "appear" | "tick" | "shatter" | "portal" | "brick" | "bounce";
 
 /** Square wave notes for the blip sounds: frequencies, how long each is, and how loud. */
 const blips: Partial<Record<Synth, { notes: number[]; length: number; level: number; type?: OscillatorType }>> = {
   appear: { notes: [660, 990], length: 0.07, level: 0.08 },
   tick: { notes: [1200], length: 0.04, level: 0.06 },
   brick: { notes: [880], length: 0.05, level: 0.07 },
-  // Two low notes at once would be a chord; one after the other honks.
-  honk: { notes: [330, 262, 330, 262], length: 0.12, level: 0.09, type: "sawtooth" },
-  coin: { notes: [1319, 1760], length: 0.06, level: 0.06 },
 };
 
 /** What the car sounds like this frame: the engine's pitch, 1 for idle-ish, the gas, how hard the tires skid and how hurt it is. */
@@ -36,8 +33,37 @@ export interface CarSound {
   damage: number;
 }
 
-/** A made-up engine: a low buzz, filtered brighter with the gas. Its pitch 1 is this many hertz. */
-const ENGINE_HERTZ = 38;
+/**
+ * The Simpsons: Hit & Run's own sounds, for the 3D world: the files each one
+ * picks from, how loud the game plays it, and how much its pitch varies
+ * either way, as the game does. The horn is cut short.
+ */
+export const SHAR_EFFECTS = {
+  coin: { files: ["coin-1", "coin-2", "coin-3"], trim: 0.48, vary: 0 },
+  crashSmall: { files: ["crash-small-1", "crash-small-2", "crash-small-3"], trim: 0.75, vary: 0.1 },
+  crashMedium: { files: ["crash-medium-1", "crash-medium-2", "crash-medium-3"], trim: 0.75, vary: 0.1 },
+  crashLarge: { files: ["crash-large-1", "crash-large-2", "crash-large-3"], trim: 0.77, vary: 0.1 },
+  explode: { files: ["explode-1", "explode-2"], trim: 0.95, vary: 0.1 },
+  carLand: { files: ["car-land-1", "car-land-2"], trim: 0.6, vary: 0.1 },
+  horn: { files: ["horn"], trim: 0.9, vary: 0, length: 0.45 },
+  jump: { files: ["jump-1", "jump-2"], trim: 0.42, vary: 0.1 },
+  step: { files: ["step-1", "step-2", "step-3"], trim: 0.67, vary: 0.1 },
+  land: { files: ["land"], trim: 0.41, vary: 0.1 },
+  virusLaser: { files: ["virus-laser"], trim: 0.81, vary: 0 },
+  virusDestroyed: { files: ["virus-destroyed"], trim: 0.8, vary: 0 },
+  zapped: { files: ["zapped"], trim: 1, vary: 0 },
+} satisfies Record<string, { files: string[]; trim: number; vary: number; length?: number }>;
+export type SharEffect = keyof typeof SHAR_EFFECTS;
+/** The car's loops: Homer's car's engine, the tires skidding, and a hurt engine. */
+const CAR_LOOPS = { engine: 0.51, skid: 0.6, damaged: 0.8 } as const;
+/** Kept as WAV, so they loop without a gap. */
+const LOOPED = new Set(["horn", ...Object.keys(CAR_LOOPS)]);
+/** Every Hit & Run sound file, as served. */
+export const SHAR_FILES = [...new Set([...Object.values(SHAR_EFFECTS).flatMap((effect) => effect.files), ...Object.keys(CAR_LOOPS)])].map(
+  (name) => `sounds/shar/${name}.${LOOPED.has(name) ? "wav" : "mp3"}`,
+);
+/** How loud the game's sounds play, at their trim, next to the rest. */
+const SHAR_LEVEL = 0.6;
 
 /** Plays the game's sounds. Each sprite plays one copy of a sound at a time, like Scratch. */
 export class Audio {
@@ -56,8 +82,8 @@ export class Audio {
   private musicRate = 1;
   private level = 1;
   private noise: AudioBuffer | null = null;
-  /** The car's engine, tires and rattle, made once and kept. */
-  private car: { engine: OscillatorNode[]; filter: BiquadFilterNode; engineGain: GainNode; skidGain: GainNode; rattleGain: GainNode } | null = null;
+  /** The car's engine, tires and hurt engine, made once and kept. */
+  private car: { engine: AudioBufferSourceNode; engineGain: GainNode; skidGain: GainNode; damagedGain: GainNode } | null = null;
 
   constructor() {
     this.output.connect(this.context.destination);
@@ -176,54 +202,55 @@ export class Audio {
   }
 
   /**
-   * The car's engine, squealing tires and, once it's hurt, a rattle, playing
-   * on while driving. Null quiets them.
+   * The car's engine, squealing tires and, once it's hurt, its sputter,
+   * playing on while driving, with Hit & Run's own loops. The engine plays
+   * faster or slower as its pitch says. Null quiets them.
    */
   setCar(sound: CarSound | null): void {
     if (!sound && !this.car) return;
     const ctx = this.context;
     const now = ctx.currentTime;
     if (!this.car) {
-      this.noise ??= noiseBuffer(ctx, 0.3);
-      const filter = ctx.createBiquadFilter();
-      filter.type = "lowpass";
-      filter.Q.value = 4;
-      const engineGain = ctx.createGain();
-      engineGain.gain.value = 0;
-      filter.connect(engineGain).connect(this.effectsOutput);
-      // A sawtooth and a square an octave down, a little out of tune, for a rough idle.
-      const engine = (["sawtooth", "square"] as const).map((type) => {
-        const oscillator = ctx.createOscillator();
-        oscillator.type = type;
-        oscillator.connect(filter);
-        oscillator.start();
-        return oscillator;
-      });
-      const noise = (filterType: BiquadFilterType, frequency: number, q: number) => {
+      const loop = (name: keyof typeof CAR_LOOPS) => {
         const source = ctx.createBufferSource();
-        source.buffer = this.noise;
+        source.buffer = this.buffers.get(`shar/${name}`) ?? null;
         source.loop = true;
-        const band = ctx.createBiquadFilter();
-        band.type = filterType;
-        band.frequency.value = frequency;
-        band.Q.value = q;
         const gain = ctx.createGain();
         gain.gain.value = 0;
-        source.connect(band).connect(gain).connect(this.effectsOutput);
+        source.connect(gain).connect(this.effectsOutput);
         source.start();
-        return gain;
+        return { source, gain };
       };
-      this.car = { engine, filter, engineGain, skidGain: noise("bandpass", 1300, 4), rattleGain: noise("lowpass", 300, 1) };
+      const engine = loop("engine");
+      this.car = { engine: engine.source, engineGain: engine.gain, skidGain: loop("skid").gain, damagedGain: loop("damaged").gain };
     }
-    const { engine, filter, engineGain, skidGain, rattleGain } = this.car;
-    const hertz = ENGINE_HERTZ * (sound?.pitch ?? 1);
-    engine[0]!.frequency.setTargetAtTime(hertz, now, 0.03);
-    engine[1]!.frequency.setTargetAtTime(hertz / 2 + 0.7, now, 0.03);
-    filter.frequency.setTargetAtTime(sound?.gas ? hertz * 9 : hertz * 4, now, 0.08);
-    engineGain.gain.setTargetAtTime(sound ? (sound.gas ? 0.09 : 0.06) : 0, now, 0.06);
-    skidGain.gain.setTargetAtTime(sound ? sound.skid * 0.12 : 0, now, 0.05);
+    const { engine, engineGain, skidGain, damagedGain } = this.car;
+    engine.playbackRate.setTargetAtTime(sound?.pitch ?? 1, now, 0.03);
+    engineGain.gain.setTargetAtTime(sound ? CAR_LOOPS.engine * SHAR_LEVEL * (sound.gas ? 1 : 0.8) : 0, now, 0.06);
+    skidGain.gain.setTargetAtTime(sound ? sound.skid * CAR_LOOPS.skid * SHAR_LEVEL : 0, now, 0.05);
     // Hit & Run's engine starts sounding damaged at 40% damage.
-    rattleGain.gain.setTargetAtTime(sound && sound.damage > 0.4 ? (sound.damage - 0.4) * 0.25 : 0, now, 0.1);
+    const damaged = sound && sound.damage > 0.4 ? Math.min(1, (sound.damage - 0.4) / 0.4) : 0;
+    damagedGain.gain.setTargetAtTime(damaged * CAR_LOOPS.damaged * SHAR_LEVEL, now, 0.1);
+  }
+
+  /** Plays one of Hit & Run's sounds, picking one of its files and pitch, as loud as `power`. */
+  effect(name: SharEffect, power = 1): void {
+    const effect: { files: string[]; trim: number; vary: number; length?: number } = SHAR_EFFECTS[name];
+    const buffer = this.buffers.get(`shar/${effect.files[Math.floor(Math.random() * effect.files.length)]!}`);
+    if (!buffer) return;
+    const ctx = this.context;
+    const now = ctx.currentTime;
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.playbackRate.value = 1 + (Math.random() * 2 - 1) * effect.vary;
+    const gain = ctx.createGain();
+    gain.gain.value = effect.trim * SHAR_LEVEL * power;
+    source.connect(gain).connect(this.effectsOutput);
+    source.start(now);
+    if (effect.length) {
+      gain.gain.setTargetAtTime(0, now + effect.length, 0.03);
+      source.stop(now + effect.length + 0.2);
+    }
   }
 
   /** Plays a short made-up sound through the sound effects volume, as hard as `power` for crashes. */
@@ -232,35 +259,6 @@ export class Audio {
     const now = ctx.currentTime;
     const gain = ctx.createGain();
     gain.connect(this.effectsOutput);
-    if (name === "crash" || name === "explode") {
-      // A crunch of noise, and a thump under it. An explosion is longer and deeper.
-      const explode = name === "explode";
-      const length = explode ? 1.4 : 0.35;
-      this.noise ??= noiseBuffer(ctx, 0.3);
-      const source = ctx.createBufferSource();
-      source.buffer = this.noise;
-      source.loop = true;
-      const filter = ctx.createBiquadFilter();
-      filter.type = "lowpass";
-      filter.frequency.setValueAtTime(explode ? 2400 : 1800, now);
-      filter.frequency.exponentialRampToValueAtTime(explode ? 120 : 300, now + length);
-      const loud = explode ? 0.7 : 0.2 + 0.5 * power;
-      gain.gain.setValueAtTime(loud, now);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + length);
-      source.connect(filter).connect(gain);
-      source.start(now);
-      source.stop(now + length);
-      const thump = ctx.createOscillator();
-      thump.frequency.setValueAtTime(explode ? 90 : 120, now);
-      thump.frequency.exponentialRampToValueAtTime(30, now + length);
-      const thumpGain = ctx.createGain();
-      thumpGain.gain.setValueAtTime(loud, now);
-      thumpGain.gain.exponentialRampToValueAtTime(0.0001, now + length);
-      thump.connect(thumpGain).connect(this.effectsOutput);
-      thump.start(now);
-      thump.stop(now + length);
-      return;
-    }
     if (name === "whoosh") {
       // A burst of noise swept upward, like air rushing past.
       this.noise ??= noiseBuffer(ctx, 0.3);
@@ -290,6 +288,19 @@ export class Audio {
       gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
       source.connect(filter).connect(gain);
       source.start(now);
+      return;
+    }
+    if (name === "bounce") {
+      // A ball's boing: a quick drop in pitch, as loud as it hit.
+      const oscillator = ctx.createOscillator();
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(420, now);
+      oscillator.frequency.exponentialRampToValueAtTime(110, now + 0.14);
+      gain.gain.setValueAtTime(0.05 + 0.2 * power, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+      oscillator.connect(gain);
+      oscillator.start(now);
+      oscillator.stop(now + 0.16);
       return;
     }
     if (name === "portal") {
