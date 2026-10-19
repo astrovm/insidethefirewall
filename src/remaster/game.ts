@@ -113,18 +113,19 @@ export const PORTAL_BOTTOM = GROUND_Y - 45;
 export const PORTAL_TOP = GROUND_Y + 45;
 /**
  * The bonus round, like Breakout: the player is the paddle, the virus the
- * ball, and the floor's bricks float up to be broken. Every few bricks give a heart.
+ * ball, and the floor's bricks float up to the top of the room, where the
+ * monitor was, to be broken. Every few bricks give a heart.
  */
-export const BRICKS = { columns: 8, rows: 3, left: -224, top: 40, width: 56, height: 16 } as const;
+export const BRICKS = { columns: 8, rows: 4, left: -224, top: 170, width: 56, height: 16 } as const;
 export const BRICKS_PER_HEART = 8;
-export const PADDLE = { y: GROUND_Y - 22, width: 64, height: 10 } as const;
+export const PADDLE = { y: GROUND_Y - 22, width: 72, height: 10 } as const;
 const PADDLE_SPEED = PLAYER_SPEED * 0.8;
 export const BALL_RADIUS = 9;
-const BALL_SPEED = 260;
-const BALL_SPEEDUP = 6;
+const BALL_SPEED = 240;
+const BALL_SPEEDUP = 4;
 /** The bricks float up this long, then the ball goes on its own if jump wasn't pressed. */
-export const BRICKS_RISE = 0.6;
-const BALL_WAIT = 1.2;
+export const BRICKS_RISE = 0.8;
+const BALL_WAIT = 1.4;
 /** Clearing every brick also gives a shield for this long. */
 const BREAKOUT_SHIELD = 3;
 /**
@@ -1063,6 +1064,7 @@ export class Game {
     this.thrown = false;
     player.visible = false;
     virus.visible = false;
+    this.monitor.visible = false;
     this.events.push({ type: "breakout" });
   }
 
@@ -1145,6 +1147,7 @@ export class Game {
     player.visible = true;
     player.setXY(round.paddle, GROUND_Y);
     player.setCostume("normal");
+    this.monitor.visible = true;
     virus.visible = true;
     this.respawnVirus();
     this.invincible = Math.max(this.invincible, 1);
