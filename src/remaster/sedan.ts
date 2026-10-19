@@ -1,9 +1,10 @@
-// Homer's car from The Simpsons: Hit & Run, drawn with WebGL: with its own
-// textures, and a depth buffer so its parts, and the player sitting in it,
-// cover each other the right way. The rest of the 3D world is canvas 2D, so
-// the car is drawn on its own canvas and pasted in.
+// Homer's car from The Simpsons: Hit & Run, and the player, drawn with WebGL:
+// the car with its own textures, and a depth buffer so their parts, and the
+// player sitting in the car, cover each other the right way. The rest of the
+// 3D world is canvas 2D, so they're drawn on their own canvas and pasted in.
 
 import { STAGE_HEIGHT, STAGE_WIDTH } from "../engine/sprite.ts";
+import type { Rig } from "./rig.ts";
 import type { View } from "./render.ts";
 import { SEDAN_MATERIALS, SEDAN_PARTS } from "./sedan-model.ts";
 
@@ -12,8 +13,13 @@ type Rgb = [number, number, number];
 
 /** World units in a centimeter of the car: about three times as long as the player is tall. */
 export const SEDAN_SCALE = 0.32;
+/** World units in a meter of the player, and how high their middle is, in meters. */
+const METER_UNITS = SEDAN_SCALE * 100;
+const PERSON_MIDDLE = 0.9;
 /** Where the driver's hips go, on the seat behind the wheel, in centimeters. */
 export const DRIVER_SEAT: Vec = [-48, 42, 6];
+/** Where the player's feet go, sitting in the driver's seat, in centimeters. */
+export const SEAT: Vec = [-48, 18, -20];
 
 /** What the car is drawn with: the 3D camera's view of the world. */
 export interface SedanCamera {
@@ -22,10 +28,29 @@ export interface SedanCamera {
   toCamera(point: Vec): Vec;
 }
 
-/** Faces drawn in one color each, already lit: the player in the driver's seat. */
+/** Faces drawn in one color each, already lit, or a color for each corner. */
 export interface ColoredFace {
   corners: Vec[];
   color: Rgb;
+  colors?: Rgb[];
+}
+
+/** The player posed, in meters as modeled, and where they stand: or sitting in the car, if `seated`. `roll` tips them over, tumbling. */
+export interface PersonPlace {
+  positions: Float32Array;
+  normals: Float32Array;
+  at: Vec;
+  heading: number;
+  scale: number;
+  seated: boolean;
+  roll?: number;
+}
+
+/** What to draw together, covering each other the right way. */
+export interface SedanScene {
+  car?: SedanPlace;
+  person?: PersonPlace;
+  faces?: ColoredFace[];
 }
 
 /** Where the car is: its middle on the floor, which way it points, and how big it is. */
@@ -111,6 +136,8 @@ export class SedanRenderer {
   private readonly indexBuffer: WebGLBuffer;
   private readonly extraVertexBuffer: WebGLBuffer;
   private readonly extraIndexBuffer: WebGLBuffer;
+  /** The player's skin, once it's loaded: its colors and triangles, and room for its corners. */
+  private person: { colors: Float32Array; count: number; vertices: Float32Array; vertexBuffer: WebGLBuffer; indexBuffer: WebGLBuffer } | null = null;
   /** Where each part's triangles start in the index buffer, and how many corners they have. */
   private readonly ranges: { material: number; start: number; count: number }[] = [];
   private readonly uniforms: Record<"center" | "focal" | "depth" | "alpha" | "paint" | "burnt", WebGLUniformLocation | null>;
@@ -189,18 +216,7 @@ export class SedanRenderer {
 
     // Each texture starts as its average color, until its image loads.
     this.white = this.solid([255, 255, 255]);
-    this.textures = SEDAN_MATERIALS.map((material) => {
-      const texture = this.solid(material.color);
-      const image = new Image();
-      image.onload = () => {
-        gl.bindTexture(gl.TEXTURE_2D, texture);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-        gl.generateMipmap(gl.TEXTURE_2D);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-      };
-      image.src = `assets/sedan/${material.file}`;
-      return texture;
-    });
+    this.textures = SEDAN_MATERIALS.map((material) => this.load(`assets/sedan/${material.file}`, material.color));
   }
 
   private solid([r, g, b]: Rgb): WebGLTexture {
@@ -215,11 +231,41 @@ export class SedanRenderer {
     return texture;
   }
 
+  /** Gets the player's skin on `rig` ready to draw. */
+  setPerson(rig: Rig): void {
+    const gl = this.gl;
+    const indexBuffer = gl.createBuffer()!;
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(rig.skin.indices), gl.STATIC_DRAW);
+    const colors = new Float32Array(rig.skin.color);
+    this.person = { colors, count: rig.skin.indices.length, vertices: new Float32Array(rig.corners * STRIDE), vertexBuffer: gl.createBuffer()!, indexBuffer };
+  }
+
+  /** Whether the player's skin is ready to draw. */
+  get hasPerson(): boolean {
+    return this.person !== null;
+  }
+
+  /** A texture that's `color` until its image at `src` loads. */
+  private load(src: string, color: Rgb): WebGLTexture {
+    const gl = this.gl;
+    const texture = this.solid(color);
+    const image = new Image();
+    image.onload = () => {
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+      gl.generateMipmap(gl.TEXTURE_2D);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    };
+    image.src = src;
+    return texture;
+  }
+
   /**
-   * Draws the car at `place`, lit by `light`, with `extra` faces in it, on a
-   * see-through canvas as big as `size`, and returns that canvas.
+   * Draws the car, the player and the faces in `scene`, lit by `light`, on a
+   * see-through canvas as big as `size`, and returns where on it they are.
    */
-  draw(camera: SedanCamera, size: { width: number; height: number }, place: SedanPlace, light: Vec, extra: ColoredFace[]): SedanDrawn {
+  draw(camera: SedanCamera, size: { width: number; height: number }, scene: SedanScene, light: Vec): SedanDrawn {
     const { gl, canvas } = this;
     if (canvas.width !== size.width || canvas.height !== size.height) [canvas.width, canvas.height] = [size.width, size.height];
     gl.viewport(0, 0, canvas.width, canvas.height);
@@ -227,40 +273,41 @@ export class SedanRenderer {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.DEPTH_TEST);
     gl.disable(gl.CULL_FACE);
+    gl.disable(gl.BLEND);
+    gl.depthMask(true);
+    gl.uniform1f(this.uniforms.alpha, 1);
+    gl.uniform1f(this.uniforms.burnt, 0);
+    gl.uniform4f(this.uniforms.paint, 0, 0, 0, 0);
 
     const { view, focal } = camera;
     gl.uniform2f(this.uniforms.center, ((view.x + (STAGE_WIDTH / 2) * view.scale) * 2) / canvas.width - 1, 1 - ((view.y + (STAGE_HEIGHT / 2) * view.scale) * 2) / canvas.height);
     gl.uniform2f(this.uniforms.focal, (focal * view.scale * 2) / canvas.width, (focal * view.scale * 2) / canvas.height);
     gl.uniform2f(this.uniforms.depth, (FAR + NEAR) / (FAR - NEAR), (-2 * FAR * NEAR) / (FAR - NEAR));
 
-    // Turned, sized and put in place, then seen from the camera, on the CPU: it's only a thousand corners.
-    const [cos, sin] = [Math.cos(place.heading), Math.sin(place.heading)];
-    const k = SEDAN_SCALE * place.scale;
-    const pose = place.pose;
-    const [pitchCos, pitchSin] = [Math.cos(pose?.pitch ?? 0), Math.sin(pose?.pitch ?? 0)];
-    const [rollCos, rollSin] = [Math.cos(pose?.roll ?? 0), Math.sin(pose?.roll ?? 0)];
-    const [spinCos, spinSin] = [Math.cos(pose?.wheelTurn ?? 0), Math.sin(pose?.wheelTurn ?? 0)];
-    const [steerCos, steerSin] = [Math.cos(pose?.steer ?? 0), Math.sin(pose?.steer ?? 0)];
-    const center = pose?.center ?? 0;
-    const { model, vertices, wheelOf, axles } = this;
     // Where the picture is on the canvas, to paste only that.
     let [left, top, right, bottom] = [Infinity, Infinity, -Infinity, -Infinity];
-    for (let i = 0, j = 0, n = 0; i < model.length; i += 8, j += STRIDE, n++) {
-      let [x, y, z] = [model[i]!, model[i + 1]!, model[i + 2]!];
-      let [nx, ny, nz] = [model[i + 5]! / 100, model[i + 6]! / 100, model[i + 7]! / 100];
-      let lift = place.at[1];
-      const wheel = wheelOf[n]!;
-      if (pose && wheel >= 0) {
-        // A wheel rolls round its axle, the front ones steer, and each stays on its own bit of floor.
-        const [ax, ay, az] = axles[wheel]!;
-        let [dy, dz] = [y - ay, z - az];
-        [dy, dz] = [dy * spinCos - dz * spinSin, dy * spinSin + dz * spinCos];
-        let dx = x - ax;
-        if (wheel >= 2) [dx, dz] = [dx * steerCos + dz * steerSin, -dx * steerSin + dz * steerCos];
-        [x, y, z] = [ax + dx, ay + dy, az + dz];
-        lift = pose.wheelY[wheel]!;
-      } else if (pose) {
-        // The body leans on its springs around its center of mass.
+    const seen = (point: Vec): Vec => {
+      const at = camera.toCamera(point);
+      if (at[2] > NEAR) {
+        const scale = (camera.focal / at[2]) * view.scale;
+        const sx = view.x + (STAGE_WIDTH / 2) * view.scale + at[0] * scale;
+        const sy = view.y + (STAGE_HEIGHT / 2) * view.scale - at[1] * scale;
+        [left, top, right, bottom] = [Math.min(left, sx), Math.min(top, sy), Math.max(right, sx), Math.max(bottom, sy)];
+      }
+      return at;
+    };
+    const lit = (nx: number, ny: number, nz: number) => 0.45 + 0.55 * Math.max(0, nx * light[0] + ny * light[1] + nz * light[2]);
+
+    // A point on the car's body, in cm, and its normal, leaning on its springs and put in place.
+    const place = scene.car;
+    const [cos, sin] = [Math.cos(place?.heading ?? 0), Math.sin(place?.heading ?? 0)];
+    const k = SEDAN_SCALE * (place?.scale ?? 1);
+    const pose = place?.pose;
+    const [pitchCos, pitchSin] = [Math.cos(pose?.pitch ?? 0), Math.sin(pose?.pitch ?? 0)];
+    const [rollCos, rollSin] = [Math.cos(pose?.roll ?? 0), Math.sin(pose?.roll ?? 0)];
+    const center = pose?.center ?? 0;
+    const onBody = (x: number, y: number, z: number, nx: number, ny: number, nz: number): [Vec, number] => {
+      if (pose) {
         let [dy, dz] = [y - BODY_PIVOT_HEIGHT, z - center];
         [dy, dz] = [dy * pitchCos + dz * pitchSin, -dy * pitchSin + dz * pitchCos];
         [ny, nz] = [ny * pitchCos + nz * pitchSin, -ny * pitchSin + nz * pitchCos];
@@ -269,42 +316,100 @@ export class SedanRenderer {
         [nx, ny] = [nx * rollCos - ny * rollSin, nx * rollSin + ny * rollCos];
         [x, y, z] = [dx, BODY_PIVOT_HEIGHT + dy, center + dz];
       }
-      const seen = camera.toCamera([place.at[0] + (x * cos + z * sin) * k, lift + y * k, place.at[2] + (-x * sin + z * cos) * k]);
-      const lit = 0.45 + 0.55 * Math.max(0, (nx * cos + nz * sin) * light[0] + ny * light[1] + (-nx * sin + nz * cos) * light[2]);
-      vertices.set(seen, j);
-      vertices[j + 3] = model[i + 3]! / 1024;
-      vertices[j + 4] = model[i + 4]! / 1024;
-      vertices[j + 5] = vertices[j + 6] = vertices[j + 7] = lit;
-      if (seen[2] > NEAR) {
-        const scale = (camera.focal / seen[2]) * view.scale;
-        const sx = view.x + STAGE_WIDTH / 2 * view.scale + seen[0] * scale;
-        const sy = view.y + STAGE_HEIGHT / 2 * view.scale - seen[1] * scale;
-        [left, top, right, bottom] = [Math.min(left, sx), Math.min(top, sy), Math.max(right, sx), Math.max(bottom, sy)];
-      }
-    }
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.DYNAMIC_DRAW);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
-    this.attributes();
-    gl.uniform1f(this.uniforms.alpha, 1);
-    gl.uniform1f(this.uniforms.burnt, place.burnt ?? 0);
-    gl.disable(gl.BLEND);
-    gl.depthMask(true);
-    const glass = this.ranges.filter((range) => SEDAN_MATERIALS[range.material]!.glass);
-    for (const range of this.ranges) {
-      if (glass.includes(range)) continue;
-      const paint = place.paint && PAINTED.has(SEDAN_MATERIALS[range.material]!.file) ? place.paint : null;
-      gl.uniform4f(this.uniforms.paint, (paint?.[0] ?? 0) / 255, (paint?.[1] ?? 0) / 255, (paint?.[2] ?? 0) / 255, paint ? 1 : 0);
-      this.drawRange(range);
-    }
-    gl.uniform4f(this.uniforms.paint, 0, 0, 0, 0);
+      const at = place!.at;
+      return [seen([at[0] + (x * cos + z * sin) * k, at[1] + y * k, at[2] + (-x * sin + z * cos) * k]), lit(nx * cos + nz * sin, ny, -nx * sin + nz * cos)];
+    };
 
+    let glass: { material: number; start: number; count: number }[] = [];
+    if (place) {
+      // Turned, sized and put in place, then seen from the camera, on the CPU: it's only a thousand corners.
+      const [spinCos, spinSin] = [Math.cos(pose?.wheelTurn ?? 0), Math.sin(pose?.wheelTurn ?? 0)];
+      const [steerCos, steerSin] = [Math.cos(pose?.steer ?? 0), Math.sin(pose?.steer ?? 0)];
+      const { model, vertices, wheelOf, axles } = this;
+      for (let i = 0, j = 0, n = 0; i < model.length; i += 8, j += STRIDE, n++) {
+        let [x, y, z] = [model[i]!, model[i + 1]!, model[i + 2]!];
+        const [nx, ny, nz] = [model[i + 5]! / 100, model[i + 6]! / 100, model[i + 7]! / 100];
+        const wheel = wheelOf[n]!;
+        let corner: Vec;
+        let shade: number;
+        if (pose && wheel >= 0) {
+          // A wheel rolls round its axle, the front ones steer, and each stays on its own bit of floor.
+          const [ax, ay, az] = axles[wheel]!;
+          let [dy, dz] = [y - ay, z - az];
+          [dy, dz] = [dy * spinCos - dz * spinSin, dy * spinSin + dz * spinCos];
+          let dx = x - ax;
+          if (wheel >= 2) [dx, dz] = [dx * steerCos + dz * steerSin, -dx * steerSin + dz * steerCos];
+          [x, y, z] = [ax + dx, ay + dy, az + dz];
+          corner = seen([place.at[0] + (x * cos + z * sin) * k, pose.wheelY[wheel]! + y * k, place.at[2] + (-x * sin + z * cos) * k]);
+          shade = lit(nx * cos + nz * sin, ny, -nx * sin + nz * cos);
+        } else [corner, shade] = onBody(x, y, z, nx, ny, nz);
+        vertices.set(corner, j);
+        vertices[j + 3] = model[i + 3]! / 1024;
+        vertices[j + 4] = model[i + 4]! / 1024;
+        vertices[j + 5] = vertices[j + 6] = vertices[j + 7] = shade;
+      }
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.DYNAMIC_DRAW);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
+      this.attributes();
+      gl.uniform1f(this.uniforms.burnt, place.burnt ?? 0);
+      glass = this.ranges.filter((range) => SEDAN_MATERIALS[range.material]!.glass);
+      for (const range of this.ranges) {
+        if (glass.includes(range)) continue;
+        const paint = place.paint && PAINTED.has(SEDAN_MATERIALS[range.material]!.file) ? place.paint : null;
+        gl.uniform4f(this.uniforms.paint, (paint?.[0] ?? 0) / 255, (paint?.[1] ?? 0) / 255, (paint?.[2] ?? 0) / 255, paint ? 1 : 0);
+        this.drawRange(range);
+      }
+      gl.uniform4f(this.uniforms.paint, 0, 0, 0, 0);
+      gl.uniform1f(this.uniforms.burnt, 0);
+    }
+
+    const skin = this.person;
+    const person = scene.person;
+    if (skin && person && (!person.seated || place)) {
+      const { positions, normals } = person;
+      const [hCos, hSin] = [Math.cos(person.heading), Math.sin(person.heading)];
+      const [rCos, rSin] = [Math.cos(person.roll ?? 0), Math.sin(person.roll ?? 0)];
+      const m = METER_UNITS * person.scale;
+      const [sx, sy, sz] = SEAT;
+      for (let i = 0, j = 0; i < positions.length; i += 3, j += STRIDE) {
+        let [x, y, z] = [positions[i]!, positions[i + 1]!, positions[i + 2]!];
+        let [nx, ny, nz] = [normals[i]!, normals[i + 1]!, normals[i + 2]!];
+        if (person.roll) {
+          // Tipped over around their middle.
+          [x, y] = [x * rCos - (y - PERSON_MIDDLE) * rSin, x * rSin + (y - PERSON_MIDDLE) * rCos + PERSON_MIDDLE];
+          [nx, ny] = [nx * rCos - ny * rSin, nx * rSin + ny * rCos];
+        }
+        let corner: Vec;
+        let shade: number;
+        // Sitting, they're part of the car's body, in its centimeters.
+        if (person.seated) [corner, shade] = onBody(sx + x * 100, sy + y * 100, sz + z * 100, nx, ny, nz);
+        else {
+          corner = seen([person.at[0] + (x * hCos + z * hSin) * m, person.at[1] + y * m, person.at[2] + (-x * hSin + z * hCos) * m]);
+          shade = lit(nx * hCos + nz * hSin, ny, -nx * hSin + nz * hCos);
+        }
+        skin.vertices.set(corner, j);
+        skin.vertices[j + 3] = skin.vertices[j + 4] = 0;
+        for (const k of [0, 1, 2]) skin.vertices[j + 5 + k] = skin.colors[i + k]! * shade;
+      }
+      gl.bindBuffer(gl.ARRAY_BUFFER, skin.vertexBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, skin.vertices, gl.DYNAMIC_DRAW);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, skin.indexBuffer);
+      this.attributes();
+      gl.bindTexture(gl.TEXTURE_2D, this.white);
+      gl.drawElements(gl.TRIANGLES, skin.count, gl.UNSIGNED_SHORT, 0);
+    }
+
+    const extra = scene.faces ?? [];
     if (extra.length > 0) {
       const extraVertices: number[] = [];
       const extraIndices: number[] = [];
       for (const face of extra) {
         const first = extraVertices.length / STRIDE;
-        for (const corner of face.corners) extraVertices.push(...camera.toCamera(corner), 0, 0, face.color[0] / 255, face.color[1] / 255, face.color[2] / 255);
+        for (const [i, corner] of face.corners.entries()) {
+          const color = face.colors?.[i] ?? face.color;
+          extraVertices.push(...seen(corner), 0, 0, color[0] / 255, color[1] / 255, color[2] / 255);
+        }
         for (let i = 1; i < face.corners.length - 1; i++) extraIndices.push(first, first + i, first + i + 1);
       }
       gl.bindBuffer(gl.ARRAY_BUFFER, this.extraVertexBuffer);
@@ -314,21 +419,23 @@ export class SedanRenderer {
       this.attributes();
       gl.bindTexture(gl.TEXTURE_2D, this.white);
       gl.drawElements(gl.TRIANGLES, extraIndices.length, gl.UNSIGNED_SHORT, 0);
+    }
+
+    if (glass.length > 0) {
+      // The windshield last, see-through, over whatever is behind it.
       gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
       this.attributes();
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      gl.depthMask(false);
+      gl.uniform1f(this.uniforms.alpha, 0.45);
+      for (const range of glass) this.drawRange(range);
+      gl.depthMask(true);
     }
-
-    // The windshield last, see-through, over whatever is behind it.
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-    gl.depthMask(false);
-    gl.uniform1f(this.uniforms.alpha, 0.45);
-    for (const range of glass) this.drawRange(range);
-    gl.depthMask(true);
-    // The player sitting in it can reach a little past the car.
-    const [x, y] = [Math.max(0, Math.floor(left) - 40), Math.max(0, Math.floor(top) - 40)];
-    const [width, height] = [Math.min(canvas.width, Math.ceil(right) + 40) - x, Math.min(canvas.height, Math.ceil(bottom) + 40) - y];
+    // A little room round the edges, for smoothing.
+    const [x, y] = [Math.max(0, Math.floor(left) - 4), Math.max(0, Math.floor(top) - 4)];
+    const [width, height] = [Math.min(canvas.width, Math.ceil(right) + 4) - x, Math.min(canvas.height, Math.ceil(bottom) + 4) - y];
     return { canvas, x, y, width: Math.max(0, width), height: Math.max(0, height) };
   }
 

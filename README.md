@@ -21,7 +21,7 @@ Power-ups and surprises pay tribute to other games:
 - The **gravity gun** from Half-Life 2 catches the virus when it gets close and fires it back at the monitor.
 - The **portal gun** puts a portal on each wall. Walk into one and come out of the other, like in Portal. The virus can go through too.
 - The **bonus round** is Breakout: you're the paddle, the virus is the ball, and the floor's bricks float up. Every 8 bricks give a heart, and breaking them all fills your hearts.
-- The red pill from The Matrix, and a Homer³ 3D world inside the monitor. The floor goes on forever, with new shapes every 1600 units and roads along their edges. Homer's pink Family Sedan is parked there, the game's own model and textures from The Simpsons: Hit & Run. Walk into it to sit at the wheel and run the virus over. It plays like Hit & Run too:
+- The red pill from The Matrix, and a Homer³ 3D world inside the monitor. The floor goes on forever, with new shapes every 1600 units and roads along their edges. You become yourself as a Simpsons character, yellow skin and all, with brown hair, a blue hoodie, a backpack and jeans, moving with Hit & Run's moves: standing, walking, running, jumping, kicking, falling and flailing. The virus turns into a smooth cartoon version of its pixel art. Homer's pink Family Sedan is parked there, the game's own model and textures from Hit & Run. Walk into it to sit at the wheel and run the virus over. It plays like Hit & Run too:
   - The car physics, with the Family Sedan's tuning: 120 km/h top speed, grip that gives way into slides, and <kbd>Space</kbd> as the handbrake, for powerslides with up held.
   - Springs on each wheel: the body leans in turns, dips braking, and flies off the ramps.
   - The chase camera, swinging round behind the car.
@@ -29,6 +29,7 @@ Power-ups and surprises pay tribute to other games:
   - Crashes that spin cars and hurt them: smoke, then fire, then an explosion that throws the player out.
   - Traffic driving the roads, which crashes too.
   - Coins to grab, in the lanes and over the ramps. The game over screen counts them.
+  - On foot, you walk round the shapes, up the ramps and off their tops, but not through their walls. <kbd>Space</kbd> (or a gamepad's A) jumps, and again in the air for a double jump, high enough to land on the shapes' flat tops. <kbd>K</kbd> (or X) is a jump kick that knocks the virus away, or shatters it frozen. The virus splats on whatever it flies into.
   - The engine's gears and pitch, played on a made-up engine sound, with squealing tires. <kbd>H</kbd> honks the horn.
 
 The music is the 2013 song, "Flight" by Tristam, then "Nightcore - How Do You Do" (Nightcore Lab NCL), "Nightcore - Bad boy" (AliceBloodRabbit) and "Meg & Dia - Monster (Nightcore Dubstep Remix)" (theHimeyukichan), from YouTube. A new game starts with the 2013 song, then plays the rest in a random order, and each song fades into the next. A retry picks up from the song the last run reached. Its title shows at the top right when it starts.

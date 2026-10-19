@@ -50,11 +50,20 @@ import {
   cellShapes,
   THIRD_CELL,
   THIRD_IN,
+  THIRD_JUMP,
+  THIRD_RADIUS,
+  KICK_TIME,
+  shapesNear,
+  shapeTop,
+  standOn,
+  floorUnder,
+  THIRD_STEP,
+  type Shape,
   thirdCell,
   WRECK_BURN,
 } from "../src/remaster/game.ts";
 import { crashIntoRound, driveCar, HALF_WIDTH, HIT_POINTS, METER, parkedCar, type Car, type CarControls } from "../src/remaster/car.ts";
-import { cellCoins, cellRamp, ROAD_HALF_WIDTH, roadX, roadZ, TRAFFIC_COUNT } from "../src/remaster/streets.ts";
+import { cellCoins, cellRamp, rampHeight, ROAD_HALF_WIDTH, roadX, roadZ, TRAFFIC_COUNT } from "../src/remaster/streets.ts";
 import { ESCAPE_ZOOM, escapeZoom, fitStage, formatTime, toCanvas, toStage, zoomView } from "../src/remaster/render.ts";
 import { seeded } from "./support.ts";
 
@@ -1153,7 +1162,7 @@ describe("controls", () => {
     const controls = new Controls();
     controls.press("key:Space", "jump");
     controls.release("key:Space");
-    expect(controls.read()).toEqual({ ...noInput, jumpPressed: true });
+    expect(controls.read()).toEqual({ ...noInput, jumpPressed: true, hopPressed: true });
     expect(controls.read()).toEqual(noInput);
   });
 
@@ -1173,6 +1182,21 @@ describe("controls", () => {
     controls.read();
     controls.press("key:Space", "jump");
     expect(controls.read()).toEqual({ ...noInput, jump: true, handbrake: true });
+  });
+
+  test("on foot, Space and pad A hop, other jump keys walk, and a kick counts once", () => {
+    const controls = new Controls();
+    controls.press("key:Space", "jump");
+    controls.press("pad:a", "jump");
+    expect(controls.read()).toMatchObject({ jump: true, jumpPressed: true, hopPressed: true, forward: false });
+    controls.press("key:ArrowUp", "jump");
+    expect(controls.read()).toMatchObject({ jump: true, jumpPressed: true, hopPressed: false, forward: true });
+    controls.releaseAll();
+    controls.press("pad:jump", "jump");
+    expect(controls.read()).toMatchObject({ gas: true, handbrake: false, hopPressed: false, forward: true });
+    controls.kick();
+    expect(controls.read().kickPressed).toBe(true);
+    expect(controls.read().kickPressed).toBe(false);
   });
 });
 
@@ -1704,6 +1728,184 @@ describe("the 3D world", () => {
     // A new run starts with none.
     game.start();
     expect(game.coins).toBe(0);
+  });
+
+  /** On foot in the 3D world, with the virus held still. */
+  function onFoot(): Game {
+    const game = started();
+    game.god = true;
+    game.cheat("dive");
+    run(game, THIRD_IN + 0.1);
+    game.third!.virus.warning = Infinity;
+    return game;
+  }
+  /** A shape with room all round it. */
+  const lonely = () => {
+    const shapes = [1, 2, 3].flatMap((i) => cellShapes(i, 0));
+    return shapes.find((s) => shapes.every((o) => o === s || Math.hypot(o.x - s.x, o.z - s.z) > s.r + o.r + 150))!;
+  };
+
+  test("the player walks round the shapes, not through them", () => {
+    const game = onFoot();
+    const p = game.third!.player;
+    const shape = lonely();
+    Object.assign(p, { x: shape.x, z: shape.z - shape.r - 60 });
+    run(game, 1, { forward: true });
+    expect(p.x).toBeCloseTo(shape.x, 6);
+    expect(p.z).toBeCloseTo(shape.z - shape.r - THIRD_RADIUS, 6);
+    // Sideways past it, sliding round.
+    Object.assign(p, { x: shape.x - shape.r - 60, z: shape.z + shape.r * 0.6 });
+    run(game, 1, { right: true });
+    expect(p.x).toBeGreaterThan(shape.x + shape.r);
+    expect(Math.hypot(p.x - shape.x, p.z - shape.z)).toBeGreaterThanOrEqual(shape.r + THIRD_RADIUS - 1e-6);
+  });
+
+  test("the player walks up a ramp, not into its walls, and falls off its top", () => {
+    const game = onFoot();
+    const p = game.third!.player;
+    const ramp = cellRamp(0, 0)!;
+    expect(ramp.heading).toBe(0);
+    Object.assign(p, { x: ramp.x, z: ramp.z - 40 });
+    run(game, 0.4, { forward: true });
+    expect(p.z).toBeGreaterThan(ramp.z + 40);
+    expect(p.y).toBeCloseTo(rampHeight(ramp, p.x, p.z), 6);
+    // Off the top end, up in the air, then down.
+    run(game, 0.3, { forward: true });
+    expect(p.z).toBeGreaterThan(ramp.z + ramp.length);
+    expect(p.y).toBeGreaterThan(0);
+    run(game, 1);
+    expect(p.y).toBe(0);
+    // The tall end and the high sides are walls.
+    Object.assign(p, { x: ramp.x, z: ramp.z + ramp.length + 60 });
+    run(game, 0.5, { down: true });
+    expect(p.z).toBeGreaterThan(ramp.z + ramp.length);
+    expect(p.y).toBe(0);
+    Object.assign(p, { x: ramp.x - ramp.width / 2 - 60, z: ramp.z + ramp.length * 0.7 });
+    run(game, 0.5, { right: true });
+    expect(p.x).toBeLessThan(ramp.x - ramp.width / 2);
+    expect(p.y).toBe(0);
+  });
+
+  test("up walks on foot, and Space jumps, again in the air, but not a third time", () => {
+    const game = onFoot();
+    const p = game.third!.player;
+    const z = p.z;
+    // Space holds jump, but only up held another way walks.
+    run(game, 0.3, { jump: true, handbrake: true });
+    expect(p.z).toBe(z);
+    run(game, 0.3, { jump: true, gas: true, forward: true });
+    expect(p.z).toBeGreaterThan(z + 50);
+    game.events.length = 0;
+    run(game, DT, { hopPressed: true });
+    expect([p.vy > 0, p.jumps]).toEqual([true, 1]);
+    let top = 0;
+    for (let i = 0; i < 0.5 / DT; i++) {
+      game.update(noInput);
+      top = Math.max(top, p.y);
+    }
+    // 1.4 m up.
+    expect(top / METER).toBeCloseTo(1.4, 1);
+    run(game, DT, { hopPressed: true });
+    expect(p.jumps).toBe(2);
+    expect(p.vy).toBeCloseTo(THIRD_JUMP - 16 * METER * DT, 6);
+    run(game, 0.1);
+    const vy = p.vy;
+    run(game, DT, { hopPressed: true });
+    expect(p.vy).toBeLessThan(vy);
+    expect(types(game.events).filter((t) => t === "hop")).toHaveLength(2);
+    run(game, 2);
+    expect([p.y, p.vy, p.jumps]).toEqual([0, 0, 0]);
+  });
+
+  test("a double jump lands on top of a shape, and walking off its edge falls", () => {
+    const game = onFoot();
+    const p = game.third!.player;
+    const shapes = [1, 2, 3, 4].flatMap((i) => [0, 1].flatMap((j) => cellShapes(i, j)));
+    const shape = shapes.find(
+      (s) => s.kind === "cylinder" && s.r * 1.4 < 80 && shapes.every((o) => o === s || Math.hypot(o.x - s.x, o.z - s.z) > s.r + o.r + 250),
+    )!;
+    const top = shape.r * 1.4;
+    Object.assign(p, { x: shape.x, z: shape.z - shape.r - THIRD_RADIUS - 5 });
+    run(game, DT, { hopPressed: true });
+    run(game, 0.3, { forward: true });
+    run(game, DT, { hopPressed: true, forward: true });
+    run(game, 0.3, { forward: true });
+    run(game, 0.5);
+    expect(Math.hypot(p.x - shape.x, p.z - shape.z)).toBeLessThan(shape.r);
+    expect([p.y, p.vy]).toEqual([top, 0]);
+    run(game, 1, { forward: true });
+    expect(p.y).toBe(0);
+    // A single jump doesn't reach it.
+    Object.assign(p, { x: shape.x, z: shape.z - shape.r - THIRD_RADIUS - 5 });
+    run(game, DT, { hopPressed: true });
+    run(game, 1, { forward: true });
+    expect(p.y).toBe(0);
+    expect(Math.hypot(p.x - shape.x, p.z - shape.z)).toBeGreaterThanOrEqual(shape.r + THIRD_RADIUS - 1e-6);
+  });
+
+  test("a kick knocks the virus away without hurting, and shatters it frozen", () => {
+    const game = onFoot();
+    const third = game.third!;
+    const { player: p, virus: v } = third;
+    Object.assign(p, { x: 600, z: 100, facing: 0 });
+    Object.assign(v, { x: 600, y: 0.8 * METER, z: 100 + 0.6 * METER, warning: 1 });
+    const health = game.health;
+    game.events.length = 0;
+    run(game, DT, { kickPressed: true });
+    expect(types(game.events)).toContain("kick");
+    run(game, 0.2);
+    expect(types(game.events)).toContain("smash");
+    expect(v.kicked).toBe(true);
+    // Away from the player, and up.
+    expect(v.dz).toBeGreaterThan(0.9);
+    expect(v.dy).toBeGreaterThan(0);
+    run(game, 1);
+    expect(game.health).toBe(health);
+    // Not again until the kick's over.
+    run(game, KICK_TIME);
+    game.powers.freeze = 5;
+    Object.assign(v, { x: p.x + Math.sin(p.facing) * 0.6 * METER, y: p.y + 0.8 * METER, z: p.z + Math.cos(p.facing) * 0.6 * METER, kicked: false });
+    game.events.length = 0;
+    run(game, DT, { kickPressed: true });
+    run(game, 0.2);
+    expect(types(game.events)).toContain("shatter");
+    expect(game.powers.freeze).toBe(0);
+  });
+
+  test("only flat tops and the top of a ball can be stood on", () => {
+    const at = { x: 0, z: 0, r: 40 };
+    const top = (kind: Shape["kind"], d: number) => standOn({ ...at, kind, top: kind === "post" ? 220 : shapeTop(kind, at.r) }, d, 0);
+    expect([top("cylinder", 39), top("cylinder", 41), top("box", 33), top("box", 35)]).toEqual([56, null, 56, null]);
+    expect([top("cone", 0), top("post", 0), top("sphere", 31)]).toEqual([null, null, null]);
+    expect(top("sphere", 0)).toBe(80);
+    expect(top("sphere", 24)).toBeCloseTo(40 + 32, 9);
+    // Only what's below the feet, or a step up, is under them.
+    const [cx, cz] = [3 * THIRD_CELL, 2 * THIRD_CELL];
+    const shape = shapesNear(cx, cz).find((s) => s.kind === "cylinder" || s.kind === "box")!;
+    expect(floorUnder(shape.x, shape.z, shape.top)).toBeGreaterThanOrEqual(shape.top);
+    expect(floorUnder(shape.x, shape.z, shape.top - THIRD_STEP - 1)).toBeLessThan(shape.top);
+  });
+
+  test("the shapes near a point are as tall as they're drawn", () => {
+    for (const shape of shapesNear(3 * THIRD_CELL, 2 * THIRD_CELL)) {
+      expect(shape.top).toBeCloseTo(shape.kind === "cone" ? shape.r * 2.5 : shape.kind === "sphere" ? shape.r * 2 : shape.r * 1.4, 9);
+    }
+  });
+
+  test("the virus splats on the shapes it flies into", () => {
+    const game = onFoot();
+    const third = game.third!;
+    const shape = lonely();
+    const health = game.health;
+    Object.assign(third.player, { x: shape.x + 150, z: shape.z });
+    Object.assign(third.virus, { x: shape.x, y: shape.r / 2, z: shape.z - shape.r - 30, dx: 0, dy: 0, dz: 1, warning: 0 });
+    game.events.length = 0;
+    run(game, 0.3);
+    expect(types(game.events)).toContain("splat");
+    expect(third.splats).toHaveLength(1);
+    expect(game.health).toBe(health);
+    // A new one, aiming again.
+    expect(third.virus.warning).toBeGreaterThan(0);
   });
 
   test("a car pushes the player on foot out of its way", () => {

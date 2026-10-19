@@ -352,9 +352,12 @@ async function main(): Promise<void> {
       case "pickup":
         if (event.full) status.textContent = `Full hearts. Shield for ${PENGUIN_SHIELD} seconds`;
         break;
+      case "dive":
+        audio.synth("whoosh");
+        status.textContent = "Walk with the arrows, Space to jump, again in the air, K to kick. Walk into the car to drive.";
+        break;
       case "nearMiss":
       case "escape":
-      case "dive":
         audio.synth("whoosh");
         break;
       case "shatter":
@@ -387,7 +390,12 @@ async function main(): Promise<void> {
         status.textContent = "Homer's car! Steer with left and right, speed up with up, brake with down, Space for the handbrake, H for the horn. Run over the virus.";
         break;
       case "smash":
+      case "splat":
         audio.synth("shatter");
+        break;
+      case "hop":
+      case "kick":
+        audio.synth("whoosh");
         break;
       case "crash":
         audio.synth("crash", event.power);
@@ -578,8 +586,9 @@ async function main(): Promise<void> {
       return;
     }
     const move = moveForKey(event.key, settings.keys);
-    // H honks Homer's horn, while driving.
+    // H honks Homer's horn, while driving, and K kicks, on foot.
     if (!move && key === "h" && !paused && !event.repeat && game.third?.car.driving) audio.synth("honk");
+    if (!move && key === "k" && !paused && !event.repeat && game.third) controls.kick();
     if (!move || paused) return;
     event.preventDefault();
     controls.press(`key:${event.code}`, move);
@@ -630,10 +639,11 @@ async function main(): Promise<void> {
   });
 
   // Gamepads: D-pad or left stick move, A jumps, Start pauses or starts.
-  const padStart = { down: false, jump: false };
+  const padStart = { down: false, jump: false, kick: false };
   const pollGamepads = () => {
     let start = false;
     let jump = false;
+    let kick = false;
     const held = new Set<string>();
     for (const pad of navigator.getGamepads?.() ?? []) {
       if (!pad) continue;
@@ -642,21 +652,28 @@ async function main(): Promise<void> {
       if (button(14) || ax < -0.5) held.add("left");
       if (button(15) || ax > 0.5) held.add("right");
       if (button(13) || ay > 0.5) held.add("down");
-      if (button(0) || button(12)) held.add("jump");
+      if (button(12) || ay < -0.5) held.add("jump");
+      if (button(0)) held.add("a");
       start ||= button(9);
       jump ||= button(0);
+      kick ||= button(2);
     }
     for (const move of ["left", "right", "down", "jump"] as const) {
       if (held.has(move) && !paused) controls.press(`pad:${move}`, move);
       else controls.release(`pad:${move}`);
     }
+    // A jumps too, and on foot in 3D it's the only jump there.
+    if (held.has("a") && !paused) controls.press("pad:a", "jump");
+    else controls.release("pad:a");
     if (start && !padStart.down) {
       if (game.phase === "title") play();
       else if (game.phase === "over") startGame();
       else setPaused(!paused);
     } else if (jump && !padStart.jump && game.canRetry && !fader.busy) startGame();
+    if (kick && !padStart.kick && !paused) controls.kick();
     padStart.down = start;
     padStart.jump = jump;
+    padStart.kick = kick;
   };
 
   $("loading").hidden = true;
