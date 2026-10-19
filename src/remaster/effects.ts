@@ -3,6 +3,9 @@
 
 import type { GameEvent } from "./game.ts";
 
+/** Seconds the pieces of a broken virus fly. */
+export const SHARDS = 0.7;
+
 export class Effects {
   /** Seconds of shake left, and how strong it is in stage pixels. */
   shakeTime = 0;
@@ -10,10 +13,31 @@ export class Effects {
   /** Red flash on hits, from 1 down to 0. */
   flash = 0;
 
+  /** Pieces of a broken frozen virus, flying apart and falling, in stage pixels. */
+  shards: { x: number; y: number; vx: number; vy: number; spin: number; size: number }[] = [];
+  /** Seconds since the virus broke. */
+  shardTime = Infinity;
+
   constructor(private readonly random: () => number = Math.random) {}
 
   handle(event: GameEvent): void {
     if (event.type === "shield") this.shake(0.1, 2);
+    if (event.type === "shatter") {
+      this.shake(0.15, 3);
+      this.shardTime = 0;
+      this.shards = Array.from({ length: 14 }, () => {
+        const angle = this.random() * Math.PI * 2;
+        const speed = 120 + this.random() * 220;
+        return {
+          x: event.x,
+          y: event.y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed + 120,
+          spin: (this.random() - 0.5) * 20,
+          size: 4 + this.random() * 6,
+        };
+      });
+    }
     if (event.type === "escape") this.shake(0.3, 4);
     if (event.type !== "hit") return;
     this.shake(event.last ? 0.3 : 0.15, event.last ? 4 : 2);
@@ -33,12 +57,20 @@ export class Effects {
   }
 
   update(seconds: number): void {
+    this.shardTime += seconds;
+    for (const shard of this.shards) {
+      shard.x += shard.vx * seconds;
+      shard.y += shard.vy * seconds;
+      shard.vy -= 900 * seconds;
+    }
+    if (this.shardTime > SHARDS) this.shards = [];
     this.shakeTime = Math.max(0, this.shakeTime - seconds);
     if (this.shakeTime === 0) this.shakeStrength = 0;
     this.flash = Math.max(0, this.flash - seconds * 4);
   }
 
   clear(): void {
+    this.shards = [];
     this.shakeTime = 0;
     this.shakeStrength = 0;
     this.flash = 0;

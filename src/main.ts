@@ -30,7 +30,7 @@ const SONGS = ["music", "how-do-you-do", "bad-boy", "monster"];
 const powerUpMessages: Record<PowerUpKind, (seconds: number) => string> = {
   jetpack: (seconds) => `Jetpack for ${seconds} seconds. Fly with up and down.`,
   shield: (seconds) => `Shield for ${seconds} seconds`,
-  freeze: (seconds) => `Virus frozen for ${seconds} seconds`,
+  freeze: (seconds) => `Virus frozen for ${seconds} seconds. Touch it to break it.`,
   pill: (seconds) => `Red pill for ${seconds} seconds. The room is code, and time slows down when the virus is close.`,
 };
 
@@ -332,6 +332,9 @@ async function main(): Promise<void> {
       case "escape":
       case "dive":
         audio.synth("whoosh");
+        break;
+      case "shatter":
+        audio.synth("shatter");
         break;
       case "appear":
         audio.synth("appear");

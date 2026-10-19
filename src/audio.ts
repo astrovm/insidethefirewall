@@ -16,7 +16,7 @@ interface Song {
 }
 
 /** Short sounds made on the fly, for cues the 2013 game had no sound for. */
-export type Synth = "whoosh" | "appear" | "tick";
+export type Synth = "whoosh" | "appear" | "tick" | "shatter";
 
 /** Plays the game's sounds. Each sprite plays one copy of a sound at a time, like Scratch. */
 export class Audio {
@@ -171,6 +171,20 @@ export class Audio {
       gain.gain.setValueAtTime(0.0001, now);
       gain.gain.exponentialRampToValueAtTime(0.35, now + 0.05);
       gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.3);
+      source.connect(filter).connect(gain);
+      source.start(now);
+      return;
+    }
+    if (name === "shatter") {
+      // Ice breaking: a sharp, bright crack of noise.
+      this.noise ??= noiseBuffer(ctx, 0.3);
+      const source = ctx.createBufferSource();
+      source.buffer = this.noise;
+      const filter = ctx.createBiquadFilter();
+      filter.type = "highpass";
+      filter.frequency.value = 2500;
+      gain.gain.setValueAtTime(0.5, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
       source.connect(filter).connect(gain);
       source.start(now);
       return;

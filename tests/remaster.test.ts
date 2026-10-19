@@ -1012,18 +1012,30 @@ describe("power-ups", () => {
     expect(game.health).toBe(1);
   });
 
-  test("a frozen virus stays put and can't hurt, then carries on", () => {
+  test("a frozen virus stays put, then carries on", () => {
+    const game = withPowerUp("freeze");
+    launch(game);
+    grab(game);
+    game.virus.setXY(0, 50);
+    run(game, POWER_UP_TIME.freeze);
+    expect([game.virus.x, game.virus.y]).toEqual([0, 50]);
+    run(game, DT);
+    expect([game.virus.x, game.virus.y]).not.toEqual([0, 50]);
+  });
+
+  test("touching the frozen virus breaks it without a hit, ends the freeze, and a new one comes out of the monitor", () => {
     const game = withPowerUp("freeze");
     game.health = 2;
     launch(game);
     grab(game);
+    game.events.length = 0;
     game.virus.setXY(game.player.x, game.player.y);
-    const at = [game.virus.x, game.virus.y];
-    run(game, POWER_UP_TIME.freeze);
-    expect([game.virus.x, game.virus.y]).toEqual(at);
-    expect(game.health).toBe(2);
-    run(game, DT);
-    expect(game.health).toBe(1);
+    const at = { x: game.virus.x, y: game.virus.y };
+    game.update(noInput);
+    expect(game.events).toEqual([{ type: "shatter", ...at }]);
+    expect([game.health, game.powers.freeze]).toEqual([2, 0]);
+    expect([game.virus.x, game.virus.y]).toEqual([VIRUS_SPAWN.x, VIRUS_SPAWN.y]);
+    expect(game.warning).toBeGreaterThan(0);
   });
 
   test("freezing also stops the virus waiting in the monitor", () => {

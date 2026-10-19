@@ -1,6 +1,6 @@
 import { STAGE_HEIGHT, STAGE_WIDTH, type Costume, type Sprite } from "../engine/sprite.ts";
 import { interpolate, type CostumeImages } from "../render.ts";
-import type { Effects } from "./effects.ts";
+import { SHARDS, type Effects } from "./effects.ts";
 import { DIVE_ZOOM, ThirdRenderer } from "./third.ts";
 import {
   ESCAPE_BURST,
@@ -158,6 +158,7 @@ export class RemasterRenderer {
     }
     if (third && third.time >= DIVE_ZOOM) this.third.draw(game, third, this.view);
     else this.drawRoom(game, between, playing);
+    if (playing && !third) this.drawShards(effects);
     const white = whiteOut(game);
     if (white > 0) {
       ctx.fillStyle = `rgba(255, 255, 255, ${white})`;
@@ -239,6 +240,26 @@ export class RemasterRenderer {
         if (flash > 0) this.fillScreen(`rgba(255, 255, 255, ${flash})`);
       }
     }
+  }
+
+  /** Ice pieces of a broken virus. */
+  private drawShards(effects: Effects): void {
+    if (effects.shards.length === 0) return;
+    const ctx = this.ctx;
+    const fade = Math.max(0, 1 - effects.shardTime / SHARDS);
+    ctx.save();
+    for (const [i, shard] of effects.shards.entries()) {
+      const [x, y] = toCanvas(this.view, shard.x, shard.y);
+      const size = shard.size * this.view.scale;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(shard.spin * effects.shardTime);
+      ctx.globalAlpha = fade;
+      ctx.fillStyle = i % 3 === 0 ? "#ffffff" : i % 3 === 1 ? "#66ccff" : "#9a9a2a";
+      ctx.fillRect(-size / 2, -size / 2, size, size);
+      ctx.restore();
+    }
+    ctx.restore();
   }
 
   /** Blue electricity crackling around the screen as the player dives through it. */

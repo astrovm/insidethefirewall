@@ -169,6 +169,7 @@ export type GameEvent =
   | { type: "nearMiss" }
   | { type: "escape"; x: number; y: number }
   | { type: "dive" }
+  | { type: "shatter"; x: number; y: number }
   | { type: "lost"; time: number };
 
 /** The player's size, in percent, as in 2013. */
@@ -577,8 +578,11 @@ export class Game {
   }
 
   private moveThirdVirus(): void {
-    if (this.powers.freeze > 0) return;
     const { player: p, virus: v } = this.third!;
+    if (this.powers.freeze > 0) {
+      if (Math.hypot(v.x - p.x, v.y - THIRD_CHEST, v.z - p.z) < THIRD_HIT) this.shatter(v.x, v.y, () => this.respawnThirdVirus());
+      return;
+    }
     if (v.warning > 0) {
       const aim = () => {
         const [dx, dy, dz] = [p.x - v.x, THIRD_CHEST - v.y, p.z - v.z];
@@ -608,6 +612,14 @@ export class Game {
         return;
       }
     }
+  }
+
+  /** Breaks the frozen virus into pieces, which ends the freeze, and brings a new one. */
+  private shatter(x: number, y: number, respawn: () => void): void {
+    this.powers.freeze = 0;
+    this.closeCall = false;
+    respawn();
+    this.events.push({ type: "shatter", x, y });
   }
 
   /** With the red pill, time slows down while the flying virus is close. */
@@ -698,8 +710,12 @@ export class Game {
 
 
   private moveVirus(): void {
-    // Frozen in place, and harmless until it thaws. Or stuck in the room on the screen.
-    if (this.powers.freeze > 0 || !this.virus.visible) return;
+    if (!this.virus.visible) return;
+    // Frozen in place, and harmless: touching it breaks it, and a new one comes out of the monitor.
+    if (this.powers.freeze > 0) {
+      if (this.virus.isTouching(this.player)) this.shatter(this.virus.x, this.virus.y, () => this.respawnVirus());
+      return;
+    }
     const virus = this.virus;
     if (this.warning > 0) {
       if (this.warning > AIM_LOCK + 1e-9) this.target = { x: this.player.x, y: this.player.y };
