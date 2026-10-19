@@ -9,7 +9,7 @@ Scratch videogame I made in 2013, now remastered in TypeScript with the original
 
 The remaster is a normal game loop at 60 updates a second, drawn as big as the window allows, with menus, pause, fades, touch buttons and settings. It uses the original art and sounds.
 
-It also takes ideas from classic games: hearts capped at 5 like Zelda, music that speeds up on long runs like Space Invaders, instant retry like Super Meat Boy, and a replay of the last 2 seconds on the game over screen. For comfort, **Settings** has a game speed slider like Celeste's Assist Mode, and the keys can be changed.
+It also takes ideas from classic games: hearts capped at 5 like Zelda, instant retry like Super Meat Boy, and a replay of the last 2 seconds on the game over screen. For comfort, **Settings** has a game speed slider like Celeste's Assist Mode, and the keys can be changed.
 
 The music is the 2013 song, then "Nightcore - How Do You Do" (Nightcore Lab NCL), "Nightcore - Bad boy" (AliceBloodRabbit) and "Meg & Dia - Monster (Nightcore Dubstep Remix)" (theHimeyukichan), from YouTube. Each game starts with the 2013 song, then plays the rest in a random order, and each song fades into the next.
 

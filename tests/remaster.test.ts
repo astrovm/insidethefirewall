@@ -31,7 +31,6 @@ import {
   WARNING_LONGEST,
   WARNING_SHORTEST,
   MAX_HEALTH,
-  MUSIC_SPEEDUP_FROM,
   NEAR_MISS,
   PENGUIN_SHIELD,
   REPLAY_SECONDS,
@@ -43,6 +42,7 @@ import {
   toOuterRoom,
   type GameEvent,
   type Input,
+  type PowerUpKind,
 } from "../src/remaster/game.ts";
 import { ESCAPE_ZOOM, escapeZoom, fitStage, formatTime, toCanvas, toStage, zoomView } from "../src/remaster/render.ts";
 import { seeded } from "./support.ts";
@@ -775,7 +775,7 @@ describe("difficulty", () => {
 
 describe("power-ups", () => {
   /** A game with a power-up of a kind on stage, far from the player. */
-  function withPowerUp(kind: "jetpack" | "shield" | "freeze"): Game {
+  function withPowerUp(kind: PowerUpKind): Game {
     const game = started();
     game.powerUp.setCostume(kind);
     game.powerUp.setXY(200, GROUND_Y);
@@ -1183,22 +1183,6 @@ describe("hearts", () => {
     game.powers.shield = 8;
     grabPenguin(game);
     expect(game.powers.shield).toBeCloseTo(8 - DT, 6);
-  });
-});
-
-describe("music", () => {
-  test("speeds up a semitone a minute from 2:00, four times at most, and starts over each game", () => {
-    const game = started();
-    parkVirus(game);
-    const rateAt = (time: number) => {
-      game.time = time;
-      return game.musicRate;
-    };
-    expect([0, 60, MUSIC_SPEEDUP_FROM - DT].map(rateAt)).toEqual([1, 1, 1]);
-    const semitones = (rate: number) => Math.round(12 * Math.log2(rate) * 1e6) / 1e6;
-    expect([120, 179.9, 180, 240, 300, 600, 6000].map((t) => semitones(rateAt(t)))).toEqual([1, 1, 2, 3, 4, 4, 4]);
-    game.start();
-    expect(game.musicRate).toBe(1);
   });
 });
 

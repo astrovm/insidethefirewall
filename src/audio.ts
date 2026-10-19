@@ -61,13 +61,22 @@ export class Audio {
     this.effectsOutput.gain.value = Math.min(1, Math.max(0, effects));
   }
 
+  /** Paused by the game, so a key or click doesn't bring the sound back. */
+  private held = false;
+
   /** Browsers only allow sound after the player interacts with the page. */
   unlock(): void {
-    if (this.context.state === "suspended") void this.context.resume();
+    if (!this.held && this.context.state === "suspended") void this.context.resume();
   }
 
   pause(): void {
+    this.held = true;
     void this.context.suspend();
+  }
+
+  resume(): void {
+    this.held = false;
+    this.unlock();
   }
 
   /** Plays a sound for the remaster. A new copy cuts off the last one, as in the 2013 game. */

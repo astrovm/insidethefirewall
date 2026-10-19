@@ -355,16 +355,14 @@ try:
         day.wait_for_function("() => synths.includes('whoosh')", timeout=2000)
         print("Cues sound when things show up, end, and fly close")
 
-        # The 2013 song plays first, then the rest in a random order, each fading into the next, and the music speeds up on long runs.
+        # The 2013 song plays first, then the rest in a random order, each fading into the next.
         playlist = day.evaluate("[...insideTheFirewall.audio.playlist]")
         assert playlist[0] == "music" and sorted(playlist) == sorted(["music", "how-do-you-do", "bad-boy", "monster"]), playlist
         assert day.evaluate("insideTheFirewall.audio.songName") == playlist[0]
         assert day.evaluate("insideTheFirewall.audio.song.source.playbackRate.value") == 1
         day.evaluate("() => { const song = insideTheFirewall.audio.song; song.position = song.end - 2.5 }")
         day.wait_for_function(f"() => insideTheFirewall.audio.songName === '{playlist[1]}'", timeout=5000)
-        day.evaluate("() => { insideTheFirewall.game.time = 300 }")
-        day.wait_for_function("() => Math.abs(insideTheFirewall.audio.song.source.playbackRate.value - 2 ** (4 / 12)) < 1e-3", timeout=5000)
-        print("Songs fade into each other, and the music speeds up on long runs")
+        print("Songs fade into each other")
 
         day.evaluate("""() => {
           const g = insideTheFirewall.game;

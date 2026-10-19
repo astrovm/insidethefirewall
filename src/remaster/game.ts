@@ -54,13 +54,6 @@ export const WARNING_SHORTEST = 0.3;
 export const AIM_LOCK = 0.15;
 /** A virus that flies by this close, in stage pixels, without a hit is a near miss. */
 export const NEAR_MISS = 8;
-/**
- * The music speeds up one semitone a minute from 2:00, four times at most, so
- * it stays in tune and only long runs hear it.
- */
-export const MUSIC_SPEEDUP_FROM = 120;
-const MUSIC_STEP_EVERY = 60;
-const MUSIC_STEPS = 4;
 /** The penguin, an extra life, comes after 20 s, then every 20 to 30 s. In 2013 it came every 10 s. */
 export const PICKUP_FIRST = 20;
 const PICKUP_EVERY = [20, 30] as const;
@@ -703,11 +696,6 @@ export class Game {
     return WARNING_LONGEST - (WARNING_LONGEST - WARNING_SHORTEST) * progress;
   }
 
-  /** How fast the music plays: a semitone faster each minute from 2:00. */
-  get musicRate(): number {
-    const steps = Math.floor((this.time - MUSIC_SPEEDUP_FROM) / MUSIC_STEP_EVERY + 1e-9) + 1;
-    return 2 ** (Math.min(MUSIC_STEPS, Math.max(0, steps)) / 12);
-  }
 
   private moveVirus(): void {
     // Frozen in place, and harmless until it thaws. Or stuck in the room on the screen.

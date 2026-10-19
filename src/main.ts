@@ -270,7 +270,7 @@ async function main(): Promise<void> {
       audio.pause();
       status.textContent = "Paused";
     } else {
-      audio.unlock();
+      audio.resume();
       status.textContent = "";
     }
     showMenus();
@@ -287,7 +287,7 @@ async function main(): Promise<void> {
     leaveGameOver();
     (document.activeElement as HTMLElement | null)?.blur();
     paused = false;
-    audio.unlock();
+    audio.resume();
     fader.to(() => {
       runSpeed = settings.speed;
       game.start();
@@ -306,7 +306,7 @@ async function main(): Promise<void> {
   const toTitle = () => {
     leaveGameOver();
     paused = false;
-    audio.unlock();
+    audio.resume();
     fader.to(() => {
       game.toTitle();
       showMenus();
@@ -565,7 +565,7 @@ async function main(): Promise<void> {
     }
     if (updates === MAX_UPDATES_PER_FRAME) pending = 0;
     // Bullet time slows the music down too.
-    if (game.phase === "playing") audio.setMusicRate(game.musicRate * game.timeScale);
+    if (game.phase === "playing") audio.setMusicRate(game.timeScale);
     audio.update();
     if (!paused) effects.update(elapsed / 1000);
     renderer.fade = fader.value;
