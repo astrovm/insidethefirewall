@@ -5,6 +5,12 @@ import type { GameEvent } from "./game.ts";
 
 /** Seconds the pieces of a broken virus fly. */
 export const SHARDS = 0.7;
+/** Colors of the pieces: ice for a frozen virus, the virus itself when it's stomped, the cube when it breaks. */
+const ICE = ["#ffffff", "#66ccff", "#9a9a2a"];
+const VIRUS = ["#ff0000", "#b51000", "#000008"];
+const CUBE = ["#c0c0c0", "#808080", "#ff3d8b"];
+/** Seconds the HEV suit's warning stays on screen. */
+export const CRITICAL = 2.5;
 
 export class Effects {
   /** Seconds of shake left, and how strong it is in stage pixels. */
@@ -17,14 +23,19 @@ export class Effects {
   shards: { x: number; y: number; vx: number; vy: number; spin: number; size: number }[] = [];
   /** Seconds since the virus broke. */
   shardTime = Infinity;
+  shardColors = ICE;
+  /** Seconds left of the HEV suit's warning. */
+  critical = 0;
 
   constructor(private readonly random: () => number = Math.random) {}
 
   handle(event: GameEvent): void {
     if (event.type === "shield") this.shake(0.1, 2);
-    if (event.type === "shatter") {
+    if (event.type === "critical") this.critical = CRITICAL;
+    if (event.type === "shatter" || event.type === "stomp" || event.type === "cube") {
       this.shake(0.15, 3);
       this.shardTime = 0;
+      this.shardColors = event.type === "stomp" ? VIRUS : event.type === "cube" ? CUBE : ICE;
       this.shards = Array.from({ length: 14 }, () => {
         const angle = this.random() * Math.PI * 2;
         const speed = 120 + this.random() * 220;
@@ -67,6 +78,7 @@ export class Effects {
     this.shakeTime = Math.max(0, this.shakeTime - seconds);
     if (this.shakeTime === 0) this.shakeStrength = 0;
     this.flash = Math.max(0, this.flash - seconds * 4);
+    this.critical = Math.max(0, this.critical - seconds);
   }
 
   clear(): void {
@@ -74,5 +86,6 @@ export class Effects {
     this.shakeTime = 0;
     this.shakeStrength = 0;
     this.flash = 0;
+    this.critical = 0;
   }
 }

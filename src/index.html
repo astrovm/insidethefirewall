@@ -6,6 +6,9 @@
   <title>Inside the firewall</title>
   <meta name="theme-color" content="#000000">
   <link rel="icon" href="icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+  <meta name="mobile-web-app-capable" content="yes">
   <style>
     html, body {
       margin: 0;
@@ -82,6 +85,7 @@
       top: 56px;
       right: 8px;
       display: grid;
+      grid-template-columns: auto auto;
       gap: 4px;
       padding: 8px;
       border-radius: 8px;
@@ -93,6 +97,7 @@
       display: none;
     }
     #cheats h2 {
+      grid-column: 1 / -1;
       margin: 0 0 2px;
       font-size: 13px;
       color: #fe9501;
@@ -338,6 +343,10 @@
     #over-menu .stat p {
       margin: 0;
     }
+    #over-menu .stat .cake {
+      font-size: calc(12 * var(--s));
+      font-style: italic;
+    }
     #over-menu .stat p:first-child {
       font-size: calc(20 * var(--s));
     }
@@ -449,7 +458,7 @@
         <h2 id="settings-title">Settings</h2>
         <label>Music <input id="music-volume" type="range" min="0" max="100" step="5"></label>
         <label>Sound effects <input id="effects-volume" type="range" min="0" max="100" step="5"></label>
-        <label>Game speed <span class="speed"><input id="game-speed" type="range" min="70" max="100" step="5"><output id="game-speed-value" for="game-speed">100%</output></span></label>
+        <label>Game speed <span class="speed"><input id="game-speed" type="range" min="5" max="500" step="5"><output id="game-speed-value" for="game-speed">100%</output></span></label>
         <fieldset>
           <legend>Touch buttons</legend>
           <span class="choices">
@@ -475,6 +484,7 @@
           <p>Time <span id="over-time">0</span> <strong id="new-best" hidden>New best!</strong></p>
           <p>Best <span id="over-best">0</span></p>
           <p id="over-grabs" class="grabs"></p>
+          <p id="over-cake" class="cake" hidden>The cake is a lie.</p>
         </div>
         <span id="replay-label">Replay</span>
         <div class="actions">
@@ -497,6 +507,12 @@
       <button type="button" data-cheat="powerUpNow"><kbd>9</kbd>Power-up now</button>
       <button type="button" data-cheat="penguinNow"><kbd>0</kbd>Penguin now</button>
       <button type="button" data-cheat="skip"><kbd>-</kbd>Skip 30 s</button>
+      <button type="button" data-cheat="shoes"><kbd>z</kbd>Speed shoes</button>
+      <button type="button" data-cheat="gravity"><kbd>x</kbd>Gravity gun</button>
+      <button type="button" data-cheat="portal"><kbd>c</kbd>Portal gun</button>
+      <button type="button" data-cheat="cube"><kbd>v</kbd>Companion Cube</button>
+      <button type="button" data-cheat="ball"><kbd>b</kbd>Bonus round</button>
+      <button type="button" data-cheat="carNow"><kbd>n</kbd>Car now</button>
     </section>
     <div id="corner">
       <button id="open-settings" class="icon" type="button" title="Settings" aria-label="Settings" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 1h4l.6 2.6 1.6.9 2.5-.9 2 3.4-2 1.8v2.4l2 1.8-2 3.4-2.5-.9-1.6.9L12 19H8l-.6-2.6-1.6-.9-2.5.9-2-3.4 2-1.8V8.8l-2-1.8 2-3.4 2.5.9 1.6-.9zm2 6a3 3 0 100 6 3 3 0 000-6z"/></svg></button>

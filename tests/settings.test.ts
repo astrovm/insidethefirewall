@@ -42,15 +42,15 @@ describe("settings", () => {
     expect(parseSettings('{"speed":"slow","keys":[]}')).toEqual(defaults);
   });
 
-  test("keep the game speed between 70% and 100%, in 5% steps", () => {
-    expect([0.85, 0.7, 1, 0.5, 2, 0.82, 0.83, 0.725].map((speed) => gameSpeed(speed))).toEqual([
-      0.85, 0.7, 1, 0.7, 1, 0.8, 0.85, 0.75,
+  test("keep the game speed between 5% and 500%, in 5% steps", () => {
+    expect([0.85, 0.05, 1, 0.01, 2, 9, 0.82, 0.83, 0.725].map((speed) => gameSpeed(speed))).toEqual([
+      0.85, 0.05, 1, 0.05, 2, 5, 0.8, 0.85, 0.75,
     ]);
     expect([NaN, Infinity, "1", null].map((speed) => gameSpeed(speed, 0.9))).toEqual([0.9, 0.9, 0.9, 0.9]);
     fc.assert(
       fc.property(fc.double(), (speed) => {
         const result = parseSettings(JSON.stringify({ speed })).speed;
-        return result >= 0.7 && result <= 1 && Number.isInteger(Math.round(result * 1e9) / 5e7);
+        return result >= 0.05 && result <= 5 && Number.isInteger(Math.round(result * 1e9) / 5e7);
       }),
     );
   });

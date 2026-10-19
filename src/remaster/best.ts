@@ -1,6 +1,7 @@
 // The best time, kept in the browser.
 
 import { formatTime } from "./render.ts";
+import { FASTEST } from "./settings.ts";
 
 const KEY = "insidethefirewall.best";
 
@@ -33,7 +34,7 @@ export class Best {
     const { seconds, speed } = data as Record<string, unknown>;
     if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds <= 0) return;
     this.seconds = Math.floor(seconds);
-    this.playedAt = typeof speed === "number" && speed > 0 && speed < 1 ? speed : 1;
+    this.playedAt = typeof speed === "number" && speed > 0 && speed <= FASTEST ? speed : 1;
   }
 
   get value(): number {
@@ -45,10 +46,10 @@ export class Best {
     return this.playedAt;
   }
 
-  /** The best time, with the game speed when it wasn't full speed. */
+  /** The best time, with the game speed when it wasn't normal speed. */
   get label(): string {
     const time = formatTime(this.seconds);
-    return this.playedAt < 1 ? `${time} at ${Math.round(this.playedAt * 100)}%` : time;
+    return this.playedAt !== 1 ? `${time} at ${Math.round(this.playedAt * 100)}%` : time;
   }
 
   /** Saves the time if it's a new best, and says whether it was. */

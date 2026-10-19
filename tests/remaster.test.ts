@@ -28,6 +28,7 @@ import {
   POWER_UP_FIRST,
   POWER_UP_SHOWN,
   POWER_UP_TIME,
+  POWER_UPS,
   WARNING_LONGEST,
   WARNING_SHORTEST,
   MAX_HEALTH,
@@ -798,7 +799,7 @@ describe("power-ups", () => {
       expect(game.powerUp.visible).toBe(false);
       run(game, DT);
       expect(game.powerUp.visible).toBe(true);
-      expect(["jetpack", "shield", "freeze", "pill"]).toContain(game.powerUpKind);
+      expect(POWER_UPS).toContain(game.powerUpKind);
       expect(Math.abs(game.powerUp.x)).toBeLessThanOrEqual(200);
       expect(game.powerUp.y).toBeGreaterThanOrEqual(GROUND_Y);
       expect(game.powerUp.y).toBeLessThanOrEqual(GROUND_Y + 60);
@@ -814,7 +815,7 @@ describe("power-ups", () => {
     game.invincible = Infinity;
     game.player.setXY(-230, GROUND_Y);
     let last = -1;
-    for (let i = 0; i < Math.round(600 / DT); i++) {
+    for (let i = 0; i < Math.round(3000 / DT); i++) {
       const before = game.powerUp.visible;
       game.update(noInput);
       game.health = 9;
@@ -824,7 +825,7 @@ describe("power-ups", () => {
         last = game.time;
       }
     }
-    expect([...kinds].sort()).toEqual(["freeze", "jetpack", "pill", "shield"]);
+    expect([...kinds].sort()).toEqual([...POWER_UPS].sort());
     expect(Math.min(...gaps)).toBeGreaterThanOrEqual(30 - 1e-6);
     expect(Math.max(...gaps)).toBeLessThanOrEqual(45 + 1e-6);
   });
@@ -876,7 +877,7 @@ describe("power-ups", () => {
   });
 
   test("grabbing one gives its power for a while", () => {
-    for (const kind of ["jetpack", "shield", "freeze", "pill"] as const) {
+    for (const kind of ["jetpack", "shield", "freeze", "pill", "shoes", "gravity", "portal", "cube"] as const) {
       const game = withPowerUp(kind);
       parkVirus(game);
       game.events.length = 0;
@@ -1052,12 +1053,12 @@ describe("power-ups", () => {
     game.powers.shield = 3;
     game.powers.freeze = 0;
     die(game);
-    expect(game.powers).toEqual({ jetpack: 0, shield: 0, freeze: 0, pill: 0 });
+    expect(Object.values(game.powers).every((left) => left === 0)).toBe(true);
     expect(game.powerUp.visible).toBe(false);
 
     game.start();
-    expect([game.powers, game.powerUp.visible, game.flying]).toEqual([{ jetpack: 0, shield: 0, freeze: 0, pill: 0 }, false, false]);
-    expect(game.layers.map((s) => s.name)).toEqual(["pickup", "powerUp", "player", "monitor", "virus"]);
+    expect([Object.values(game.powers).every((left) => left === 0), game.powerUp.visible, game.flying]).toEqual([true, false, false]);
+    expect(game.layers.map((s) => s.name)).toEqual(["pickup", "powerUp", "player", "monitor", "virus", "car"]);
   });
 });
 

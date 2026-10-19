@@ -1,25 +1,26 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { artFiles, flame, freeze, jetpack, palette, pill, shield, toSvg } from "../src/remaster/art.ts";
-import { flameCostumes, POWER_UPS, powerUpCostumes } from "../src/remaster/game.ts";
+import { artFiles, ball, car, cube, flame, freeze, gravity, jetpack, palette, pill, portal, shield, shoes, toSvg } from "../src/remaster/art.ts";
+import { carCostumes, flameCostumes, POWER_UPS, powerUpCostumes } from "../src/remaster/game.ts";
 
 const size = (rows: string[]) => [Math.max(...rows.map((r) => r.length)), rows.length];
 
 test("every pixel uses a palette color, and every color is real", () => {
-  for (const rows of [jetpack, shield, freeze, pill, ...flame]) {
+  for (const rows of [jetpack, shield, freeze, pill, shoes, gravity, portal, cube, ball, car, ...flame]) {
     for (const row of rows) for (const pixel of row) expect(pixel === "." || pixel in palette).toBe(true);
   }
   for (const color of Object.values(palette)) expect(color).toMatch(/^#[0-9a-f]{6}$/);
 });
 
 test("rows are all the same width, and costumes match the art", () => {
-  for (const rows of [jetpack, shield, freeze, pill, ...flame]) expect(new Set(rows.map((r) => r.length)).size).toBe(1);
-  const art = { jetpack, shield, freeze, pill };
+  for (const rows of [jetpack, shield, freeze, pill, shoes, gravity, portal, cube, ball, car, ...flame]) expect(new Set(rows.map((r) => r.length)).size).toBe(1);
+  const art = { jetpack, shield, freeze, pill, shoes, gravity, portal, cube, ball };
   POWER_UPS.forEach((kind, i) => {
     expect(powerUpCostumes[i]!.name).toBe(kind);
     expect([powerUpCostumes[i]!.width, powerUpCostumes[i]!.height]).toEqual(size(art[kind]));
   });
   flameCostumes.forEach((costume, i) => expect([costume.width, costume.height]).toEqual(size(flame[i]!)));
+  expect([carCostumes[0]!.width, carCostumes[0]!.height]).toEqual(size(car));
 });
 
 test("runs of a color become one rectangle, and empty pixels none", () => {
@@ -38,5 +39,5 @@ test("runs of a color become one rectangle, and empty pixels none", () => {
 test("the SVG files match the art, so they never drift apart", () => {
   const root = new URL("..", import.meta.url).pathname;
   for (const [file, svg] of artFiles()) expect(readFileSync(`${root}src/assets/costumes/${file}`, "utf8")).toBe(svg);
-  expect([...artFiles().keys()]).toEqual([...powerUpCostumes, ...flameCostumes].map((c) => c.file));
+  expect([...artFiles().keys()]).toEqual([...powerUpCostumes, ...flameCostumes, ...carCostumes].map((c) => c.file));
 });
