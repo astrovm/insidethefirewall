@@ -117,6 +117,8 @@ async function main(): Promise<void> {
 
   /** The song the last run played after the 2013 one. */
   let secondSong: string | null = null;
+  /** The last run's songs and the one it reached, for a retry to pick up from. */
+  let reached: { playlist: string[]; index: number } | null = null;
 
   const game = new Game();
   const controls = new Controls();
@@ -404,13 +406,21 @@ async function main(): Promise<void> {
         status.textContent = "The shield blocked a hit";
         break;
       case "music":
-        if (event.playing) {
-          // Each run starts with the 2013 song, then plays the rest in a new random order.
+        if (event.playing && reached) {
+          // A retry picks up from the song the last run reached, in the same order.
+          audio.setMusic(reached.playlist, reached.index);
+        } else if (event.playing) {
+          // A new game starts with the 2013 song, then plays the rest in a new random order.
           const [original, ...rest] = SONGS;
           const playlist = [original!, ...shuffled(rest, secondSong)];
           secondSong = playlist[1]!;
           audio.setMusic(playlist);
-        } else audio.setMusic(null);
+        } else {
+          // Game over keeps the song for a retry. Going back to the title starts over.
+          const song = audio.songName;
+          reached = game.phase === "over" && song ? { playlist: [...audio.playlist], index: audio.playlist.indexOf(song) } : null;
+          audio.setMusic(null);
+        }
         break;
       case "lost": {
         effects.clear();

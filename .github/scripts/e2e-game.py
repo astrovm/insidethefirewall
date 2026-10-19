@@ -413,9 +413,11 @@ try:
         # Focus is still on Share, so Space would share again. Up jumps.
         day.keyboard.press("ArrowUp")
         day.wait_for_function("() => insideTheFirewall.game.phase === 'playing'", timeout=5000)
-        day.wait_for_function("() => insideTheFirewall.audio.songName === 'music'", timeout=2000)
+        # It picks up from the song the run reached, the second one, in the same order.
+        day.wait_for_function(f"() => insideTheFirewall.audio.songName === '{playlist[1]}'", timeout=2000)
+        assert day.evaluate("[...insideTheFirewall.audio.playlist]") == playlist
         assert day.evaluate("insideTheFirewall.audio.song.source.playbackRate.value") == 1
-        print("Jump starts again, with the 2013 song")
+        print("Jump starts again, from the song the last run reached")
 
         # Settings: a slower game speed, and a new jump key.
         day.click("#pause-game")
