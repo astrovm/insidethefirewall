@@ -4,6 +4,7 @@
 
 import { Sprite, type Bounds, type Costume, type RotationStyle } from "../engine/sprite.ts";
 import { costumes, sounds } from "../game/classic.ts";
+import { bounceCar, driveCar, parkedCar, type Car } from "./car.ts";
 
 /** Updates a second. 120, so the game moves as smoothly as fast screens can show. */
 export const HZ = 120;
@@ -173,23 +174,11 @@ export const THIRD_CHEST = 40;
 /**
  * Homer's pink sedan, from The Simpsons: Hit & Run, is parked in the 3D world.
  * Walking into it gets in. Up speeds up, down brakes and backs up, left and
- * right steer. It runs the virus over, and bumps off the shapes.
+ * right steer, and Space is the handbrake, for sliding round corners. It runs
+ * the virus over, and bumps off the shapes.
  */
 export const PARKED = { x: 150, z: 280 } as const;
 const GET_IN = 80;
-/** Its top speed in Hit & Run, 120 km/h, at 32 world units to a meter, the size of its model. */
-const CAR_TOP_SPEED = 1070;
-const CAR_REVERSE = 360;
-/** Full speed in about 2.5 s. */
-const CAR_ACCELERATION = 430;
-const CAR_BRAKING = 1200;
-/** Slowing down on its own, with nothing pressed. */
-const CAR_COAST = 300;
-/** Radians a second at full steer, from this speed up. */
-const CAR_STEER = 2.6;
-const CAR_STEER_SPEED = 150;
-/** Steering softens at top speed by this much, as in Hit & Run. */
-const CAR_STEER_DROP = 0.27;
 /** How far the car reaches from its middle, for running into things. */
 const CAR_RADIUS = 58;
 /** The shapes standing on the floor in the first square, which the car bumps off: where, and how wide. */
@@ -277,7 +266,7 @@ export interface ThirdDimension {
   player: { x: number; z: number; vx: number; vz: number; facing: number; step: number };
   virus: { x: number; y: number; z: number; dx: number; dy: number; dz: number; warning: number };
   /** `heading` is the way it points, like the player's `facing`. */
-  car: { x: number; z: number; heading: number; speed: number; driving: boolean };
+  car: Car;
 }
 
 /** The bonus round. */
@@ -311,6 +300,9 @@ export interface Input {
   down: boolean;
   jump: boolean;
   jumpPressed: boolean;
+  /** For driving: up held by anything but Space, which is the handbrake. */
+  gas: boolean;
+  handbrake: boolean;
 }
 
 /** Shortcuts for trying things out while making the game. */
@@ -318,7 +310,7 @@ export type Cheat = PowerUpKind | "heart" | "god" | "dive" | "drive" | "escape" 
 /** The skip cheat jumps this many seconds ahead, so the virus gets faster. */
 export const CHEAT_SKIP = 30;
 
-export const noInput: Input = { left: false, right: false, down: false, jump: false, jumpPressed: false };
+export const noInput: Input = { left: false, right: false, down: false, jump: false, jumpPressed: false, gas: false, handbrake: false };
 
 export type GameEvent =
   | { type: "sound"; sound: "laser" | "death" | "glados" | "meow" }
@@ -746,7 +738,7 @@ export class Game {
       time: 0,
       player: { x: 0, z: 120, vx: 0, vz: 0, facing: Math.PI, step: 0 },
       virus: { x: 0, y: 0, z: 0, dx: 0, dy: 0, dz: 0, warning: 0 },
-      car: { ...PARKED, heading: 0, speed: 0, driving: false },
+      car: parkedCar(PARKED.x, PARKED.z),
     };
     this.respawnThirdVirus();
     this.events.push({ type: "dive" });
@@ -824,33 +816,15 @@ export class Game {
     this.events.push({ type: "drive" });
   }
 
-  /** Driving Homer's car: speeding up, braking, steering, and bumping off the shapes. */
+  /** Driving Homer's car, with Hit & Run's physics, and bumping off the shapes. */
   private drive(input: Input): void {
     const { car, player } = this.third!;
-    const throttle = Number(input.jump) - Number(input.down);
-    if (throttle > 0) car.speed = Math.min(CAR_TOP_SPEED, car.speed + (car.speed < 0 ? CAR_BRAKING : CAR_ACCELERATION) * DT);
-    else if (throttle < 0) car.speed = Math.max(-CAR_REVERSE, car.speed - (car.speed > 0 ? CAR_BRAKING : CAR_ACCELERATION) * DT);
-    else car.speed -= Math.sign(car.speed) * Math.min(Math.abs(car.speed), CAR_COAST * DT);
-    // It turns more the faster it goes, up to a point, a little less near top speed, and the other way backing up.
     const steer = Number(input.right) - Number(input.left);
-    const grip = Math.min(1, Math.abs(car.speed) / CAR_STEER_SPEED) * Math.sign(car.speed) * (1 - CAR_STEER_DROP * Math.min(1, Math.abs(car.speed) / CAR_TOP_SPEED));
-    car.heading += steer * CAR_STEER * grip * DT;
-    let x = car.x + Math.sin(car.heading) * car.speed * DT;
-    let z = car.z + Math.cos(car.heading) * car.speed * DT;
-    let bumped = false;
-    for (const prop of shapesNear(x, z)) {
-      const distance = Math.hypot(x - prop.x, z - prop.z);
-      const closest = prop.r + CAR_RADIUS;
-      if (distance >= closest) continue;
-      const k = closest / (distance || 1);
-      [x, z, bumped] = [prop.x + (x - prop.x) * k, prop.z + (z - prop.z) * k, true];
-    }
-    if (bumped) {
-      if (Math.abs(car.speed) > 60) this.events.push({ type: "bump" });
-      car.speed *= -0.3;
-    }
-    [car.x, car.z] = [x, z];
-    [player.x, player.z, player.facing] = [x, z, car.heading];
+    driveCar(car, { gas: input.gas, brake: input.down, handbrake: input.handbrake, steer }, DT);
+    let hit = 0;
+    for (const prop of shapesNear(car.x, car.z)) hit = Math.max(hit, bounceCar(car, prop.x, prop.z, prop.r + CAR_RADIUS));
+    if (hit > 60) this.events.push({ type: "bump" });
+    [player.x, player.z, player.facing] = [car.x, car.z, car.heading];
     player.step += Math.abs(car.speed) * DT;
   }
 
