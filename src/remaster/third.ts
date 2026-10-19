@@ -12,6 +12,7 @@ import { STAGE_HEIGHT, STAGE_WIDTH, type Costume } from "../engine/sprite.ts";
 import type { CostumeImages } from "../render.ts";
 import {
   BLAST_LAST,
+  cellBalls,
   cellShapes,
   COIN_COLLECT,
   thirdCell,
@@ -27,6 +28,7 @@ import {
   type ThirdDimension,
 } from "./game.ts";
 import type { View } from "./render.ts";
+import { restingBall, type Ball } from "./balls.ts";
 import { carDamage, carPoint, CENTER_AHEAD, METER, WHEELS, type Car } from "./car.ts";
 import { playerSkin } from "./player-model.ts";
 import { Moves, Rig, type Move, type RigData } from "./rig.ts";
@@ -344,7 +346,6 @@ export class ThirdRenderer {
     mesh(cone([300, 0, 780], 46, 120, [70, 100, 230]));
     mesh(cylinder([-110, 0, 920], 52, 70, [210, 100, 30]));
     mesh(box([330, 150 + Math.sin(t * 2) * 10, 430], [22, 22, 22], [255, 210, 0], t * 2));
-    this.addSphere(things, camera, [270, 26, 300], 26, [230, 30, 20]);
     this.addSphere(things, camera, [130, 230, 1050], 75, [60, 120, 200], true);
     this.addSignpost(things, camera, [-370, 0, 520]);
     this.addText(things, camera, "1782¹² + 1841¹² = 1922¹²", [-170, 150, 820], 30, "#c8b4e6");
@@ -375,10 +376,14 @@ export class ThirdRenderer {
           if (shape.kind === "box") mesh(box([x, r * 0.7, z], [r * 1.4, r * 1.4, r * 1.4], color, t * 0.3 + x));
           else if (shape.kind === "cone") mesh(cone([x, 0, z], r, r * 2.5, color));
           else if (shape.kind === "cylinder") mesh(cylinder([x, 0, z], r, r * 1.4, color));
-          else this.addSphere(things, camera, [x, r, z], r, color);
+        }
+        // Balls that haven't come near yet, where they start.
+        for (const { id, x, z, r, color } of cellBalls(i, j)) {
+          if (!third.balls.has(id) && Math.hypot(x - p.x, z - p.z) < SHAPES_SHOWN) this.addBall(things, camera, restingBall(id, x, z, r, color));
         }
       }
     }
+    for (const ball of third.balls.values()) if (Math.hypot(ball.x - p.x, ball.z - p.z) < SHAPES_SHOWN) this.addBall(things, camera, ball);
 
     const v = third.virus;
     const end = third.time - THIRD_TIME;
@@ -978,7 +983,16 @@ export class ThirdRenderer {
   }
 
   /** A shiny ball, or the Earth. */
-  private addSphere(things: Thing[], camera: Camera, at: Vec, radius: number, [r, g, b]: Rgb, earth = false): void {
+  /** A ball, with its shadow on whatever's under it, smaller and fainter the higher it bounces. */
+  private addBall(things: Thing[], camera: Camera, ball: Ball): void {
+    const floor = floorUnder(ball.x, ball.z, ball.y);
+    const up = Math.min(1, (ball.y - floor) / (3 * METER));
+    this.addShadow(things, camera, [ball.x, floor, ball.z], ball.r * (1 - up * 0.4), 0.6 * (1 - up * 0.6));
+    this.addSphere(things, camera, [ball.x, ball.y + ball.r, ball.z], ball.r, ball.color, false, ball.spot);
+  }
+
+  /** A shaded ball. The Earth has land on it, and a ball rolling has a white spot that turns with it. */
+  private addSphere(things: Thing[], camera: Camera, at: Vec, radius: number, [r, g, b]: Rgb, earth = false, spot?: Vec): void {
     const center = camera.toCamera(at);
     if (center[2] < NEAR) return;
     const ctx = this.ctx;
@@ -996,6 +1010,18 @@ export class ThirdRenderer {
         ctx.beginPath();
         ctx.arc(x, y, size, 0, Math.PI * 2);
         ctx.fill();
+        if (spot) {
+          // On the side facing the camera, squashed toward the edge.
+          const on = camera.toCamera([at[0] + spot[0] * radius, at[1] + spot[1] * radius, at[2] + spot[2] * radius]);
+          const facing = (center[2] - on[2]) / radius;
+          if (facing > 0 && on[2] > NEAR) {
+            const [sx, sy] = camera.toCanvas(on);
+            ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+            ctx.beginPath();
+            ctx.arc(sx, sy, size * 0.22 * Math.sqrt(facing), 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
         if (earth) {
           // Land, roughly.
           ctx.clip();

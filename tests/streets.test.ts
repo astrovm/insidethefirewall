@@ -267,19 +267,21 @@ describe("traffic", () => {
 
 describe("the engine's sound", () => {
   test("shifts up with speed, never down while speeding up", () => {
+    // Homer's car: second gear from 64% of its 120 km/h, third from 95%.
     expect(gearFor(0, 0, 0)).toBe(0);
     expect(gearFor(20, 10, 1)).toBe(1);
-    expect(gearFor(40, 30, 1)).toBe(2);
-    expect(gearFor(110, 100, 4)).toBe(5);
+    expect(gearFor(80, 70, 1)).toBe(2);
+    expect(gearFor(116, 110, 2)).toBe(3);
     // Speeding up through a bump in speed: no downshift.
-    expect(gearFor(30, 29, 3)).toBe(3);
+    expect(gearFor(70, 69, 2)).toBe(2);
     // Slowing down: no upshift.
-    expect(gearFor(60, 61, 2)).toBe(2);
+    expect(gearFor(80, 81, 1)).toBe(1);
   });
 
   test("its pitch climbs through each gear and drops at each shift", () => {
-    expect(gearPitch(2, 37)).toBeLessThan(gearPitch(2, 50));
-    expect(gearPitch(3, 55)).toBeLessThan(gearPitch(2, 53));
+    expect(gearPitch(1, 20)).toBeLessThan(gearPitch(1, 60));
+    expect(gearPitch(1, 76.7)).toBeCloseTo(1.67, 2);
+    expect(gearPitch(2, 77)).toBeLessThan(gearPitch(1, 76.7));
     const motor = new Motor();
     const car = parkedCar(0, -3000);
     const pitches: number[] = [];
@@ -287,7 +289,8 @@ describe("the engine's sound", () => {
       driveCar(car, { ...still, gas: true }, DT, ground);
       pitches.push(motor.update(car, true, DT));
     }
-    expect(motor.gear).toBeGreaterThanOrEqual(4);
+    expect(motor.gear).toBeGreaterThanOrEqual(2);
+    expect(Math.min(...pitches)).toBeLessThan(0.6);
     expect(Math.max(...pitches)).toBeGreaterThan(1.5);
     // It changes at most an octave in half a second.
     for (let i = 1; i < pitches.length; i++) expect(Math.abs(pitches[i]! - pitches[i - 1]!)).toBeLessThanOrEqual(DT / 0.5 + 1e-9);

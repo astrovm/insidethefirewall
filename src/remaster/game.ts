@@ -4,6 +4,7 @@
 
 import { Sprite, type Bounds, type Costume, type RotationStyle } from "../engine/sprite.ts";
 import { costumes, sounds } from "../game/classic.ts";
+import { ballStuck, carHitsBall, collideBalls, hitBall, kickBall, moveBall, nudgeBall, pushBall, restingBall, type Ball } from "./balls.ts";
 import { CENTER_AHEAD, crashCars, crashDamage, crashIntoBox, crashIntoRound, carCorners, damageCar, driveCar, HALF_LENGTH, HALF_WIDTH, METER, parkedCar, type Car, type Crash } from "./car.ts";
 import {
   CELL,
@@ -193,6 +194,14 @@ const KICK_HOP = 0.4 * THIRD_JUMP;
 export const KICK_TIME = 0.6;
 const KICK_HITS = [0.1, 0.45] as const;
 const KICK_REACH = 1.3 * METER;
+/** A footstep is heard every this far, half the run's stride, and landing faster than this. */
+const THIRD_FOOTSTEP = 2.1 * METER;
+const LAND_HEARD = 2 * METER;
+/** How tall the player is, for walking into balls. */
+const THIRD_HEIGHT = 1.8 * METER;
+/** The balls bounce loud enough to hear faster than this. The virus splatting on one knocks it this fast. */
+const BOUNCE_HEARD = 2 * METER;
+const VIRUS_NUDGE = 3 * METER;
 /** How high the cars are, for the virus to fly over. */
 const CAR_HEIGHT = 1.4 * METER;
 /**
@@ -205,8 +214,10 @@ const CAR_HEIGHT = 1.4 * METER;
  */
 export const PARKED = { x: 150, z: 280 } as const;
 const GET_IN = 80;
-/** How far the car reaches from its middle, for running into the virus. */
+/** How far the car reaches from its middle, for running into the virus, and how far up and down from its bottom. */
 const CAR_RADIUS = 58;
+const CAR_REACH_UP = 70;
+const CAR_REACH_DOWN = 20;
 /** A wrecked car burns this long, then blows up, as in Hit & Run. */
 export const WRECK_BURN = 3;
 /** How long a grabbed coin takes to fly into the player, as in Hit & Run. */
@@ -219,7 +230,6 @@ export const THIRD_PROPS: readonly Shape[] = [
   { kind: "box", x: -340, z: 660, r: 64, top: 90 },
   { kind: "cone", x: 300, z: 780, r: 46, top: 120 },
   { kind: "cylinder", x: -110, z: 920, r: 52, top: 70 },
-  { kind: "sphere", x: 270, z: 300, r: 26, top: 52 },
   { kind: "post", x: -370, z: 520, r: 6, top: 220 },
 ];
 
@@ -237,12 +247,11 @@ export function shapeTop(kind: ShapeKind, r: number): number {
   return kind === "cone" ? r * 2.5 : kind === "sphere" ? r * 2 : r * 1.4;
 }
 
-/** How high the player stands on a shape at `x`, `z`: its flat top, or up a ball. Not on cones and posts, or off it. */
+/** How high the player stands on a shape at `x`, `z`: its flat top. Not on cones and posts, or off it. */
 export function standOn(shape: Shape, x: number, z: number): number | null {
   const d = Math.hypot(x - shape.x, z - shape.z);
   if (shape.kind === "cylinder" && d < shape.r) return shape.top;
   if (shape.kind === "box" && d < shape.r * 0.85) return shape.top;
-  if (shape.kind === "sphere" && d < shape.r * 0.75) return shape.top - shape.r + Math.sqrt(shape.r * shape.r - d * d);
   return null;
 }
 /**
@@ -254,8 +263,9 @@ export function standOn(shape: Shape, x: number, z: number): number | null {
 export const THIRD_CELL = CELL;
 
 export type ShapeKind = "box" | "cone" | "cylinder" | "sphere";
-/** A made-up shape standing on the floor: how wide it is, and its color. */
+/** A made-up shape standing on the floor: how wide it is, and its color. Spheres are balls, which roll away. */
 export interface ThirdShape {
+  id: string;
   kind: ShapeKind;
   x: number;
   z: number;
@@ -277,8 +287,27 @@ const SHAPE_COLORS: [number, number, number][] = [
 /** The square a point is in. */
 export const thirdCell = cellOf;
 
-/** The made-up shapes in square `i`, `j`. The first square's are drawn by hand, so it has none. */
-export function cellShapes(i: number, j: number): ThirdShape[] {
+/** The made-up shapes in square `i`, `j`, kept, since they're always the same. The first square's are drawn by hand, so it has none. */
+const madeUp = new Map<string, readonly ThirdShape[]>();
+export function cellShapes(i: number, j: number): readonly ThirdShape[] {
+  const key = `${i},${j}`;
+  let shapes = madeUp.get(key);
+  if (!shapes) {
+    if (madeUp.size > 400) madeUp.clear();
+    shapes = makeShapes(i, j);
+    madeUp.set(key, shapes);
+  }
+  return shapes;
+}
+
+/** The balls in square `i`, `j`, where they start: its spheres, or the first square's red one. */
+export function cellBalls(i: number, j: number): readonly ThirdShape[] {
+  if (i === 0 && j === 0) return [FIRST_BALL];
+  return cellShapes(i, j).filter((shape) => shape.kind === "sphere");
+}
+const FIRST_BALL: ThirdShape = { id: "0,0,0", kind: "sphere", x: 270, z: 300, r: 26, color: [230, 30, 20] };
+
+function makeShapes(i: number, j: number): ThirdShape[] {
   if (i === 0 && j === 0) return [];
   const random = (() => {
     let n = 0;
@@ -288,7 +317,8 @@ export function cellShapes(i: number, j: number): ThirdShape[] {
   // Off the roads, and off the ramp.
   const margin = ROAD_HALF_WIDTH + 80 + 30;
   const ramp = cellRamp(i, j);
-  const shapes = Array.from({ length: count }, () => ({
+  const shapes = Array.from({ length: count }, (_, n) => ({
+    id: `${i},${j},${n}`,
     kind: SHAPE_KINDS[Math.floor(random() * SHAPE_KINDS.length)]!,
     x: i * THIRD_CELL + (random() - 0.5) * (THIRD_CELL - 2 * margin),
     z: FIRST_CELL_Z + j * THIRD_CELL + (random() - 0.5) * (THIRD_CELL - 2 * margin),
@@ -300,14 +330,14 @@ export function cellShapes(i: number, j: number): ThirdShape[] {
   return shapes.filter((shape) => Math.hypot(shape.x - rx, shape.z - rz) > shape.r + ramp.length / 2 + 120);
 }
 
-/** Everything the car can bump into near `x`, `z`: the first square's shapes and the made-up ones around. */
+/** Everything standing still near `x`, `z`, for the car to bump into: the first square's shapes and the made-up ones around, but not the balls. */
 export function shapesNear(x: number, z: number): readonly Shape[] {
   const [ci, cj] = thirdCell(x, z);
   const shapes: Shape[] = [];
   for (let i = ci - 1; i <= ci + 1; i++) {
     for (let j = cj - 1; j <= cj + 1; j++) {
       if (i === 0 && j === 0) shapes.push(...THIRD_PROPS);
-      else for (const { kind, x, z, r } of cellShapes(i, j)) shapes.push({ kind, x, z, r, top: shapeTop(kind, r) });
+      else for (const { kind, x, z, r } of cellShapes(i, j)) if (kind !== "sphere") shapes.push({ kind, x, z, r, top: shapeTop(kind, r) });
     }
   }
   return shapes;
@@ -348,6 +378,8 @@ export interface ThirdDimension {
   blasts: { x: number; z: number; time: number }[];
   /** Where the virus splatted on something. */
   splats: { x: number; y: number; z: number; time: number }[];
+  /** The balls that have come near, rolling and bouncing, by where they started. */
+  balls: Map<string, Ball>;
 }
 
 /** The bonus round. */
@@ -421,6 +453,10 @@ export type GameEvent =
   | { type: "drive" }
   | { type: "smash" }
   | { type: "splat" }
+  | { type: "bounce"; power: number }
+  | { type: "step" }
+  | { type: "footLand" }
+  | { type: "carLand"; power: number }
   | { type: "hop"; double: boolean }
   | { type: "kick" }
   | { type: "crash"; power: number }
@@ -829,6 +865,7 @@ export class Game {
       sparks: [],
       blasts: [],
       splats: [],
+      balls: new Map(),
     };
     this.respawnThirdVirus();
     this.events.push({ type: "dive" });
@@ -869,6 +906,7 @@ export class Game {
     if (third.time >= THIRD_TIME) return;
     const p = third.player;
     this.updateTraffic();
+    this.updateBalls();
     if (third.car.driving) {
       this.drive(input);
       this.grabCoins();
@@ -890,7 +928,10 @@ export class Game {
     };
     p.vx = approach(p.vx, (across / length) * THIRD_SPEED);
     p.vz = approach(p.vz, (ahead / length) * THIRD_SPEED);
+    const stepped = p.step;
     this.walkTo(p.x + p.vx * DT, p.z + p.vz * DT);
+    // A footstep every half stride, on the floor.
+    if (Math.floor(p.step / THIRD_FOOTSTEP) > Math.floor(stepped / THIRD_FOOTSTEP) && this.onSomething()) this.events.push({ type: "step" });
     const moving = across !== 0 || ahead !== 0;
     if (moving) {
       // Turn the short way round.
@@ -908,6 +949,7 @@ export class Game {
     if (!car.husk && car.wrecked < 0 && Math.abs(p.y - car.y) < THIRD_STEP && Math.hypot(p.x - car.x, p.z - car.z) < GET_IN) this.getInCar();
     this.grabCoins();
     this.kickVirus();
+    this.kickBalls();
     this.moveThirdVirus();
   }
 
@@ -937,6 +979,18 @@ export class Game {
       if (!blocked(shape.x + ux * reach, shape.z + uz * reach)) [x, z] = [shape.x + ux * reach, shape.z + uz * reach];
       else [x, z] = [p.x, p.z];
     }
+    // Balls roll out of the way, unless they're stuck against something, then they're in the way.
+    for (const ball of this.third!.balls.values()) {
+      const before = { ...ball };
+      if (!pushBall(ball, x, z, p.vx, p.vz, THIRD_RADIUS, p.y, p.y + THIRD_HEIGHT)) continue;
+      if (!ballStuck(ball, floorUnder, shapesNear(ball.x, ball.z))) continue;
+      Object.assign(ball, before);
+      const [dx, dz] = [x - ball.x, z - ball.z];
+      const [distance, reach] = [Math.hypot(dx, dz), ball.r + THIRD_RADIUS];
+      const [ux, uz] = distance > 0 ? [dx / distance, dz / distance] : [0, -1];
+      if (!blocked(ball.x + ux * reach, ball.z + uz * reach)) [x, z] = [ball.x + ux * reach, ball.z + uz * reach];
+      else [x, z] = [p.x, p.z];
+    }
     p.step += Math.hypot(x - p.x, z - p.z);
     [p.x, p.z] = [x, z];
     this.fall();
@@ -952,7 +1006,9 @@ export class Game {
     p.vy -= THIRD_GRAVITY * DT;
     p.y += p.vy * DT;
     const floor = floorUnder(p.x, p.z, p.y);
-    if (p.y <= floor) [p.y, p.vy, p.jumps] = [floor, 0, 0];
+    if (p.y > floor) return;
+    if (p.vy < -LAND_HEARD) this.events.push({ type: "footLand" });
+    [p.y, p.vy, p.jumps] = [floor, 0, 0];
   }
 
   /** Whether the player on foot is standing on something, not jumping or falling. */
@@ -979,12 +1035,30 @@ export class Game {
     this.events.push({ type: "kick" });
   }
 
+  /** Where the kicking foot is, while a kick can hit something, or null. */
+  private kickingFoot(): [number, number, number] | null {
+    const p = this.third!.player;
+    if (p.kick < KICK_HITS[0] || p.kick > KICK_HITS[1]) return null;
+    const [sin, cos] = [Math.sin(p.facing), Math.cos(p.facing)];
+    return [p.x + sin * 0.6 * METER, p.y + 0.8 * METER, p.z + cos * 0.6 * METER];
+  }
+
+  /** The balls a kick under way reaches fly off. */
+  private kickBalls(): void {
+    const foot = this.kickingFoot();
+    if (!foot) return;
+    for (const ball of this.third!.balls.values()) {
+      if (kickBall(ball, foot, this.third!.player.facing, KICK_REACH)) this.events.push({ type: "bounce", power: 1 });
+    }
+  }
+
   /** The virus, if a kick under way reaches it. */
   private kickVirus(): void {
-    const { player: p, virus: v } = this.third!;
-    if (p.kick < KICK_HITS[0] || p.kick > KICK_HITS[1] || v.kicked) return;
+    const { virus: v } = this.third!;
+    const foot = this.kickingFoot();
+    if (!foot || v.kicked) return;
+    const p = this.third!.player;
     const [sin, cos] = [Math.sin(p.facing), Math.cos(p.facing)];
-    const foot: [number, number, number] = [p.x + sin * 0.6 * METER, p.y + 0.8 * METER, p.z + cos * 0.6 * METER];
     if (Math.hypot(v.x - foot[0], v.y - foot[1], v.z - foot[2]) > KICK_REACH) return;
     this.closeCall = false;
     if (this.powers.freeze > 0) {
@@ -1007,7 +1081,9 @@ export class Game {
   private drive(input: Input): void {
     const { car, player } = this.third!;
     const steer = Number(input.right) - Number(input.left);
+    const [flying, falling] = [car.airborne, car.vy];
     driveCar(car, { gas: input.gas, brake: input.down, handbrake: input.handbrake, steer }, DT, ground);
+    if (flying && !car.airborne && falling < -LAND_HEARD) this.events.push({ type: "carLand", power: Math.min(1, -falling / (8 * METER)) });
     this.crashes(car, true);
     if (car.wrecked >= WRECK_BURN) {
       this.blowUp(car);
@@ -1114,6 +1190,32 @@ export class Game {
     third.splats = third.splats.filter((s) => third.time - s.time < SPARKS_LAST);
   }
 
+  /**
+   * The balls around: the ones that come near for the first time start where
+   * their spheres stand. They roll and bounce, off each other too, and the
+   * cars knock them flying.
+   */
+  private updateBalls(): void {
+    const third = this.third!;
+    const p = third.player;
+    const [ci, cj] = thirdCell(p.x, p.z);
+    for (let i = ci - 1; i <= ci + 1; i++) {
+      for (let j = cj - 1; j <= cj + 1; j++) {
+        for (const { id, x, z, r, color } of cellBalls(i, j)) if (!third.balls.has(id)) third.balls.set(id, restingBall(id, x, z, r, color));
+      }
+    }
+    const balls = [...third.balls.values()];
+    let hardest = 0;
+    for (const car of [third.car, ...third.traffic.map((t) => t.car)]) {
+      for (const ball of balls) if (Math.hypot(ball.x - car.x, ball.z - car.z) < HALF_LENGTH + CENTER_AHEAD + ball.r) hardest = Math.max(hardest, carHitsBall(car, ball, CAR_HEIGHT));
+    }
+    for (const ball of balls) hardest = Math.max(hardest, moveBall(ball, DT, floorUnder, shapesNear(ball.x, ball.z)));
+    for (let a = 0; a < balls.length; a++) {
+      for (let b = a + 1; b < balls.length; b++) if (!balls[a]!.asleep || !balls[b]!.asleep) hardest = Math.max(hardest, collideBalls(balls[a]!, balls[b]!));
+    }
+    if (hardest > BOUNCE_HEARD) this.events.push({ type: "bounce", power: Math.min(1, hardest / (15 * METER)) });
+  }
+
   /** A car pushing the player on foot out of its way. */
   private shove(car: Car): void {
     const p = this.third!.player;
@@ -1172,8 +1274,8 @@ export class Game {
       v.x += v.dx * step;
       v.y += v.dy * step;
       v.z += v.dz * step;
-      // Hit and run: the car runs it over.
-      if (car.driving && v.y < 70 && Math.hypot(v.x - car.x, v.z - car.z) < CAR_RADIUS + 12) {
+      // Hit and run: the car runs it over, or flies into it off a ramp, as it does Hit & Run's wasps.
+      if (car.driving && v.y > car.y - CAR_REACH_DOWN && v.y < car.y + CAR_REACH_UP && Math.hypot(v.x - car.x, v.z - car.z) < CAR_RADIUS + 12) {
         this.closeCall = false;
         this.events.push({ type: "smash" });
         this.respawnThirdVirus();
@@ -1205,6 +1307,13 @@ export class Game {
     const third = this.third!;
     if (y < ground(x, z)) return true;
     for (const shape of shapesNear(x, z)) if (y < shape.top && Math.hypot(x - shape.x, z - shape.z) < shape.r) return true;
+    const v = third.virus;
+    for (const ball of third.balls.values()) {
+      if (!hitBall(ball, x, y, z)) continue;
+      // Knocking it a little.
+      nudgeBall(ball, v.dx * VIRUS_NUDGE, v.dy * VIRUS_NUDGE, v.dz * VIRUS_NUDGE);
+      return true;
+    }
     const cars = [...third.traffic.map((t) => t.car), ...(third.car.driving ? [] : [third.car])];
     for (const car of cars) {
       if (y < car.y || y > car.y + CAR_HEIGHT) continue;

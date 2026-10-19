@@ -113,7 +113,10 @@ describe("the port matches the 2013 project file", () => {
       miau: "meow",
     };
     const files = Object.fromEntries(
-      readdirSync(`${root}src/assets/sounds`).map((file) => [file.split(".")[0], md5(`${root}src/assets/sounds/${file}`)]),
+      // Hit & Run's sounds, for the 3D world, are in a folder of their own.
+      readdirSync(`${root}src/assets/sounds`, { withFileTypes: true })
+        .filter((entry) => entry.isFile())
+        .map(({ name: file }) => [file.split(".")[0], md5(`${root}src/assets/sounds/${file}`)]),
     );
     const originalSounds = targets.flatMap((t) => t.sounds);
     expect(originalSounds.map((s) => String(names[s.name])).sort()).toEqual(Object.keys(sounds).sort());
