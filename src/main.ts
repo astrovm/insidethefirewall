@@ -1,5 +1,5 @@
 import { buildMask, fetchAll, loadImage } from "./assets.ts";
-import { Audio } from "./audio.ts";
+import { Audio, shuffled } from "./audio.ts";
 import { costumes, createClassic, sounds } from "./game/classic.ts";
 import { bindKey, canBind, Controls, defaultKeys, keyLabel, MOVES, moveForKey, type Move } from "./input.ts";
 import type { Costume } from "./engine/sprite.ts";
@@ -23,14 +23,15 @@ import { formatTime, RemasterRenderer, toStage } from "./remaster/render.ts";
 import { gameSpeed, loadSettings, saveSettings, showTouch, type TouchControls } from "./remaster/settings.ts";
 
 const MAX_UPDATES_PER_FRAME = 8;
-/** The 2013 song, then nightcore songs in the same spirit. Each game starts with the next one. */
+/** The 2013 song first, then nightcore songs in the same spirit, in a random order each game. */
 const SONGS = ["music", "how-do-you-do", "bad-boy", "monster"];
 
 /** What the screen reader says when the player grabs a power-up. */
 const powerUpMessages: Record<PowerUpKind, (seconds: number) => string> = {
   jetpack: (seconds) => `Jetpack for ${seconds} seconds. Fly with up and down.`,
   shield: (seconds) => `Shield for ${seconds} seconds`,
-  freeze: (seconds) => `Virus frozen for ${seconds} seconds`,
+  freeze: (seconds) => `Virus frozen for ${seconds} seconds. Touch it to break it.`,
+  pill: (seconds) => `Red pill for ${seconds} seconds. The room is code, and time slows down when the virus is close.`,
 };
 
 /** The run summary on the game over screen: an icon and a count for each thing grabbed. */
@@ -39,6 +40,7 @@ const grabIcons: Record<Grab, { file: string; name: string }> = {
   jetpack: { file: "jetpack.svg", name: "Jetpacks" },
   shield: { file: "shield.svg", name: "Shields" },
   freeze: { file: "freeze.svg", name: "Freezes" },
+  pill: { file: "pill.svg", name: "Red pills" },
 };
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -91,7 +93,8 @@ async function main(): Promise<void> {
     }),
   ]);
 
-  let nextSong = 0;
+  /** The song the last run played after the 2013 one. */
+  let secondSong: string | null = null;
 
   const game = new Game();
   const controls = new Controls();
@@ -267,7 +270,7 @@ async function main(): Promise<void> {
       audio.pause();
       status.textContent = "Paused";
     } else {
-      audio.unlock();
+      audio.resume();
       status.textContent = "";
     }
     showMenus();
@@ -284,7 +287,7 @@ async function main(): Promise<void> {
     leaveGameOver();
     (document.activeElement as HTMLElement | null)?.blur();
     paused = false;
-    audio.unlock();
+    audio.resume();
     fader.to(() => {
       runSpeed = settings.speed;
       game.start();
@@ -303,7 +306,7 @@ async function main(): Promise<void> {
   const toTitle = () => {
     leaveGameOver();
     paused = false;
-    audio.unlock();
+    audio.resume();
     fader.to(() => {
       game.toTitle();
       showMenus();
@@ -326,7 +329,12 @@ async function main(): Promise<void> {
         if (event.full) status.textContent = `Full hearts. Shield for ${PENGUIN_SHIELD} seconds`;
         break;
       case "nearMiss":
+      case "escape":
+      case "dive":
         audio.synth("whoosh");
+        break;
+      case "shatter":
+        audio.synth("shatter");
         break;
       case "appear":
         audio.synth("appear");
@@ -338,8 +346,13 @@ async function main(): Promise<void> {
         status.textContent = "The shield blocked a hit";
         break;
       case "music":
-        audio.setMusic(event.playing ? SONGS : null, nextSong);
-        if (event.playing) nextSong = (nextSong + 1) % SONGS.length;
+        if (event.playing) {
+          // Each run starts with the 2013 song, then plays the rest in a new random order.
+          const [original, ...rest] = SONGS;
+          const playlist = [original!, ...shuffled(rest, secondSong)];
+          secondSong = playlist[1]!;
+          audio.setMusic(playlist);
+        } else audio.setMusic(null);
         break;
       case "lost": {
         effects.clear();
@@ -545,7 +558,7 @@ async function main(): Promise<void> {
     last = now;
     pollGamepads();
     // A slower game speed gives the player more time to react.
-    pending = paused ? 0 : pending + (elapsed / 1000) * settings.speed;
+    pending = paused ? 0 : pending + (elapsed / 1000) * settings.speed * game.timeScale;
     let updates = 0;
     while (pending >= DT && updates < MAX_UPDATES_PER_FRAME) {
       game.update(controls.read());
@@ -554,7 +567,8 @@ async function main(): Promise<void> {
       updates++;
     }
     if (updates === MAX_UPDATES_PER_FRAME) pending = 0;
-    if (game.phase === "playing") audio.setMusicRate(game.musicRate);
+    // Bullet time slows the music down too.
+    if (game.phase === "playing") audio.setMusicRate(game.timeScale);
     audio.update();
     if (!paused) effects.update(elapsed / 1000);
     renderer.fade = fader.value;

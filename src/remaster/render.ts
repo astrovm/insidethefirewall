@@ -1,7 +1,9 @@
 import { STAGE_HEIGHT, STAGE_WIDTH, type Costume, type Sprite } from "../engine/sprite.ts";
 import { interpolate, type CostumeImages } from "../render.ts";
-import type { Effects } from "./effects.ts";
+import { SHARDS, type Effects } from "./effects.ts";
+import { DIVE_ZOOM, ThirdRenderer } from "./third.ts";
 import {
+  ESCAPE_BURST,
   flameCostumes,
   PICKUP_BLINK,
   POWER_UP_TIME,
@@ -9,7 +11,12 @@ import {
   powerUpCostumes,
   REPLAY_SPEED,
   replayFrame,
+  SCREEN,
+  SCREEN_ROOM,
+  THIRD_OUT,
+  THIRD_TIME,
   type Game,
+  type SpriteShot,
 } from "./game.ts";
 
 export const colors = {
@@ -58,8 +65,42 @@ const TITLE_SIZE = 0.9708737864077678;
 /** The replay on the game over screen: a small window in the top right corner, under Menu. */
 export const REPLAY_BOX = { left: 318, top: 50, scale: 0.3 } as const;
 
+/** After an escape the camera snaps out from the screen to the whole room in this long. */
+export const ESCAPE_ZOOM = 0.35;
+/** The white flash on the screen as the player bursts out of it. */
+const ESCAPE_FLASH = 0.2;
+/** Rooms drawn inside each other on the monitor's screen. */
+const SCREEN_DEPTH = 3;
+
+/**
+ * How much the camera is zoomed in this long after an escape: at first the
+ * screen fills the stage, so the room the player was in stays put, then it
+ * snaps back out to the whole room.
+ */
+export function escapeZoom(seconds: number): number {
+  if (seconds >= ESCAPE_ZOOM) return 1;
+  const t = Math.max(0, seconds / ESCAPE_ZOOM);
+  return (1 / SCREEN_ROOM.scale) ** (1 - t * t * (3 - 2 * t));
+}
+
+/**
+ * The view zoomed in this much toward the room on the screen. It zooms around
+ * the one point that stays put, so at full zoom the room on the screen fills
+ * the stage exactly.
+ */
+export function zoomView(view: View, zoom: number): View {
+  const { left, top, scale } = SCREEN_ROOM;
+  const fixedX = (STAGE_WIDTH / 2 + left) / (1 - scale);
+  const fixedY = (STAGE_HEIGHT / 2 - top) / (1 - scale);
+  return {
+    x: view.x + fixedX * view.scale * (1 - zoom),
+    y: view.y + fixedY * view.scale * (1 - zoom),
+    scale: view.scale * zoom,
+  };
+}
+
 interface Raster {
-  canvas: HTMLCanvasElement;
+  canvas: CanvasImageSource;
   /** Device pixels per costume unit. */
   scale: number;
 }
@@ -67,9 +108,12 @@ interface Raster {
 /** Draws the remastered game on a canvas that fills the window. */
 export class RemasterRenderer {
   private readonly ctx: CanvasRenderingContext2D;
-  /** Each costume at up to two sizes: in the game and in the replay. */
+  /** Each costume at up to four sizes: in the game, in the replay and on the monitor's screen. */
   private readonly rasters = new Map<Costume, Raster[]>();
-  private stageRaster: HTMLCanvasElement | null = null;
+  private stageRasters: HTMLCanvasElement[] = [];
+  /** Draw the SVGs straight, for sizes that change every frame. */
+  private direct = false;
+  private readonly third: ThirdRenderer;
   view: View = { x: 0, y: 0, scale: 1 };
   /** 0 shows the game, 1 is fully black. Used for fades between screens. */
   fade = 0;
@@ -82,6 +126,7 @@ export class RemasterRenderer {
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("Canvas 2D is not available");
     this.ctx = ctx;
+    this.third = new ThirdRenderer(ctx, images, backdrops.stage);
   }
 
   resize(cssWidth: number, cssHeight: number, pixelRatio: number): void {
@@ -97,37 +142,30 @@ export class RemasterRenderer {
     ctx.imageSmoothingEnabled = true;
     const steady = this.view;
     const [dx, dy] = effects.shakeOffset();
-    this.view = { ...steady, x: steady.x + Math.round(dx * steady.scale), y: steady.y + Math.round(dy * steady.scale) };
+    const shaken = { ...steady, x: steady.x + Math.round(dx * steady.scale), y: steady.y + Math.round(dy * steady.scale) };
+    const playing = game.phase === "playing";
+    const third = playing ? game.third : null;
+    const zoom = third ? (third.time < DIVE_ZOOM ? diveZoom(third.time) : 1) : playing ? escapeZoom(game.escapeTime) : 1;
+    this.view = zoom === 1 ? shaken : zoomView(shaken, zoom);
+    this.direct = zoom !== 1;
     this.drawBackdrop("#000");
-    if (game.phase !== "over") this.drawStage();
-    if (game.phase === "title") this.drawTitle();
-
     // Sprites can poke out of the stage a little, as in Scratch. Hide that part.
     ctx.save();
-    if (game.phase === "playing") {
+    if (playing) {
       ctx.beginPath();
-      ctx.rect(this.view.x, this.view.y, Math.round(STAGE_WIDTH * this.view.scale), Math.round(STAGE_HEIGHT * this.view.scale));
+      ctx.rect(shaken.x, shaken.y, Math.round(STAGE_WIDTH * shaken.scale), Math.round(STAGE_HEIGHT * shaken.scale));
       ctx.clip();
     }
-    const playing = game.phase === "playing";
-    for (const sprite of game.layers) {
-      if (!sprite.visible) continue;
-      let [x, y] = interpolate(sprite, game.previous.get(sprite), between);
-      // Power-ups bob up and down, so they read as things to grab.
-      if (sprite === game.powerUp) y += Math.sin(game.time * 5) * 3;
-      if (playing && sprite === game.player && game.powers.jetpack > 0) {
-        this.drawJetpack(x, y, sprite.flipX, game.powers.jetpack < 1 ? blink(game.powers.jetpack) : 1, game.flying, game.time);
-      }
-      ctx.globalAlpha = playing ? this.alphaOf(game, sprite) : 1;
-      if (playing && sprite === game.virus && game.powers.freeze > 0) ctx.filter = "hue-rotate(160deg) saturate(1.5)";
-      if (ctx.globalAlpha > 0) this.drawSprite(sprite, x, y);
-      ctx.filter = "none";
-      ctx.globalAlpha = 1;
-      if (playing && sprite === game.player && game.powers.shield > 0) {
-        this.drawShield(x, y, 0.7 * (game.powers.shield < 1.5 ? blink(game.powers.shield) : 1));
-      }
+    if (third && third.time >= DIVE_ZOOM) this.third.draw(game, third, this.view);
+    else this.drawRoom(game, between, playing);
+    if (playing && !third) this.drawShards(effects);
+    const white = whiteOut(game);
+    if (white > 0) {
+      ctx.fillStyle = `rgba(255, 255, 255, ${white})`;
+      ctx.fillRect(shaken.x, shaken.y, STAGE_WIDTH * shaken.scale, STAGE_HEIGHT * shaken.scale);
     }
     ctx.restore();
+    this.direct = false;
     if (game.phase === "over") this.drawReplay(game);
     this.view = steady;
     if (game.phase === "playing") this.drawHud(game);
@@ -145,6 +183,150 @@ export class RemasterRenderer {
     }
   }
 
+  /** The 2D room and everything in it, or the title or game over screen. */
+  private drawRoom(game: Game, between: number, playing: boolean): void {
+    const ctx = this.ctx;
+    if (game.phase !== "over") this.drawStage();
+    if (game.phase === "title") this.drawTitle();
+    // The red pill: the room is code.
+    const matrix = playing ? matrixAmount(game.powers.pill) : 0;
+    if (matrix > 0) {
+      ctx.fillStyle = `rgba(0, 0, 0, ${matrix})`;
+      ctx.fillRect(this.view.x, this.view.y, STAGE_WIDTH * this.view.scale, STAGE_HEIGHT * this.view.scale);
+      this.drawCodeRain(game.time, matrix);
+    }
+
+    // Bursting out of the screen or diving into it, the player is in front of the monitor.
+    const bursting = playing && (game.escapeTime <= ESCAPE_BURST || game.third !== null);
+    const layers = bursting ? [...game.layers.filter((s) => s !== game.player), game.player] : game.layers;
+    for (const sprite of layers) {
+      if (!sprite.visible) continue;
+      let [x, y] = interpolate(sprite, game.previous.get(sprite), between);
+      // Power-ups bob up and down, so they read as things to grab.
+      if (sprite === game.powerUp) y += Math.sin(game.time * 5) * 3;
+      const grown = sprite.size / sprite.initial.size;
+      // Bullet time: the virus leaves a trail of itself.
+      if (sprite === game.virus && game.timeScale < 0.99) {
+        const radians = (sprite.direction * Math.PI) / 180;
+        for (let k = 3; k >= 1; k--) {
+          ctx.globalAlpha = 0.18 * (4 - k) * (1 - game.timeScale);
+          ctx.filter = matrix > 0.5 ? CODE_RED : "none";
+          this.drawSprite(sprite, x - Math.sin(radians) * k * 16, y - Math.cos(radians) * k * 16);
+        }
+        ctx.filter = "none";
+        ctx.globalAlpha = 1;
+      }
+      // Wrapping around the sides, the player shows on both at once.
+      const wraps = playing && sprite === game.player && game.powers.jetpack > 0;
+      const copies = wraps ? wrapCopies(x, this.playerReach(game)) : [x];
+      for (const x of copies) {
+        if (playing && sprite === game.player && game.powers.jetpack > 0) {
+          this.drawJetpack(x, y, sprite.flipX, game.powers.jetpack < 1 ? blink(game.powers.jetpack) : 1, game.flying, game.time, grown);
+        }
+        ctx.globalAlpha = playing ? this.alphaOf(game, sprite) : 1;
+        if (matrix > 0.5) ctx.filter = sprite === game.virus ? CODE_RED : CODE_GREEN;
+        if (playing && sprite === game.virus && game.powers.freeze > 0) ctx.filter = "hue-rotate(160deg) saturate(1.5)";
+        if (ctx.globalAlpha > 0) this.drawSprite(sprite, x, y);
+        ctx.filter = "none";
+        ctx.globalAlpha = 1;
+        if (playing && sprite === game.player && game.powers.shield > 0) {
+          this.drawShield(x, y, 0.7 * (game.powers.shield < 1.5 ? blink(game.powers.shield) : 1), grown);
+        }
+      }
+      if (playing && sprite === game.monitor && game.third) this.drawPortal(game.third.time);
+      if (playing && sprite === game.monitor && game.inside.length > 0) {
+        this.drawScreenRoom(game.inside, game.monitor.currentCostume, SCREEN_DEPTH);
+        const flash = 0.7 * (1 - game.escapeTime / ESCAPE_FLASH);
+        if (flash > 0) this.fillScreen(`rgba(255, 255, 255, ${flash})`);
+      }
+    }
+  }
+
+  /** Ice pieces of a broken virus. */
+  private drawShards(effects: Effects): void {
+    if (effects.shards.length === 0) return;
+    const ctx = this.ctx;
+    const fade = Math.max(0, 1 - effects.shardTime / SHARDS);
+    ctx.save();
+    for (const [i, shard] of effects.shards.entries()) {
+      const [x, y] = toCanvas(this.view, shard.x, shard.y);
+      const size = shard.size * this.view.scale;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(shard.spin * effects.shardTime);
+      ctx.globalAlpha = fade;
+      ctx.fillStyle = i % 3 === 0 ? "#ffffff" : i % 3 === 1 ? "#66ccff" : "#9a9a2a";
+      ctx.fillRect(-size / 2, -size / 2, size, size);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  /** Blue electricity crackling around the screen as the player dives through it. */
+  private drawPortal(time: number): void {
+    const ctx = this.ctx;
+    const [left, top] = toCanvas(this.view, SCREEN.left, SCREEN.top);
+    const [width, height] = [SCREEN.width * this.view.scale, SCREEN.height * this.view.scale];
+    const flicker = Math.floor(time * 30);
+    ctx.save();
+    ctx.strokeStyle = "#8fd8ff";
+    ctx.shadowColor = "#3aa0ff";
+    ctx.shadowBlur = 10 * this.view.scale;
+    ctx.lineWidth = Math.max(1, 1.5 * this.view.scale);
+    ctx.beginPath();
+    const steps = 40;
+    for (let i = 0; i <= steps; i++) {
+      const along = (i / steps) * 2 * (width + height);
+      const jitter = ((hash(flicker * 131 + i) % 100) / 100 - 0.5) * 6 * this.view.scale;
+      let [x, y] = [left, top];
+      if (along < width) [x, y] = [left + along, top + jitter];
+      else if (along < width + height) [x, y] = [left + width + jitter, top + along - width];
+      else if (along < 2 * width + height) [x, y] = [left + width - (along - width - height), top + height + jitter];
+      else [x, y] = [left + jitter, top + height - (along - 2 * width - height)];
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /** Green code falling down the stage, and the floor made of it. */
+  private drawCodeRain(time: number, alpha: number): void {
+    const ctx = this.ctx;
+    const { x, y, scale } = this.view;
+    const columns = STAGE_WIDTH / CODE_CELL;
+    const rows = STAGE_HEIGHT / CODE_CELL;
+    ctx.save();
+    ctx.font = `${Math.round(CODE_CELL * scale)}px monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    const glyph = (column: number, row: number) => CODE_GLYPHS[(hash(column * 977 + row) + Math.floor(time * 5)) % CODE_GLYPHS.length]!;
+    const put = (column: number, row: number, text: string) =>
+      ctx.fillText(text, x + (column + 0.5) * CODE_CELL * scale, y + row * CODE_CELL * scale);
+    for (let column = 0; column < columns; column++) {
+      const seed = hash(column);
+      const speed = 6 + (seed % 9);
+      const length = 8 + (seed % 12);
+      const head = Math.floor((time * speed + (seed % 97)) % (rows + length + 12));
+      for (let k = 0; k < length; k++) {
+        const row = head - k;
+        if (row < 0 || row >= rows) continue;
+        ctx.globalAlpha = alpha * (k === 0 ? 1 : 0.85 * (1 - k / length));
+        ctx.fillStyle = k === 0 ? "#d8ffd8" : "#00ff41";
+        put(column, row, glyph(column, row));
+      }
+    }
+    // The floor, as a wall of code.
+    ctx.fillStyle = "#00b32d";
+    for (let row = Math.floor(CODE_FLOOR / CODE_CELL); row < rows; row++) {
+      for (let column = 0; column < columns; column++) {
+        ctx.globalAlpha = alpha * (0.35 + 0.4 * ((hash(column * 31 + row * 7 + Math.floor(time * 3)) % 100) / 100));
+        put(column, row, glyph(column, row));
+      }
+    }
+    ctx.restore();
+  }
+
   /**
    * Blinking, as a warning: the player while invincible, the penguin and
    * power-ups before they go, and a frozen virus about to thaw.
@@ -157,28 +339,35 @@ export class RemasterRenderer {
     return 1;
   }
 
-  /** The jetpack on the player's back, with a flame while it pushes. */
-  private drawJetpack(x: number, y: number, flipX: number, alpha: number, flying: boolean, time: number): void {
-    const back = x - flipX * 30;
+  /** How far the player with a jetpack reaches each way from its middle, with the shield too if it has one. */
+  private playerReach(game: Game): number {
+    const bounds = game.player.bounds();
+    const grown = game.player.size / game.player.initial.size;
+    return Math.max((bounds.right - bounds.left) / 2, (game.powers.shield > 0 ? 52 : 48) * grown);
+  }
+
+  /** The jetpack on the player's back, with a flame while it pushes. `grown` is the player's size, 1 as usual. */
+  private drawJetpack(x: number, y: number, flipX: number, alpha: number, flying: boolean, time: number, grown = 1): void {
+    const back = x - flipX * 30 * grown;
     this.ctx.globalAlpha = alpha;
-    this.drawCostume(powerUpCostumes[0]!, back, y + 4, 0, 3, 3);
+    this.drawCostume(powerUpCostumes[0]!, back, y + 4 * grown, 0, 3 * grown, 3 * grown);
     if (flying) {
       const frame = flameCostumes[Math.floor(time / 0.08) % 2]!;
-      this.drawCostume(frame, back, y - 20, 0, 3, 3);
+      this.drawCostume(frame, back, y - 20 * grown, 0, 3 * grown, 3 * grown);
     }
     this.ctx.globalAlpha = 1;
   }
 
   /** A bubble around the player while the shield is up. */
-  private drawShield(x: number, y: number, alpha: number): void {
+  private drawShield(x: number, y: number, alpha: number, grown = 1): void {
     const ctx = this.ctx;
-    const [cx, cy] = toCanvas(this.view, x, y - 4);
+    const [cx, cy] = toCanvas(this.view, x, y - 4 * grown);
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.strokeStyle = colors.shield;
-    ctx.lineWidth = 3 * this.view.scale;
+    ctx.lineWidth = 3 * grown * this.view.scale;
     ctx.beginPath();
-    ctx.arc(cx, cy, 52 * this.view.scale, 0, Math.PI * 2);
+    ctx.arc(cx, cy, 52 * grown * this.view.scale, 0, Math.PI * 2);
     ctx.stroke();
     ctx.globalAlpha *= 0.25;
     ctx.fillStyle = colors.shield;
@@ -199,18 +388,63 @@ export class RemasterRenderer {
     const { x, y, scale } = this.view;
     const width = Math.round(STAGE_WIDTH * scale);
     const height = Math.round(STAGE_HEIGHT * scale);
-    let stage = this.stageRaster;
-    if (stage?.width !== width || stage.height !== height) {
+    const border = -this.backdrops.stage.x;
+    if (this.direct) {
+      const image = this.images.get(this.backdrops.stage);
+      if (image) this.ctx.drawImage(image, border, border, STAGE_WIDTH, STAGE_HEIGHT, x, y, STAGE_WIDTH * scale, STAGE_HEIGHT * scale);
+      return;
+    }
+    let stage = this.stageRasters.find((r) => r.width === width && r.height === height);
+    if (!stage) {
       const image = this.images.get(this.backdrops.stage);
       if (!image) return;
       stage = document.createElement("canvas");
       stage.width = width;
       stage.height = height;
-      const border = -this.backdrops.stage.x;
       stage.getContext("2d")?.drawImage(image, border, border, STAGE_WIDTH, STAGE_HEIGHT, 0, 0, width, height);
-      this.stageRaster = stage;
+      this.stageRasters = [stage, ...this.stageRasters].slice(0, 4);
     }
     this.ctx.drawImage(stage, x, y);
+  }
+
+  /**
+   * The room the player escaped from, small on the monitor's screen, with its
+   * own monitor showing it again. The screen is wider than the room, so the
+   * room carries on at the sides.
+   */
+  private drawScreenRoom(shots: SpriteShot[], monitor: Costume, depth: number): void {
+    const ctx = this.ctx;
+    const outer = this.view;
+    ctx.save();
+    this.clipScreen();
+    const scale = outer.scale * SCREEN_ROOM.scale;
+    const [x, y] = toCanvas(outer, SCREEN_ROOM.left, SCREEN_ROOM.top);
+    // The sides overlap the middle by a pixel, so no seam shows between them.
+    for (const side of [-1, 1, 0]) {
+      this.view = { x: x + side * (STAGE_WIDTH * scale - 1), y, scale };
+      this.drawStage();
+    }
+    this.view = { x, y, scale };
+    for (const shot of shots) {
+      const size = shot.size / 100;
+      this.drawCostume(shot.costume, shot.x, shot.y, shot.rotation, size * shot.flipX, size);
+      if (shot.costume === monitor && depth > 1) this.drawScreenRoom(shots, monitor, depth - 1);
+    }
+    ctx.restore();
+    this.view = outer;
+  }
+
+  private clipScreen(): void {
+    const [left, top] = toCanvas(this.view, SCREEN.left, SCREEN.top);
+    this.ctx.beginPath();
+    this.ctx.rect(left, top, SCREEN.width * this.view.scale, SCREEN.height * this.view.scale);
+    this.ctx.clip();
+  }
+
+  private fillScreen(color: string): void {
+    const [left, top] = toCanvas(this.view, SCREEN.left, SCREEN.top);
+    this.ctx.fillStyle = color;
+    this.ctx.fillRect(left, top, SCREEN.width * this.view.scale, SCREEN.height * this.view.scale);
   }
 
   /**
@@ -237,10 +471,11 @@ export class RemasterRenderer {
     this.drawStage();
     frame.sprites.forEach((shot, i) => {
       const player = i === frame.player;
-      if (player && frame.jetpack) this.drawJetpack(shot.x, shot.y, shot.flipX, 1, frame.flying, game.overTime * REPLAY_SPEED);
+      const grown = shot.size / game.player.initial.size;
+      if (player && frame.jetpack) this.drawJetpack(shot.x, shot.y, shot.flipX, 1, frame.flying, game.overTime * REPLAY_SPEED, grown);
       const size = shot.size / 100;
       this.drawCostume(shot.costume, shot.x, shot.y, shot.rotation, size * shot.flipX, size);
-      if (player && frame.shield) this.drawShield(shot.x, shot.y, 0.7);
+      if (player && frame.shield) this.drawShield(shot.x, shot.y, 0.7, grown);
     });
     ctx.restore();
     this.view = outer;
@@ -262,6 +497,7 @@ export class RemasterRenderer {
     const ctx = this.ctx;
     const [px, py] = toCanvas(this.view, x, y);
     ctx.save();
+    if (this.direct) ctx.imageSmoothingEnabled = costume.smooth;
     ctx.translate(Math.round(px), Math.round(py));
     if (rotation) ctx.rotate(rotation);
     ctx.scale(Math.sign(scaleX), 1);
@@ -283,6 +519,10 @@ export class RemasterRenderer {
    */
   private raster(costume: Costume, scaleX: number, scaleY: number): Raster | null {
     const scale = Math.max(scaleX, scaleY);
+    if (this.direct) {
+      const image = this.images.get(costume);
+      return image ? { canvas: image, scale } : null;
+    }
     const sizes = this.rasters.get(costume) ?? [];
     const cached = sizes.find((r) => Math.abs(r.scale - scale) < 1e-6);
     if (cached) return cached;
@@ -296,7 +536,7 @@ export class RemasterRenderer {
     ctx.imageSmoothingEnabled = costume.smooth;
     ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
     const raster = { canvas, scale };
-    this.rasters.set(costume, [raster, ...sizes].slice(0, 2));
+    this.rasters.set(costume, [raster, ...sizes].slice(0, 4));
     return raster;
   }
 
@@ -334,6 +574,52 @@ export class RemasterRenderer {
       this.drawCostume(costume, -240 + 12 + i * 44 + 18, 180 - 78, 0, 2.5, 2.5);
     });
   }
+}
+
+/** Where to draw the player, `reach` wide each way: once, or twice while it's partly off a side and wraps around to the other. */
+export function wrapCopies(x: number, reach: number): number[] {
+  if (x + reach > STAGE_WIDTH / 2) return [x, x - STAGE_WIDTH];
+  if (x - reach < -STAGE_WIDTH / 2) return [x, x + STAGE_WIDTH];
+  return [x];
+}
+
+/** Code rain: the size of a glyph, in stage pixels, where the floor starts, and the glyphs. */
+const CODE_CELL = 12;
+const CODE_FLOOR = 296;
+const CODE_GLYPHS = [..."ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ0123456789Z:=*+<>|"];
+/** Sprites as green code, and the virus as a red agent. */
+const CODE_GREEN = "grayscale(1) sepia(1) hue-rotate(70deg) saturate(6) brightness(1.1)";
+const CODE_RED = "grayscale(1) sepia(1) hue-rotate(-40deg) saturate(8)";
+
+/** How much the room is code with this much red pill left: it fades in and out. */
+export function matrixAmount(left: number): number {
+  if (left <= 0) return 0;
+  return Math.max(0, Math.min(1, (POWER_UP_TIME.pill - left) / 0.4, left / 0.5));
+}
+
+/** Diving into the screen: the camera zooms in until the screen fills the stage. */
+export function diveZoom(seconds: number): number {
+  const t = Math.min(1, Math.max(0, seconds / DIVE_ZOOM));
+  return (1 / SCREEN_ROOM.scale) ** (t * t * (3 - 2 * t));
+}
+
+/** White over the stage when going into and out of the 3D world. */
+export function whiteOut(game: Game): number {
+  const third = game.phase === "playing" ? game.third : null;
+  if (!third) return game.phase === "playing" ? Math.max(0, 1 - game.sinceThird / 0.3) : 0;
+  const t = third.time;
+  if (t < DIVE_ZOOM) return Math.max(0, (t - (DIVE_ZOOM - 0.2)) / 0.2);
+  if (t < DIVE_ZOOM + 0.25) return 1 - (t - DIVE_ZOOM) / 0.25;
+  const end = THIRD_TIME + THIRD_OUT;
+  return Math.max(0, (t - (end - 0.2)) / 0.2);
+}
+
+/** A well mixed whole number from another, for the code rain. */
+function hash(n: number): number {
+  let h = Math.imul(n ^ 0x9e3779b9, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  return (h ^ (h >>> 16)) >>> 0;
 }
 
 /** Full and half see-through in turn, as a warning that something is about to end. */

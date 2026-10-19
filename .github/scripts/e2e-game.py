@@ -189,10 +189,28 @@ try:
         }""")
         page.wait_for_function("() => insideTheFirewall.game.powers.jetpack > 0", timeout=2000)
         assert page.locator("#status").text_content().startswith("Jetpack")
+        # Away from the monitor: flying up under it dives into the 3D world instead.
+        page.evaluate("() => insideTheFirewall.game.player.setXY(150, insideTheFirewall.game.player.y)")
         page.keyboard.down("ArrowUp")
         page.wait_for_function("() => insideTheFirewall.game.player.y > 20", timeout=3000)
-        page.keyboard.up("ArrowUp")
         print("A jetpack flies")
+
+        # Holding up into the ceiling bursts out of the monitor, and the room
+        # left behind shows on its screen until the virus comes out.
+        page.evaluate("() => { insideTheFirewall.game.health = 5 }")
+        page.wait_for_function("() => insideTheFirewall.game.escapeTime > 0.5 && insideTheFirewall.game.escapeTime < 1", timeout=3000)
+        page.keyboard.up("ArrowUp")
+        # The floor-less middle of the small room, at three spots, in case the virus is on one.
+        on_screen = page.evaluate("""() => {
+          const { x, y, scale } = insideTheFirewall.view;
+          const ctx = document.querySelector('#game').getContext('2d');
+          return [206.67, 240, 273.33].map((left) => [...ctx.getImageData(Math.round(x + left * scale), Math.round(y + 52 * scale), 1, 1).data]);
+        }""")
+        green = [p for p in on_screen if p[1] > 150 and p[0] < 50]
+        assert len(green) >= 2, f"No room on the monitor's screen: {on_screen}"
+        page.wait_for_function("() => insideTheFirewall.game.virus.visible && insideTheFirewall.game.escapeTime === Infinity", timeout=3000)
+        assert page.evaluate("insideTheFirewall.game.player.size") > 180
+        print("The jetpack escapes the monitor")
 
         # Menu on the game over screen goes to the title, and the game over song stops.
         page.evaluate("() => { insideTheFirewall.game.invincible = 0; insideTheFirewall.game.health = 0 }")
@@ -339,14 +357,14 @@ try:
         day.wait_for_function("() => synths.includes('whoosh')", timeout=2000)
         print("Cues sound when things show up, end, and fly close")
 
-        # The 2013 song plays first, then fades into the next one, and the music speeds up on long runs.
-        assert day.evaluate("insideTheFirewall.audio.songName") == "music"
+        # The 2013 song plays first, then the rest in a random order, each fading into the next.
+        playlist = day.evaluate("[...insideTheFirewall.audio.playlist]")
+        assert playlist[0] == "music" and sorted(playlist) == sorted(["music", "how-do-you-do", "bad-boy", "monster"]), playlist
+        assert day.evaluate("insideTheFirewall.audio.songName") == playlist[0]
         assert day.evaluate("insideTheFirewall.audio.song.source.playbackRate.value") == 1
         day.evaluate("() => { const song = insideTheFirewall.audio.song; song.position = song.end - 2.5 }")
-        day.wait_for_function("() => insideTheFirewall.audio.songName === 'how-do-you-do'", timeout=5000)
-        day.evaluate("() => { insideTheFirewall.game.time = 300 }")
-        day.wait_for_function("() => Math.abs(insideTheFirewall.audio.song.source.playbackRate.value - 2 ** (4 / 12)) < 1e-3", timeout=5000)
-        print("Songs fade into each other, and the music speeds up on long runs")
+        day.wait_for_function(f"() => insideTheFirewall.audio.songName === '{playlist[1]}'", timeout=5000)
+        print("Songs fade into each other")
 
         day.evaluate("""() => {
           const g = insideTheFirewall.game;
@@ -389,9 +407,9 @@ try:
         # Focus is still on Share, so Space would share again. Up jumps.
         day.keyboard.press("ArrowUp")
         day.wait_for_function("() => insideTheFirewall.game.phase === 'playing'", timeout=5000)
-        day.wait_for_function("() => insideTheFirewall.audio.songName === 'how-do-you-do'", timeout=2000)
+        day.wait_for_function("() => insideTheFirewall.audio.songName === 'music'", timeout=2000)
         assert day.evaluate("insideTheFirewall.audio.song.source.playbackRate.value") == 1
-        print("Jump starts again, with the next song")
+        print("Jump starts again, with the 2013 song")
 
         # Settings: a slower game speed, and a new jump key.
         day.click("#pause-game")

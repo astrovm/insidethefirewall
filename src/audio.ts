@@ -16,7 +16,7 @@ interface Song {
 }
 
 /** Short sounds made on the fly, for cues the 2013 game had no sound for. */
-export type Synth = "whoosh" | "appear" | "tick";
+export type Synth = "whoosh" | "appear" | "tick" | "shatter";
 
 /** Plays the game's sounds. Each sprite plays one copy of a sound at a time, like Scratch. */
 export class Audio {
@@ -61,13 +61,22 @@ export class Audio {
     this.effectsOutput.gain.value = Math.min(1, Math.max(0, effects));
   }
 
+  /** Paused by the game, so a key or click doesn't bring the sound back. */
+  private held = false;
+
   /** Browsers only allow sound after the player interacts with the page. */
   unlock(): void {
-    if (this.context.state === "suspended") void this.context.resume();
+    if (!this.held && this.context.state === "suspended") void this.context.resume();
   }
 
   pause(): void {
+    this.held = true;
     void this.context.suspend();
+  }
+
+  resume(): void {
+    this.held = false;
+    this.unlock();
   }
 
   /** Plays a sound for the remaster. A new copy cuts off the last one, as in the 2013 game. */
@@ -87,6 +96,11 @@ export class Audio {
     // A new run starts at normal speed, without gliding down from the last one.
     this.musicRate = 1;
     if (this.songs.length > 0) this.song = this.startSong((first % this.songs.length + this.songs.length) % this.songs.length, false);
+  }
+
+  /** The songs in the order they play. */
+  get playlist(): readonly string[] {
+    return this.songs;
   }
 
   /** The song playing, if any. */
@@ -161,6 +175,20 @@ export class Audio {
       source.start(now);
       return;
     }
+    if (name === "shatter") {
+      // Ice breaking: a sharp, bright crack of noise.
+      this.noise ??= noiseBuffer(ctx, 0.3);
+      const source = ctx.createBufferSource();
+      source.buffer = this.noise;
+      const filter = ctx.createBiquadFilter();
+      filter.type = "highpass";
+      filter.frequency.value = 2500;
+      gain.gain.setValueAtTime(0.5, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
+      source.connect(filter).connect(gain);
+      source.start(now);
+      return;
+    }
     // Square wave blips, in the 8-bit style of the art.
     const notes = name === "appear" ? [660, 990] : [1200];
     const length = name === "appear" ? 0.07 : 0.04;
@@ -225,4 +253,15 @@ export function audibleRange(samples: Float32Array, sampleRate: number): { start
   while (last > first && Math.abs(samples[last]!) < SILENCE) last--;
   if (first >= samples.length) return { start: 0, end: samples.length / sampleRate };
   return { start: first / sampleRate, end: (last + 1) / sampleRate };
+}
+
+/** The songs in a random order. It never starts with `notFirst`, so two runs in a row start differently. */
+export function shuffled(songs: readonly string[], notFirst: string | null, random = Math.random): string[] {
+  const order = [...songs];
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [order[i], order[j]] = [order[j]!, order[i]!];
+  }
+  if (order.length > 1 && order[0] === notFirst) [order[0], order[1]] = [order[1]!, order[0]!];
+  return order;
 }
