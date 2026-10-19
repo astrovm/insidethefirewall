@@ -759,16 +759,18 @@ export class RemasterRenderer {
       ctx.strokeText(warning, 12, 122);
       ctx.fillText(warning, 12, 122);
     }
-    // The song that just started: slides in at the bottom, then fades out.
+    // The song that just started: small, sliding in at the bottom right, then fading out.
     const age = (performance.now() - this.song.at) / 1000;
     if (age < SONG_SHOWN) {
       const slide = Math.min(1, age / 0.3);
       ctx.globalAlpha = Math.min(1, (SONG_SHOWN - age) / 0.6);
-      ctx.font = "500 14px 'Noto Sans', sans-serif";
+      ctx.font = "500 10px 'Noto Sans', sans-serif";
+      ctx.textAlign = "right";
+      ctx.lineWidth = 3;
       ctx.fillStyle = "#ffffff";
-      const x = 12 - (1 - slide * (2 - slide)) * 200;
-      ctx.strokeText(`♪ ${this.song.title}`, x, 344);
-      ctx.fillText(`♪ ${this.song.title}`, x, 344);
+      const x = STAGE_WIDTH - 8 + (1 - slide * (2 - slide)) * 150;
+      ctx.strokeText(`♪ ${this.song.title}`, x, STAGE_HEIGHT - 9);
+      ctx.fillText(`♪ ${this.song.title}`, x, STAGE_HEIGHT - 9);
       ctx.globalAlpha = 1;
     }
     ctx.restore();
