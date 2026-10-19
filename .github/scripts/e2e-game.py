@@ -296,11 +296,16 @@ try:
           navigator.getGamepads = () => [fake];
         }""")
 
+        # The game reads the pad once a frame, so hold and release each for a couple of
+        # frames, not a fixed time a slow runner can fit no frame into.
+        def frames():
+            pad.evaluate("() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))")
+
         def tap_button(index):
             pad.evaluate(f"() => {{ fakePad.buttons[{index}].pressed = true }}")
-            pad.wait_for_timeout(100)
+            frames()
             pad.evaluate(f"() => {{ fakePad.buttons[{index}].pressed = false }}")
-            pad.wait_for_timeout(100)
+            frames()
 
         tap_button(9)
         pad.wait_for_function("() => insideTheFirewall.game.phase === 'playing'", timeout=5000)

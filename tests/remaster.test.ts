@@ -51,8 +51,10 @@ import {
   THIRD_CELL,
   THIRD_IN,
   thirdCell,
+  WRECK_BURN,
 } from "../src/remaster/game.ts";
-import { bounceCar, driveCar, METER, parkedCar, type Car, type CarControls } from "../src/remaster/car.ts";
+import { crashIntoRound, driveCar, HALF_WIDTH, HIT_POINTS, METER, parkedCar, type Car, type CarControls } from "../src/remaster/car.ts";
+import { cellCoins, cellRamp, ROAD_HALF_WIDTH, roadX, roadZ, TRAFFIC_COUNT } from "../src/remaster/streets.ts";
 import { ESCAPE_ZOOM, escapeZoom, fitStage, formatTime, toCanvas, toStage, zoomView } from "../src/remaster/render.ts";
 import { seeded } from "./support.ts";
 
@@ -1619,11 +1621,20 @@ describe("escaping the monitor", () => {
 describe("the 3D world", () => {
   test("goes on in squares, each with its own shapes, the same every time", () => {
     expect(cellShapes(0, 0)).toEqual([]);
-    for (const [i, j] of [[1, 0], [-3, 7], [12, -40]] as const) {
+    for (const [i, j] of [[1, 0], [-3, 7], [12, -40], [4, 4], [-9, 2]] as const) {
       const shapes = cellShapes(i, j);
-      expect(shapes.length).toBeGreaterThanOrEqual(4);
+      expect(shapes.length).toBeGreaterThanOrEqual(1);
       expect(shapes.length).toBeLessThanOrEqual(6);
-      for (const shape of shapes) expect(thirdCell(shape.x, shape.z)).toEqual([i, j]);
+      const ramp = cellRamp(i, j);
+      for (const shape of shapes) {
+        expect(thirdCell(shape.x, shape.z)).toEqual([i, j]);
+        // Off the roads, and off the ramp.
+        expect(Math.abs(shape.x - roadX(i))).toBeGreaterThan(ROAD_HALF_WIDTH + shape.r);
+        expect(Math.abs(shape.x - roadX(i - 1))).toBeGreaterThan(ROAD_HALF_WIDTH + shape.r);
+        expect(Math.abs(shape.z - roadZ(j))).toBeGreaterThan(ROAD_HALF_WIDTH + shape.r);
+        expect(Math.abs(shape.z - roadZ(j - 1))).toBeGreaterThan(ROAD_HALF_WIDTH + shape.r);
+        if (ramp) expect(Math.hypot(shape.x - ramp.x, shape.z - ramp.z)).toBeGreaterThan(shape.r);
+      }
       expect(cellShapes(i, j)).toEqual(shapes);
     }
     expect(cellShapes(1, 0)).not.toEqual(cellShapes(0, 1));
@@ -1638,10 +1649,76 @@ describe("the 3D world", () => {
     const shape = cellShapes(5, 3)[0]!;
     expect(Math.hypot(shape.x, shape.z)).toBeGreaterThan(5 * THIRD_CELL);
     // Heading straight at it from just outside its reach.
+    third.traffic = [];
+    game.events.length = 0;
     Object.assign(third.car, { x: shape.x, z: shape.z - shape.r - 70, heading: 0, vx: 0, vz: 600, speed: 600 });
     run(game, 0.1, { jump: true, gas: true });
     expect(third.car.speed).toBeLessThan(0);
-    expect(Math.hypot(third.car.x - shape.x, third.car.z - shape.z)).toBeGreaterThanOrEqual(shape.r + 58 - 1e-6);
+    expect(crashIntoRound({ ...third.car }, shape.x, shape.z, shape.r)).toBeNull();
+    // It hurt, and shook the camera.
+    expect(third.car.hitPoints).toBeLessThan(HIT_POINTS);
+    expect(game.events.find((e) => e.type === "crash")).toMatchObject({ type: "crash" });
+    expect(third.sparks.length).toBeGreaterThan(0);
+  });
+
+  test("a wrecked car burns 3 seconds, blows up and throws the player out, and won't take them back", () => {
+    const game = started();
+    game.god = true;
+    game.cheat("drive");
+    run(game, THIRD_IN);
+    const third = game.third!;
+    third.car.wrecked = 0;
+    game.events.length = 0;
+    run(game, WRECK_BURN - 0.1, { jump: true, gas: true });
+    expect([third.car.driving, third.car.husk, third.car.speed]).toEqual([true, false, 0]);
+    run(game, 0.2);
+    expect(types(game.events)).toContain("explode");
+    expect([third.car.driving, third.car.husk]).toEqual([false, true]);
+    expect(third.blasts.length).toBe(1);
+    // Beside the car, and walking into it doesn't get back in.
+    const { player: p, car } = third;
+    expect(Math.hypot(p.x - car.x, p.z - car.z)).toBeGreaterThan(HALF_WIDTH);
+    [p.x, p.z] = [car.x + 10, car.z];
+    run(game, 0.1);
+    expect(car.driving).toBe(false);
+  });
+
+  test("traffic drives around the player, and coins are grabbed once", () => {
+    const game = started();
+    game.god = true;
+    game.cheat("dive");
+    run(game, THIRD_IN + 0.1);
+    const third = game.third!;
+    expect(third.traffic.length).toBe(TRAFFIC_COUNT);
+    for (const traffic of third.traffic) expect(Math.hypot(traffic.car.x - third.player.x, traffic.car.z - third.player.z)).toBeGreaterThan(1000);
+    const coin = cellCoins(1, 0)[0]!;
+    game.events.length = 0;
+    // The first in its row, with the next one just out of reach.
+    Object.assign(third.player, { x: coin.x, z: coin.z - 40 });
+    run(game, 0.1);
+    expect(game.coins).toBe(1);
+    expect(types(game.events).filter((t) => t === "coin")).toHaveLength(1);
+    expect(third.coins.has(coin.id)).toBe(true);
+    run(game, 0.5);
+    expect(game.coins).toBe(1);
+    // A new run starts with none.
+    game.start();
+    expect(game.coins).toBe(0);
+  });
+
+  test("a car pushes the player on foot out of its way", () => {
+    const game = started();
+    game.god = true;
+    game.cheat("dive");
+    run(game, THIRD_IN + 0.1);
+    const third = game.third!;
+    const car = third.traffic[0]!.car;
+    Object.assign(third.player, { x: car.x + 5, z: car.z });
+    run(game, DT);
+    const [dx, dz] = [third.player.x - car.x, third.player.z - car.z];
+    const across = dx * Math.cos(car.heading) - dz * Math.sin(car.heading);
+    const along = dx * Math.sin(car.heading) + dz * Math.cos(car.heading);
+    expect(Math.abs(across) >= HALF_WIDTH || Math.abs(along) >= HALF_WIDTH).toBe(true);
   });
 });
 
@@ -1731,11 +1808,13 @@ describe("Homer's car", () => {
     expect(controls.read()).toMatchObject({ jump: true, gas: true, handbrake: false });
   });
 
-  test("bounces off what it runs into, a third as fast", () => {
+  test("bounces off what it runs into", () => {
     const car = Object.assign(parkedCar(0, -100), { vz: 600, speed: 600 });
-    expect(bounceCar(car, 0, 0, 120)).toBeCloseTo(600, 9);
-    expect([car.z, car.vz]).toEqual([-120, -180]);
-    expect(bounceCar(car, 0, 0, 120)).toBe(0);
-    expect(bounceCar(car, 500, 500, 120)).toBe(0);
+    const crash = crashIntoRound(car, 0, 0, 40);
+    expect(crash!.impulse).toBeGreaterThan(0);
+    expect(car.vz).toBeLessThan(0);
+    expect(crashIntoRound(car, 0, 0, 40)).toBeNull();
+    expect(crashIntoRound(car, 500, 500, 40)).toBeNull();
   });
+
 });

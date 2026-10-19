@@ -4,7 +4,26 @@
 
 import { Sprite, type Bounds, type Costume, type RotationStyle } from "../engine/sprite.ts";
 import { costumes, sounds } from "../game/classic.ts";
-import { bounceCar, driveCar, parkedCar, type Car } from "./car.ts";
+import { CENTER_AHEAD, crashCars, crashDamage, crashIntoBox, crashIntoRound, carCorners, damageCar, driveCar, HALF_LENGTH, HALF_WIDTH, METER, parkedCar, type Car, type Crash } from "./car.ts";
+import {
+  CELL,
+  cellOf,
+  cellRamp,
+  cellRandom,
+  coinsNear,
+  driveTraffic,
+  FIRST_CELL_Z,
+  grabs,
+  ground,
+  hitTraffic,
+  rampsNear,
+  rampWall,
+  ROAD_HALF_WIDTH,
+  spawnTraffic,
+  TRAFFIC_COUNT,
+  trafficGone,
+  type Traffic,
+} from "./streets.ts";
 
 /** Updates a second. 120, so the game moves as smoothly as fast screens can show. */
 export const HZ = 120;
@@ -175,12 +194,21 @@ export const THIRD_CHEST = 40;
  * Homer's pink sedan, from The Simpsons: Hit & Run, is parked in the 3D world.
  * Walking into it gets in. Up speeds up, down brakes and backs up, left and
  * right steer, and Space is the handbrake, for sliding round corners. It runs
- * the virus over, and bumps off the shapes.
+ * the virus over, crashes into the shapes and the traffic, flies off ramps
+ * and grabs coins. Crash it enough and it burns, then blows up, throwing the
+ * player out.
  */
 export const PARKED = { x: 150, z: 280 } as const;
 const GET_IN = 80;
-/** How far the car reaches from its middle, for running into things. */
+/** How far the car reaches from its middle, for running into the virus. */
 const CAR_RADIUS = 58;
+/** A wrecked car burns this long, then blows up, as in Hit & Run. */
+export const WRECK_BURN = 3;
+/** How long a grabbed coin takes to fly into the player, as in Hit & Run. */
+export const COIN_COLLECT = 1;
+/** Sparks and explosions are drawn this long. */
+const SPARKS_LAST = 0.6;
+export const BLAST_LAST = 1.2;
 /** The shapes standing on the floor in the first square, which the car bumps off: where, and how wide. */
 export const THIRD_PROPS = [
   { x: -340, z: 660, r: 64 },
@@ -190,13 +218,12 @@ export const THIRD_PROPS = [
   { x: -370, z: 520, r: 6 },
 ] as const;
 /**
- * The 3D floor goes on forever, in squares this wide. The first one, where the
- * player lands, is laid out by hand. Every other one gets its own shapes, made
- * up from where it is, so it's the same each time.
+ * The 3D floor goes on forever, in squares this wide, with roads along their
+ * edges. The first one, where the player lands, is laid out by hand. Every
+ * other one gets its own shapes, made up from where it is, so it's the same
+ * each time.
  */
-export const THIRD_CELL = 1600;
-/** The middle of the first square. */
-const FIRST_CELL_Z = 600;
+export const THIRD_CELL = CELL;
 
 export type ShapeKind = "box" | "cone" | "cylinder" | "sphere";
 /** A made-up shape standing on the floor: how wide it is, and its color. */
@@ -220,17 +247,7 @@ const SHAPE_COLORS: [number, number, number][] = [
 ];
 
 /** The square a point is in. */
-export function thirdCell(x: number, z: number): [number, number] {
-  return [Math.floor(x / THIRD_CELL + 0.5), Math.floor((z - FIRST_CELL_Z) / THIRD_CELL + 0.5)];
-}
-
-/** A number from 0 to 1, always the same for the same square and `n`. */
-function cellRandom(i: number, j: number, n: number): number {
-  let h = Math.imul(i, 73856093) ^ Math.imul(j, 19349663) ^ Math.imul(n + 1, 83492791);
-  h = Math.imul(h ^ (h >>> 13), 0x5bd1e995);
-  h ^= h >>> 15;
-  return (h >>> 0) / 4294967296;
-}
+export const thirdCell = cellOf;
 
 /** The made-up shapes in square `i`, `j`. The first square's are drawn by hand, so it has none. */
 export function cellShapes(i: number, j: number): ThirdShape[] {
@@ -240,14 +257,19 @@ export function cellShapes(i: number, j: number): ThirdShape[] {
     return () => cellRandom(i, j, n++);
   })();
   const count = 4 + Math.floor(random() * 3);
-  const margin = 150;
-  return Array.from({ length: count }, () => ({
+  // Off the roads, and off the ramp.
+  const margin = ROAD_HALF_WIDTH + 80 + 30;
+  const ramp = cellRamp(i, j);
+  const shapes = Array.from({ length: count }, () => ({
     kind: SHAPE_KINDS[Math.floor(random() * SHAPE_KINDS.length)]!,
     x: i * THIRD_CELL + (random() - 0.5) * (THIRD_CELL - 2 * margin),
     z: FIRST_CELL_Z + j * THIRD_CELL + (random() - 0.5) * (THIRD_CELL - 2 * margin),
     r: 30 + random() * 50,
     color: SHAPE_COLORS[Math.floor(random() * SHAPE_COLORS.length)]!,
   }));
+  if (!ramp) return shapes;
+  const [rx, rz] = [ramp.x + Math.sin(ramp.heading) * ramp.length / 2, ramp.z + Math.cos(ramp.heading) * ramp.length / 2];
+  return shapes.filter((shape) => Math.hypot(shape.x - rx, shape.z - rz) > shape.r + ramp.length / 2 + 120);
 }
 
 /** Everything the car can bump into near `x`, `z`: the first square's shapes and the made-up ones around. */
@@ -267,6 +289,13 @@ export interface ThirdDimension {
   virus: { x: number; y: number; z: number; dx: number; dy: number; dz: number; warning: number };
   /** `heading` is the way it points, like the player's `facing`. */
   car: Car;
+  /** The cars driving around. */
+  traffic: Traffic[];
+  /** The coins grabbed, and when, so they fly into the player. */
+  coins: Map<string, number>;
+  /** Sparks where cars crashed, and explosions, with when they happened. */
+  sparks: { x: number; y: number; z: number; time: number; power: number }[];
+  blasts: { x: number; z: number; time: number }[];
 }
 
 /** The bonus round. */
@@ -337,7 +366,9 @@ export type GameEvent =
   | { type: "breakoutEnd"; cleared: boolean }
   | { type: "drive" }
   | { type: "smash" }
-  | { type: "bump" }
+  | { type: "crash"; power: number }
+  | { type: "explode" }
+  | { type: "coin" }
   | { type: "lost"; time: number };
 
 /** The player's size, in percent, as in 2013. */
@@ -445,6 +476,8 @@ export class Game {
   flying = false;
   /** Everything grabbed this run, in order. */
   grabbed: Grab[] = [];
+  /** Coins grabbed in the 3D world this run. */
+  coins = 0;
   /** The last seconds of the run, oldest first. */
   replay: ReplayFrame[] = [];
   /** Seconds on the game over screen. */
@@ -560,6 +593,7 @@ export class Game {
     this.powerUpShown = 0;
     this.closeCall = false;
     this.grabbed = [];
+    this.coins = 0;
     this.replay = [];
     this.endEscape();
     for (const s of this.allSprites()) s.visible = false;
@@ -739,6 +773,10 @@ export class Game {
       player: { x: 0, z: 120, vx: 0, vz: 0, facing: Math.PI, step: 0 },
       virus: { x: 0, y: 0, z: 0, dx: 0, dy: 0, dz: 0, warning: 0 },
       car: parkedCar(PARKED.x, PARKED.z),
+      traffic: [],
+      coins: new Map(),
+      sparks: [],
+      blasts: [],
     };
     this.respawnThirdVirus();
     this.events.push({ type: "dive" });
@@ -776,11 +814,15 @@ export class Game {
     }
     if (third.time >= THIRD_TIME) return;
     const p = third.player;
+    this.updateTraffic();
     if (third.car.driving) {
       this.drive(input);
+      this.grabCoins();
       this.moveThirdVirus();
       return;
     }
+    // A wrecked car left behind still burns, then blows up.
+    if (third.car.wrecked >= 0 || third.car.vx !== 0 || third.car.vz !== 0) this.coast(third.car);
     // Arrows move along the floor as seen from the camera: up goes away, down comes back.
     const across = Number(input.right) - Number(input.left);
     const ahead = Number(input.jump) - Number(input.down);
@@ -805,7 +847,11 @@ export class Game {
     this.walkTime = moving ? this.walkTime + DT : 0;
     this.hitTime += DT;
     this.player.setCostume(this.playerCostume(noInput, moving));
-    if (Math.hypot(p.x - third.car.x, p.z - third.car.z) < GET_IN) this.getInCar();
+    // Cars push the player out of the way.
+    for (const other of [third.car, ...third.traffic.map((t) => t.car)]) this.shove(other);
+    const car = third.car;
+    if (!car.husk && car.wrecked < 0 && Math.hypot(p.x - car.x, p.z - car.z) < GET_IN) this.getInCar();
+    this.grabCoins();
     this.moveThirdVirus();
   }
 
@@ -816,16 +862,146 @@ export class Game {
     this.events.push({ type: "drive" });
   }
 
-  /** Driving Homer's car, with Hit & Run's physics, and bumping off the shapes. */
+  /** Driving Homer's car, with Hit & Run's physics, crashing into things, and blowing up when wrecked. */
   private drive(input: Input): void {
     const { car, player } = this.third!;
     const steer = Number(input.right) - Number(input.left);
-    driveCar(car, { gas: input.gas, brake: input.down, handbrake: input.handbrake, steer }, DT);
-    let hit = 0;
-    for (const prop of shapesNear(car.x, car.z)) hit = Math.max(hit, bounceCar(car, prop.x, prop.z, prop.r + CAR_RADIUS));
-    if (hit > 60) this.events.push({ type: "bump" });
+    driveCar(car, { gas: input.gas, brake: input.down, handbrake: input.handbrake, steer }, DT, ground);
+    this.crashes(car, true);
+    if (car.wrecked >= WRECK_BURN) {
+      this.blowUp(car);
+      this.getOut();
+      return;
+    }
     [player.x, player.z, player.facing] = [car.x, car.z, car.heading];
     player.step += Math.abs(car.speed) * DT;
+  }
+
+  /** The car rolling on with nobody in it. */
+  private coast(car: Car): void {
+    driveCar(car, { gas: false, brake: false, handbrake: false, steer: 0 }, DT, ground);
+    this.crashes(car, false);
+    if (car.wrecked >= WRECK_BURN) this.blowUp(car);
+  }
+
+  /** Thrown out of the car, standing beside it on the driver's side. */
+  private getOut(): void {
+    const { car, player } = this.third!;
+    car.driving = false;
+    const [x, z] = [car.x - Math.cos(car.heading) * (HALF_WIDTH + 40), car.z + Math.sin(car.heading) * (HALF_WIDTH + 40)];
+    Object.assign(player, { x, z, vx: 0, vz: 0, facing: car.heading });
+    this.player.setCostume("normal");
+  }
+
+  /** A wrecked car blows up into a burnt husk. */
+  private blowUp(car: Car): void {
+    const third = this.third!;
+    car.husk = true;
+    car.wrecked = -1;
+    third.blasts.push({ x: car.x, z: car.z, time: third.time });
+    this.events.push({ type: "explode" });
+  }
+
+  /** Homer's car running into the shapes, the ramps' walls and the traffic, hurting what it hits. */
+  private crashes(car: Car, driven: boolean): void {
+    const third = this.third!;
+    let hardest = 0;
+    const crashed = (crash: Crash | null) => {
+      if (!crash || crash.impulse <= 0) return;
+      hardest = Math.max(hardest, crash.impulse);
+      const damage = crashDamage(crash.impulse);
+      if (damage > 0) {
+        damageCar(car, damage);
+        third.sparks.push({ x: crash.x, y: car.y + 0.6 * METER, z: crash.z, time: third.time, power: damage });
+      }
+    };
+    // Flying over things misses them.
+    for (const prop of shapesNear(car.x, car.z)) if (car.y < prop.r * 2) crashed(crashIntoRound(car, prop.x, prop.z, prop.r));
+    // The car's corners, back ones first, ride as high as the body leans, or as their wheels, if higher.
+    const alongs = [-CENTER_AHEAD - HALF_LENGTH, -CENTER_AHEAD - HALF_LENGTH, HALF_LENGTH - CENTER_AHEAD, HALF_LENGTH - CENTER_AHEAD];
+    const wheels = [Math.max(car.wheelY[0], car.wheelY[1]), Math.max(car.wheelY[2], car.wheelY[3])];
+    for (const ramp of rampsNear(car.x, car.z)) {
+      for (const [i, [x, z]] of carCorners(car).entries()) {
+        const wall = rampWall(ramp, x, z, Math.max(car.y + car.pitch * alongs[i]!, wheels[i < 2 ? 0 : 1]!));
+        if (wall) {
+          crashed(crashIntoBox(car, wall));
+          break;
+        }
+      }
+    }
+    for (const traffic of third.traffic) {
+      const crash = crashCars(car, traffic.car);
+      if (!crash) continue;
+      crashed(crash);
+      if (hitTraffic(traffic, crash.impulse)) traffic.car.wrecked = 0;
+    }
+    // Hit & Run shakes the camera past 19000 newton seconds.
+    if (driven && hardest > 19000) this.events.push({ type: "crash", power: Math.min(1, hardest / 100000) });
+    else if (driven && hardest > 3000) this.events.push({ type: "crash", power: 0 });
+  }
+
+  /** The traffic around the player: driving, crashing into each other, blowing up, and coming and going. */
+  private updateTraffic(): void {
+    const third = this.third!;
+    const p = third.player;
+    const cars = [third.car, ...third.traffic.map((t) => t.car)];
+    // The player on foot is something to stop for too.
+    const watched = third.car.driving ? cars : [...cars, { x: p.x, z: p.z } as Car];
+    for (const traffic of third.traffic) {
+      driveTraffic(traffic, watched, DT, this.random);
+      const car = traffic.car;
+      for (const prop of shapesNear(car.x, car.z)) {
+        const crash = crashIntoRound(car, prop.x, prop.z, prop.r);
+        if (crash && hitTraffic(traffic, crash.impulse)) car.wrecked = 0;
+      }
+      // Traffic blows up right away when wrecked, as in Hit & Run.
+      if (car.wrecked >= 0) {
+        this.blowUp(car);
+        traffic.loose = true;
+      }
+    }
+    for (let a = 0; a < third.traffic.length; a++) {
+      for (let b = a + 1; b < third.traffic.length; b++) {
+        const crash = crashCars(third.traffic[a]!.car, third.traffic[b]!.car);
+        if (crash && crash.impulse > 3000) for (const t of [third.traffic[a]!, third.traffic[b]!]) if (hitTraffic(t, crash.impulse)) t.car.wrecked = 0;
+      }
+    }
+    third.traffic = third.traffic.filter((t) => !trafficGone(t, p.x, p.z));
+    while (third.traffic.length < TRAFFIC_COUNT) third.traffic.push(spawnTraffic(p.x, p.z, this.random));
+    third.sparks = third.sparks.filter((s) => third.time - s.time < SPARKS_LAST);
+    third.blasts = third.blasts.filter((b) => third.time - b.time < BLAST_LAST);
+  }
+
+  /** A car pushing the player on foot out of its way. */
+  private shove(car: Car): void {
+    const p = this.third!.player;
+    const [sin, cos] = [Math.sin(car.heading), Math.cos(car.heading)];
+    const [dx, dz] = [p.x - car.x, p.z - car.z];
+    const along = dx * sin + dz * cos + CENTER_AHEAD;
+    const across = dx * cos - dz * sin;
+    const [reachAcross, reachAlong] = [HALF_WIDTH + 14, HALF_LENGTH + 14];
+    if (Math.abs(across) >= reachAcross || Math.abs(along) >= reachAlong) return;
+    // Out the nearest side.
+    if (reachAcross - Math.abs(across) < reachAlong - Math.abs(along)) {
+      const out = Math.sign(across || 1) * reachAcross - across;
+      [p.x, p.z] = [p.x + cos * out, p.z - sin * out];
+    } else {
+      const out = Math.sign(along || 1) * reachAlong - along;
+      [p.x, p.z] = [p.x + sin * out, p.z + cos * out];
+    }
+  }
+
+  /** Grabbing the coins the player, or the car they drive, passes. */
+  private grabCoins(): void {
+    const third = this.third!;
+    const { car, player: p } = third;
+    const [x, y, z] = car.driving ? [car.x, car.y + 0.8 * METER, car.z] : [p.x, THIRD_CHEST, p.z];
+    for (const coin of coinsNear(x, z)) {
+      if (third.coins.has(coin.id) || !grabs(coin, x, y, z, car.driving)) continue;
+      third.coins.set(coin.id, third.time);
+      this.coins++;
+      this.events.push({ type: "coin" });
+    }
   }
 
   private moveThirdVirus(): void {

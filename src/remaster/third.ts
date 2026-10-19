@@ -3,23 +3,30 @@
 // X Y Z signpost. The player becomes a blocky 3D body in their pixel art's
 // colors that walks and turns, and the virus a chunky figure built from its
 // pixel art. Homer's pink sedan from The Simpsons: Hit & Run is parked there,
-// to drive. Drawn on the 2D canvas with a small software 3D
-// renderer: shapes are flat-shaded faces, sorted back to front.
+// to drive, with roads, traffic, ramps and coins around, and the game's own
+// chase camera, skid marks, smoke and explosions. Drawn on the 2D canvas with
+// a small software 3D renderer: shapes are flat-shaded faces, sorted back to
+// front.
 
 import { STAGE_HEIGHT, STAGE_WIDTH, type Costume } from "../engine/sprite.ts";
 import type { CostumeImages } from "../render.ts";
 import {
+  BLAST_LAST,
   cellShapes,
+  COIN_COLLECT,
   thirdCell,
+  THIRD_CHEST,
   THIRD_IN,
   THIRD_OUT,
   THIRD_TIME,
+  WRECK_BURN,
   type Game,
   type ThirdDimension,
 } from "./game.ts";
 import type { View } from "./render.ts";
-import { CENTER_AHEAD } from "./car.ts";
-import { DRIVER_SEAT, SEDAN_SCALE, SedanRenderer } from "./sedan.ts";
+import { carDamage, carPoint, CENTER_AHEAD, METER, WHEELS, type Car } from "./car.ts";
+import { DRIVER_SEAT, SEDAN_SCALE, SedanRenderer, type SedanPlace } from "./sedan.ts";
+import { cellCoins, cellRamp, LANE, ROAD_HALF_WIDTH, roadX, roadZ, TRAFFIC_HIT_POINTS, type Ramp } from "./streets.ts";
 import { SEDAN_MATERIALS, SEDAN_PARTS } from "./sedan-model.ts";
 
 /** Diving into the screen: the camera zooms in this long, then the player falls down the grid tunnel. */
@@ -119,12 +126,77 @@ const GRID_REACH = 1500;
 /** How far from the player the made-up shapes are drawn. */
 const SHAPES_SHOWN = 2000;
 
+/**
+ * The chase camera behind a car, like Hit & Run's: how far back and how high
+ * it sits, the point it looks at, and how much of the way to where it wants
+ * to be it moves each 16 ms frame, with cubic easing. Its field of view, 1.36
+ * radians, taken as across.
+ */
+const CHASE = {
+  distance: 7.856 * METER,
+  pitch: Math.PI / 2 - 1.256837,
+  target: { up: 1, ahead: 1.2 },
+  lag: { yaw: 0.044, pitch: 0.028, distance: 0.05, target: 0.1 },
+  focal: STAGE_WIDTH / 2 / Math.tan(1.363451 / 2),
+} as const;
+const WALK_FOCAL = 360;
+/** Skid marks: how wide a tire's is, and how many are kept. */
+const SKID_WIDTH = 0.25 * METER;
+const SKID_MARKS = 600;
+const MOST_PARTICLES = 450;
+/** A coin's size, and how fast it spins, as in Hit & Run. */
+const COIN_RADIUS = 0.35 * METER;
+const COIN_SPIN = 3;
+
+/** One step of the chase camera's cubic easing: eases `value` toward `wanted`, keeping its rate, `part` of the way. */
+function motionCubic(value: number, rate: number, wanted: number, part: number): [number, number] {
+  const [square, cube] = [part * part, part * part * part];
+  const a = rate + (value - wanted) * 2;
+  const b = (wanted - value) * 3 - rate * 2;
+  return [a * cube + b * square + rate * part + value, a * square * 3 + b * part * 2 + rate];
+}
+
+interface Chase {
+  yaw: number;
+  yawRate: number;
+  pitch: number;
+  pitchRate: number;
+  distance: number;
+  distanceRate: number;
+  target: Vec;
+  targetRate: Vec;
+}
+
+interface SkidMark {
+  a: Vec;
+  b: Vec;
+  alpha: number;
+}
+
+/** Smoke, fire and sparks: where, how fast, how old, how long they last, and how they look. */
+interface Particle {
+  at: Vec;
+  velocity: Vec;
+  age: number;
+  life: number;
+  size: [number, number];
+  color: Rgb;
+  alpha: number;
+  glow: boolean;
+  falls: boolean;
+}
+
 export class ThirdRenderer {
   /** Draws Homer's car with its textures, where WebGL works. */
   private readonly sedan = SedanRenderer.create();
   private readonly figures = new Map<Costume, Figure>();
   /** Where the camera looks, catching up with the player. */
-  private follow: { third: ThirdDimension; time: number; x: number; z: number; yaw: number } | null = null;
+  private follow: { third: ThirdDimension; time: number; x: number; z: number; yaw: number; focal: number; chase: Chase | null } | null = null;
+  /** Skid marks on the floor, where each car's wheels were last frame, and smoke, fire and sparks. */
+  private skids: SkidMark[] = [];
+  private lastWheels = new WeakMap<Car, (Vec | null)[]>();
+  private particles: Particle[] = [];
+  private seen = new WeakSet<object>();
   private readonly stars = Array.from({ length: 90 }, (_, i) => [hash01(i * 3), hash01(i * 3 + 1) * 0.55, hash01(i * 3 + 2)] as const);
 
   constructor(
@@ -191,25 +263,33 @@ export class ThirdRenderer {
     const t = third.time - THIRD_IN;
     const p = third.player;
     const car = third.car;
-    // The camera catches up with the player, from behind and above. Driving, it
-    // swings round behind the car and looks ahead of it.
-    if (this.follow?.third !== third) this.follow = { third, time: third.time, x: p.x, z: p.z, yaw: 0 };
+    // The camera catches up with the player, from behind and above. Driving, it's
+    // Hit & Run's chase camera, swinging round behind the car.
+    if (this.follow?.third !== third) {
+      this.follow = { third, time: third.time, x: p.x, z: p.z, yaw: 0, focal: WALK_FOCAL, chase: null };
+      this.skids = [];
+      this.particles = [];
+    }
     const follow = this.follow;
     const elapsed = Math.max(0, third.time - follow.time);
-    const catchUp = 1 - Math.exp(-elapsed * (car.driving ? 8 : 5));
+    const catchUp = 1 - Math.exp(-elapsed * 5);
     follow.x += (p.x - follow.x) * catchUp;
     follow.z += (p.z - follow.z) * catchUp;
-    const wantedYaw = car.driving ? car.heading : 0;
-    const turn = wantedYaw - follow.yaw;
-    follow.yaw += Math.atan2(Math.sin(turn), Math.cos(turn)) * (1 - Math.exp(-elapsed * 4));
+    follow.yaw += Math.atan2(Math.sin(-follow.yaw), Math.cos(-follow.yaw)) * (1 - Math.exp(-elapsed * 4));
+    follow.focal += ((car.driving ? CHASE.focal : WALK_FOCAL) - follow.focal) * (1 - Math.exp(-elapsed * 4));
     follow.time = third.time;
     // It swoops down from high above at the start.
     const swoop = ease(Math.min(1, t / 1.4));
-    const yaw = lerp(1.3, follow.yaw, swoop);
-    const target: Vec = car.driving
-      ? [follow.x + Math.sin(follow.yaw) * 100, 45, follow.z + Math.cos(follow.yaw) * 100]
-      : [follow.x, 38, follow.z + 70];
-    const camera = new Camera(view, target, lerp(1300, car.driving ? 480 : 360, swoop), yaw, lerp(1.05, car.driving ? 0.32 : 0.4, swoop), 360);
+    let [yaw, distance, pitch, target] = [follow.yaw, 360, 0.4, [follow.x, 38, follow.z + 70] as Vec];
+    if (car.driving) {
+      const chase = (follow.chase ??= { yaw: follow.yaw, yawRate: 0, pitch: 0.4, pitchRate: 0, distance: 360, distanceRate: 0, target, targetRate: [0, 0, 0] });
+      this.moveChase(chase, car, elapsed);
+      [yaw, distance, pitch, target] = [chase.yaw, chase.distance, chase.pitch, chase.target];
+      follow.yaw = yaw;
+      [follow.x, follow.z] = [p.x, p.z];
+    } else follow.chase = null;
+    const camera = new Camera(view, target, lerp(1300, distance, swoop), lerp(1.3, yaw, swoop), lerp(1.05, pitch, swoop), follow.focal);
+    this.updateEffects(third, elapsed);
 
     // The sky: black, a little blue near the horizon, with stars.
     ctx.fillStyle = "#000";
@@ -245,10 +325,25 @@ export class ThirdRenderer {
     this.addText(things, camera, "1782¹² + 1841¹² = 1922¹²", [-170, 150, 820], 30, "#c8b4e6");
     this.addText(things, camera, "P = NP", [360, 70, 560], 46, "#66ddee");
     this.addCard(things, camera);
-    // The made-up shapes in the squares around, out to where the floor fades.
+    // The made-up shapes in the squares around, out to where the floor fades, with their ramps and coins.
     const [ci, cj] = thirdCell(p.x, p.z);
     for (let i = ci - 1; i <= ci + 1; i++) {
       for (let j = cj - 1; j <= cj + 1; j++) {
+        const ramp = cellRamp(i, j);
+        if (ramp && Math.hypot(ramp.x - p.x, ramp.z - p.z) < SHAPES_SHOWN) mesh(rampFaces(ramp));
+        for (const coin of cellCoins(i, j)) {
+          if (Math.hypot(coin.x - p.x, coin.z - p.z) > SHAPES_SHOWN) continue;
+          const grabbed = third.coins.get(coin.id);
+          // A grabbed coin pops up and flies into the player, as in Hit & Run.
+          if (grabbed === undefined) this.addCoin(things, camera, [coin.x, coin.y, coin.z], third.time * COIN_SPIN + coin.x * 0.01, 1);
+          else {
+            const age = (third.time - grabbed) / COIN_COLLECT;
+            if (age >= 1) continue;
+            const to: Vec = car.driving ? [car.x, car.y + 0.8 * METER, car.z] : [p.x, THIRD_CHEST, p.z];
+            const at: Vec = [lerp(coin.x, to[0], age), lerp(coin.y, to[1], age) + Math.sin(age * Math.PI) * 0.4 * METER * 2, lerp(coin.z, to[2], age)];
+            this.addCoin(things, camera, at, third.time * COIN_SPIN * 4, 1 - age * 0.6);
+          }
+        }
         for (const shape of cellShapes(i, j)) {
           if (Math.hypot(shape.x - p.x, shape.z - p.z) > SHAPES_SHOWN) continue;
           const { x, z, r, color } = shape;
@@ -270,14 +365,21 @@ export class ThirdRenderer {
     // Homer's car, parked or driven, sucked in at the end with the player at the wheel.
     if (sucked < 1) {
       const sink = car.driving ? sucked : 0;
-      // Its x and z are its center of mass, a little ahead of the middle of the model.
-      const [x, z] = [car.x - Math.sin(car.heading) * CENTER_AHEAD, car.z - Math.cos(car.heading) * CENTER_AHEAD];
-      const place = { at: [x, -sink * 60, z] as Vec, heading: car.heading + sink * 14, scale: 1 - sink };
-      this.addShadow(things, camera, [x, 0, z], 72 * (1 - sink));
+      const place = carPlace(car, sink);
+      this.addCarShadow(things, camera, car, place, 1 - sink);
       // The player sits on the driver's seat, and blinks by hiding.
       const driver = car.driving && playerAlpha === 1 ? this.driverFaces(game, place) : [];
       this.addCar(things, camera, place, driver);
     }
+    // The traffic.
+    for (const traffic of third.traffic) {
+      const place = { ...carPlace(traffic.car, 0), paint: traffic.paint };
+      if (Math.hypot(place.at[0] - p.x, place.at[2] - p.z) > SHAPES_SHOWN) continue;
+      this.addCarShadow(things, camera, traffic.car, place, 1);
+      this.addCar(things, camera, place, []);
+    }
+    this.addParticles(things, camera);
+    for (const blast of third.blasts) this.addBlast(things, camera, blast, third.time - blast.time);
     // Blinks by hiding: a see-through body would show its insides.
     if (sucked < 1 && playerAlpha === 1 && !car.driving) {
       this.addShadow(things, camera, [p.x, 0, p.z], 22 * (1 - sucked));
@@ -303,6 +405,183 @@ export class ThirdRenderer {
       });
     }
     for (const thing of things.sort((a, b) => b.depth - a.depth)) thing.draw();
+  }
+
+  /** The follow camera: eases round behind the car, holding still while it flies. */
+  private moveChase(chase: Chase, car: Car, elapsed: number): void {
+    // The lags are for 16 ms frames.
+    const frames = (elapsed * 1000) / 16;
+    const part = (lag: number) => Math.min(1, lag * frames);
+    let wantedYaw = car.airborne ? chase.yaw : car.heading;
+    // The short way round.
+    wantedYaw = chase.yaw + Math.atan2(Math.sin(wantedYaw - chase.yaw), Math.cos(wantedYaw - chase.yaw));
+    [chase.yaw, chase.yawRate] = motionCubic(chase.yaw, chase.yawRate, wantedYaw, part(CHASE.lag.yaw));
+    [chase.pitch, chase.pitchRate] = motionCubic(chase.pitch, chase.pitchRate, CHASE.pitch, part(CHASE.lag.pitch));
+    [chase.distance, chase.distanceRate] = motionCubic(chase.distance, chase.distanceRate, CHASE.distance, part(CHASE.lag.distance));
+    const [x, z] = carPoint(car, 0, CHASE.target.ahead * METER - CENTER_AHEAD);
+    const wanted: Vec = [x, car.y + CHASE.target.up * METER, z];
+    const target: Vec = [0, 0, 0];
+    const rate: Vec = [0, 0, 0];
+    for (const i of [0, 1, 2] as const) [target[i], rate[i]] = motionCubic(chase.target[i], chase.targetRate[i], wanted[i], part(CHASE.lag.target));
+    [chase.target, chase.targetRate] = [target, rate];
+  }
+
+  /** Lays skid marks behind skidding tires, and makes smoke, fire and sparks, `elapsed` seconds on. */
+  private updateEffects(third: ThirdDimension, elapsed: number): void {
+    const cars: Car[] = [third.car, ...third.traffic.map((t) => t.car)];
+    for (const car of cars) {
+      const last = this.lastWheels.get(car) ?? [null, null, null, null];
+      this.lastWheels.set(car, last);
+      WHEELS.forEach((wheel, i) => {
+        const skidding = car.skid > 0 && !car.airborne && (!car.burnout || wheel.drive);
+        if (!skidding) {
+          last[i] = null;
+          return;
+        }
+        const [x, z] = carPoint(car, wheel.across * METER, wheel.along * METER);
+        const at: Vec = [x, car.wheelY[i]! + 0.5, z];
+        const before = last[i];
+        if (before && Math.hypot(at[0] - before[0], at[2] - before[2]) < 120) {
+          if (Math.hypot(at[0] - before[0], at[2] - before[2]) > 3) {
+            this.skids.push({ a: before, b: at, alpha: car.skid * 0.45 });
+            last[i] = at;
+          }
+        } else last[i] = at;
+        // Smoke off sliding tires.
+        if (Math.random() < elapsed * 6 * car.skid) {
+          this.puff([x, car.wheelY[i]! + 6, z], [0, 20, 0], 0.9, [5, 22], [210, 210, 215], 0.18);
+        }
+      });
+      // A hurt car smokes from under its hood: white, then grey, then black with fire, as in Hit & Run.
+      const damage = carDamage(car, car === third.car ? undefined : TRAFFIC_HIT_POINTS);
+      const [hx, hz] = carPoint(car, 0, 1.4 * METER);
+      const hood: Vec = [hx, car.y + 1.1 * METER, hz];
+      const burning = car.wrecked >= 0;
+      if (car.husk) this.smoke(hood, elapsed * 3, [25, 25, 28], 0.4);
+      else if (burning) {
+        this.smoke(hood, elapsed * 10, [20, 20, 22], 0.5);
+        for (let n = 0; n < elapsed * 40; n++) this.puff(hood, [(Math.random() - 0.5) * 40, 60 + Math.random() * 40, (Math.random() - 0.5) * 40], 0.45, [14, 4], [255, 120 + Math.random() * 80, 30], 0.9, true);
+      } else if (damage >= 0.99) this.smoke(hood, elapsed * 8, [120, 120, 125], 0.4);
+      else if (damage > 0.6) this.smoke(hood, elapsed * 5, [235, 235, 240], 0.3);
+    }
+    if (this.skids.length > SKID_MARKS) this.skids.splice(0, this.skids.length - SKID_MARKS);
+    // Sparks where things crashed, and explosions.
+    for (const spark of third.sparks) {
+      if (this.seen.has(spark)) continue;
+      this.seen.add(spark);
+      for (let n = 0; n < 6 + spark.power * 20; n++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 150 + Math.random() * 250;
+        this.puff([spark.x, spark.y, spark.z], [Math.cos(angle) * speed, 80 + Math.random() * 200, Math.sin(angle) * speed], 0.35 + Math.random() * 0.2, [3, 1], [255, 220, 90], 1, true, true);
+      }
+    }
+    for (const blast of third.blasts) {
+      if (this.seen.has(blast)) continue;
+      this.seen.add(blast);
+      for (let n = 0; n < 40; n++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 60 + Math.random() * 260;
+        this.puff([blast.x, 40, blast.z], [Math.cos(angle) * speed, 60 + Math.random() * 240, Math.sin(angle) * speed], 0.6 + Math.random() * 0.4, [30, 70], [255, 100 + Math.random() * 130, 20], 0.9, true);
+      }
+      for (let n = 0; n < 24; n++) {
+        const angle = Math.random() * Math.PI * 2;
+        this.puff([blast.x, 50, blast.z], [Math.cos(angle) * 80, 80 + Math.random() * 80, Math.sin(angle) * 80], 1.5 + Math.random(), [30, 80], [25, 25, 28], 0.5);
+      }
+    }
+    for (const particle of this.particles) {
+      particle.age += elapsed;
+      if (particle.falls) particle.velocity[1] -= 16 * METER * elapsed;
+      for (const i of [0, 1, 2] as const) particle.at[i] += particle.velocity[i] * elapsed;
+      if (particle.falls && particle.at[1] < 0) [particle.at[1], particle.velocity[1]] = [0, -particle.velocity[1] * 0.3];
+    }
+    this.particles = this.particles.filter((particle) => particle.age < particle.life);
+    if (this.particles.length > MOST_PARTICLES) this.particles.splice(0, this.particles.length - MOST_PARTICLES);
+  }
+
+  /** Smoke rising, `count` puffs of it on average. */
+  private smoke(at: Vec, count: number, color: Rgb, alpha: number): void {
+    for (let n = 0; n < Math.floor(count) + (Math.random() < count % 1 ? 1 : 0); n++) {
+      this.puff([at[0] + (Math.random() - 0.5) * 20, at[1], at[2] + (Math.random() - 0.5) * 20], [(Math.random() - 0.5) * 20, 50 + Math.random() * 30, (Math.random() - 0.5) * 20], 1.4, [6, 28], color, alpha);
+    }
+  }
+
+  private puff(at: Vec, velocity: Vec, life: number, size: [number, number], color: Rgb, alpha: number, glow = false, falls = false): void {
+    this.particles.push({ at: [...at], velocity, age: 0, life, size, color, alpha, glow, falls });
+  }
+
+  private addParticles(things: Thing[], camera: Camera): void {
+    const ctx = this.ctx;
+    for (const particle of this.particles) {
+      const center = camera.toCamera(particle.at);
+      if (center[2] < NEAR) continue;
+      const u = particle.age / particle.life;
+      const radius = lerp(particle.size[0], particle.size[1], u);
+      things.push({
+        depth: center[2],
+        draw: () => {
+          const [x, y] = camera.toCanvas(center);
+          ctx.save();
+          ctx.globalAlpha = particle.alpha * (1 - u);
+          if (particle.glow) ctx.globalCompositeOperation = "lighter";
+          ctx.fillStyle = `rgb(${particle.color[0]}, ${particle.color[1]}, ${particle.color[2]})`;
+          ctx.beginPath();
+          ctx.arc(x, y, Math.max(0.5, radius * camera.pixels(center[2])), 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        },
+      });
+    }
+  }
+
+  /** An explosion's flash: a ball of light, growing and fading. */
+  private addBlast(things: Thing[], camera: Camera, blast: { x: number; z: number }, age: number): void {
+    const center = camera.toCamera([blast.x, 50, blast.z]);
+    if (center[2] < NEAR || age > BLAST_LAST) return;
+    const ctx = this.ctx;
+    const u = age / BLAST_LAST;
+    things.push({
+      depth: center[2] - 60,
+      draw: () => {
+        const [x, y] = camera.toCanvas(center);
+        const radius = (60 + 200 * Math.sqrt(u)) * camera.pixels(center[2]);
+        const glow = ctx.createRadialGradient(x, y, 0, x, y, radius);
+        glow.addColorStop(0, `rgba(255, 250, 200, ${0.95 * (1 - u)})`);
+        glow.addColorStop(0.4, `rgba(255, 150, 40, ${0.7 * (1 - u)})`);
+        glow.addColorStop(1, "rgba(255, 60, 0, 0)");
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      },
+    });
+  }
+
+  /** A gold coin, spinning on its edge, `size` of its full size. */
+  private addCoin(things: Thing[], camera: Camera, at: Vec, angle: number, size: number): void {
+    const center = camera.toCamera(at);
+    if (center[2] < NEAR) return;
+    const ctx = this.ctx;
+    things.push({
+      depth: center[2],
+      draw: () => {
+        const [x, y] = camera.toCanvas(center);
+        const radius = COIN_RADIUS * size * camera.pixels(center[2]);
+        const width = Math.max(radius * 0.12, Math.abs(Math.cos(angle)) * radius);
+        ctx.save();
+        ctx.fillStyle = "#a8740c";
+        ctx.beginPath();
+        ctx.ellipse(x, y, width, radius, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = Math.cos(angle) > 0 ? "#ffd23c" : "#f0b820";
+        ctx.beginPath();
+        ctx.ellipse(x, y, width * 0.8, radius * 0.8, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      },
+    });
   }
 
   /** The glowing floor grid, fading into the dark, with the edge of where the player can go. */
@@ -333,12 +612,96 @@ export class ThirdRenderer {
     }
     ctx.stroke();
     ctx.restore();
+    this.drawRoads(camera, cx, cz);
+    this.drawSkids(camera);
     // Fog: the grid fades out toward the horizon.
     const fog = ctx.createLinearGradient(0, horizonY, 0, horizonY + 70 * view.scale);
     fog.addColorStop(0, "rgba(0, 0, 0, 1)");
     fog.addColorStop(1, "rgba(0, 0, 0, 0)");
     ctx.fillStyle = fog;
     ctx.fillRect(view.x, horizonY - 1, STAGE_WIDTH * view.scale, 70 * view.scale + 1);
+  }
+
+  /** The roads along the squares' edges: dark, with glowing edges and a dashed middle line. */
+  private drawRoads(camera: Camera, cx: number, cz: number): void {
+    const ctx = this.ctx;
+    const { scale } = camera.view;
+    const strips: { a: Vec; b: Vec; across: Vec }[] = [];
+    const first = (offset: number, center: number) => Math.ceil((center - GRID_REACH - offset) / 1600 - 0.5);
+    for (let i = first(0, cx); roadX(i) <= cx + GRID_REACH; i++) strips.push({ a: [roadX(i), 0, cz - GRID_REACH], b: [roadX(i), 0, cz + GRID_REACH], across: [1, 0, 0] });
+    for (let j = first(600, cz); roadZ(j) <= cz + GRID_REACH; j++) strips.push({ a: [cx - GRID_REACH, 0, roadZ(j)], b: [cx + GRID_REACH, 0, roadZ(j)], across: [0, 0, 1] });
+    ctx.save();
+    for (const { a, b, across } of strips) {
+      const side = (point: Vec, k: number): Vec => [point[0] + across[0] * k, 0.1, point[2] + across[2] * k];
+      const surface = clip([side(a, -ROAD_HALF_WIDTH), side(b, -ROAD_HALF_WIDTH), side(b, ROAD_HALF_WIDTH), side(a, ROAD_HALF_WIDTH)].map((c) => camera.toCamera(c)));
+      if (surface.length < 3) continue;
+      ctx.fillStyle = "#0a0a16";
+      ctx.beginPath();
+      for (const [i, c] of surface.entries()) {
+        const [x, y] = camera.toCanvas(c);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.fill();
+      ctx.lineWidth = Math.max(1, 1.5 * scale);
+      ctx.strokeStyle = "#ff3cdc";
+      ctx.beginPath();
+      for (const k of [-ROAD_HALF_WIDTH, ROAD_HALF_WIDTH]) this.line(camera, side(a, k), side(b, k));
+      ctx.stroke();
+      // The middle line, dashed, and the lanes' edges, faint.
+      ctx.strokeStyle = "#ffd23c";
+      ctx.beginPath();
+      const length = Math.hypot(b[0] - a[0], b[2] - a[2]);
+      const [dx, dz] = [(b[0] - a[0]) / length, (b[2] - a[2]) / length];
+      const start = Math.floor((a[0] * dx + a[2] * dz) / 120) * 120 - (a[0] * dx + a[2] * dz);
+      for (let d = start; d < length; d += 120) {
+        const from: Vec = [a[0] + dx * d, 0.2, a[2] + dz * d];
+        this.line(camera, from, [from[0] + dx * 60, 0.2, from[2] + dz * 60]);
+      }
+      ctx.stroke();
+      ctx.globalAlpha = 0.25;
+      ctx.strokeStyle = "#ffffff";
+      ctx.beginPath();
+      for (const k of [-LANE, LANE]) this.line(camera, side(a, k), side(b, k));
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+  }
+
+  /** Adds a line from `a` to `b` to the path being drawn, cut where it goes behind the camera. */
+  private line(camera: Camera, a: Vec, b: Vec): void {
+    let [p, q] = [camera.toCamera(a), camera.toCamera(b)];
+    if (p[2] < NEAR && q[2] < NEAR) return;
+    if (p[2] < NEAR) p = cut(p, q);
+    else if (q[2] < NEAR) q = cut(q, p);
+    const [px, py] = camera.toCanvas(p);
+    const [qx, qy] = camera.toCanvas(q);
+    this.ctx.moveTo(px, py);
+    this.ctx.lineTo(qx, qy);
+  }
+
+  /** The skid marks, grey rubber on the floor. */
+  private drawSkids(camera: Camera): void {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.lineCap = "butt";
+    for (const mark of this.skids) {
+      let [p, q] = [camera.toCamera(mark.a), camera.toCamera(mark.b)];
+      if (p[2] < NEAR && q[2] < NEAR) continue;
+      if (p[2] < NEAR) p = cut(p, q);
+      else if (q[2] < NEAR) q = cut(q, p);
+      const [px, py] = camera.toCanvas(p);
+      const [qx, qy] = camera.toCanvas(q);
+      ctx.globalAlpha = mark.alpha;
+      ctx.strokeStyle = "#8a8a96";
+      ctx.lineWidth = Math.max(1, SKID_WIDTH * camera.pixels((p[2] + q[2]) / 2));
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.lineTo(qx, qy);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   /** Flat-shaded faces, the ones facing the camera, back to front. */
@@ -382,7 +745,7 @@ export class ThirdRenderer {
   }
 
   /** Homer's car at `place`, with `driver` in it: textured with WebGL, or flat where it doesn't work. */
-  private addCar(things: Thing[], camera: Camera, place: { at: Vec; heading: number; scale: number }, driver: Face[]): void {
+  private addCar(things: Thing[], camera: Camera, place: SedanPlace, driver: Face[]): void {
     const sedan = this.sedan;
     if (!sedan) {
       this.addMesh(things, camera, [...placeFaces(CAR, place.at, place.heading, place.scale), ...driver]);
@@ -393,12 +756,15 @@ export class ThirdRenderer {
     const lit = driver.map((face) => ({ corners: face.corners, color: face.color.map((c) => c * (0.35 + 0.65 * Math.max(0, dot(face.normal, LIGHT)))) as Rgb }));
     things.push({
       depth: middle[2],
-      draw: () => ctx.drawImage(sedan.draw(camera, ctx.canvas, place, LIGHT, lit), 0, 0),
+      draw: () => {
+        const drawn = sedan.draw(camera, ctx.canvas, place, LIGHT, lit);
+        if (drawn.width > 0 && drawn.height > 0) ctx.drawImage(drawn.canvas, drawn.x, drawn.y, drawn.width, drawn.height, drawn.x, drawn.y, drawn.width, drawn.height);
+      },
     });
   }
 
   /** The player sitting in the driver's seat of the car at `place`, hands on the wheel. */
-  private driverFaces(game: Game, place: { at: Vec; heading: number; scale: number }): Face[] {
+  private driverFaces(game: Game, place: SedanPlace): Face[] {
     const [cos, sin] = [Math.cos(place.heading), Math.sin(place.heading)];
     const k = SEDAN_SCALE * place.scale;
     const [x, y, z] = DRIVER_SEAT;
@@ -659,8 +1025,14 @@ export class ThirdRenderer {
     });
   }
 
+  /** A car's shadow, smaller and fainter the higher it flies. */
+  private addCarShadow(things: Thing[], camera: Camera, car: Car, place: SedanPlace, size: number): void {
+    const up = Math.max(0, Math.min(1, car.y / (4 * METER)));
+    this.addShadow(things, camera, [place.at[0], 0, place.at[2]], 72 * size * (1 - up * 0.4), 0.75 * (1 - up * 0.6));
+  }
+
   /** A dark glow on the floor, so it's clear where things are. */
-  private addShadow(things: Thing[], camera: Camera, at: Vec, radius: number): void {
+  private addShadow(things: Thing[], camera: Camera, at: Vec, radius: number, alpha = 0.75): void {
     const points = ring(at, radius, 16).map((p) => camera.toCamera(p));
     if (points.some((p) => p[2] < NEAR)) return;
     const ctx = this.ctx;
@@ -668,7 +1040,7 @@ export class ThirdRenderer {
       depth: camera.toCamera(at)[2] + radius + 30,
       draw: () => {
         ctx.save();
-        ctx.fillStyle = "rgba(0, 0, 0, 0.75)";
+        ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`;
         ctx.beginPath();
         for (const [i, p] of points.entries()) {
           const [x, y] = camera.toCanvas(p);
@@ -751,6 +1123,61 @@ const CAR: Face[] = SEDAN_PARTS.flatMap(({ material, corners, triangles }) => {
   }
   return faces;
 });
+
+/** Where a car is drawn: its model's middle, a little behind its center of mass, leaning on its springs, `sink` into the black hole. */
+function carPlace(car: Car, sink: number): SedanPlace {
+  const [x, z] = carPoint(car, 0, -CENTER_AHEAD);
+  return {
+    at: [x, car.y - sink * 60, z],
+    heading: car.heading + sink * 14,
+    scale: 1 - sink,
+    pose: {
+      pitch: car.pitch,
+      roll: car.roll,
+      center: CENTER_AHEAD / SEDAN_SCALE,
+      wheelY: car.wheelY.map((y) => y - sink * 60),
+      wheelTurn: car.wheelTurn,
+      steer: car.steer * (30 * Math.PI) / 180,
+    },
+    burnt: car.husk ? 1 : car.wrecked >= 0 ? Math.min(1, car.wrecked / WRECK_BURN) * 0.6 : 0,
+  };
+}
+
+/** A ramp's faces: the slope, its tall end and its two sides. */
+function rampFaces(ramp: Ramp): Face[] {
+  const [sin, cos] = [Math.sin(ramp.heading), Math.cos(ramp.heading)];
+  const point = (up: number, across: number, y: number): Vec => [ramp.x + up * sin + across * cos, y, ramp.z + up * cos - across * sin];
+  const [w, l, h] = [ramp.width / 2, ramp.length, ramp.height];
+  const faces: Vec[][] = [
+    [point(0, -w, 0), point(l, -w, h), point(l, w, h), point(0, w, 0)],
+    [point(l, w, h), point(l, -w, h), point(l, -w, 0), point(l, w, 0)],
+    [point(0, -w, 0), point(l, -w, 0), point(l, -w, h)],
+    [point(0, w, 0), point(l, w, h), point(l, w, 0)],
+  ];
+  const middle = point(l / 2, 0, h / 3);
+  return faces.map((corners, i) => {
+    const [a, b, c] = corners as [Vec, Vec, Vec];
+    let normal = normalize([
+      (b[1] - a[1]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[1] - a[1]),
+      (b[2] - a[2]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[2] - a[2]),
+      (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]),
+    ]);
+    // Pointing out of the ramp.
+    if (dot(normal, [a[0] - middle[0], a[1] - middle[1], a[2] - middle[2]]) < 0) normal = [-normal[0], -normal[1], -normal[2]];
+    return { corners, normal, color: i === 0 ? [255, 150, 40] : [200, 90, 30] };
+  });
+}
+
+/** A polygon in camera space, cut where it goes behind the camera. */
+function clip(points: Vec[]): Vec[] {
+  const out: Vec[] = [];
+  points.forEach((p, i) => {
+    const q = points[(i + 1) % points.length]!;
+    if (p[2] >= NEAR) out.push(p);
+    if (p[2] >= NEAR !== q[2] >= NEAR) out.push(p[2] < NEAR ? cut(p, q) : cut(q, p));
+  });
+  return out;
+}
 
 /** The point where a line from behind the camera crosses into view. */
 function cut(behind: Vec, ahead: Vec): Vec {
