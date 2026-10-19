@@ -189,6 +189,8 @@ try:
         }""")
         page.wait_for_function("() => insideTheFirewall.game.powers.jetpack > 0", timeout=2000)
         assert page.locator("#status").text_content().startswith("Jetpack")
+        # Away from the monitor: flying up under it dives into the 3D world instead.
+        page.evaluate("() => insideTheFirewall.game.player.setXY(150, insideTheFirewall.game.player.y)")
         page.keyboard.down("ArrowUp")
         page.wait_for_function("() => insideTheFirewall.game.player.y > 20", timeout=3000)
         print("A jetpack flies")
