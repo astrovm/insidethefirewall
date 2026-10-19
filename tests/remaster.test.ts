@@ -47,6 +47,10 @@ import {
   type GameEvent,
   type Input,
   type PowerUpKind,
+  cellShapes,
+  THIRD_CELL,
+  THIRD_IN,
+  thirdCell,
 } from "../src/remaster/game.ts";
 import { ESCAPE_ZOOM, escapeZoom, fitStage, formatTime, toCanvas, toStage, zoomView } from "../src/remaster/render.ts";
 import { seeded } from "./support.ts";
@@ -1608,5 +1612,34 @@ describe("escaping the monitor", () => {
     expect(y).toBeCloseTo(view.y, 9);
     expect(zoomed.scale * SCREEN_ROOM.scale).toBeCloseTo(view.scale, 9);
     expect(zoomView(view, 1)).toEqual(view);
+  });
+});
+
+describe("the 3D world", () => {
+  test("goes on in squares, each with its own shapes, the same every time", () => {
+    expect(cellShapes(0, 0)).toEqual([]);
+    for (const [i, j] of [[1, 0], [-3, 7], [12, -40]] as const) {
+      const shapes = cellShapes(i, j);
+      expect(shapes.length).toBeGreaterThanOrEqual(4);
+      expect(shapes.length).toBeLessThanOrEqual(6);
+      for (const shape of shapes) expect(thirdCell(shape.x, shape.z)).toEqual([i, j]);
+      expect(cellShapes(i, j)).toEqual(shapes);
+    }
+    expect(cellShapes(1, 0)).not.toEqual(cellShapes(0, 1));
+  });
+
+  test("the car drives anywhere, and bumps off the shapes far from the start", () => {
+    const game = started();
+    parkVirus(game);
+    game.cheat("drive");
+    run(game, THIRD_IN);
+    const third = game.third!;
+    const shape = cellShapes(5, 3)[0]!;
+    expect(Math.hypot(shape.x, shape.z)).toBeGreaterThan(5 * THIRD_CELL);
+    // Heading straight at it from just outside its reach.
+    Object.assign(third.car, { x: shape.x, z: shape.z - shape.r - 70, heading: 0, speed: 600 });
+    run(game, 0.1, { jump: true });
+    expect(third.car.speed).toBeLessThan(0);
+    expect(Math.hypot(third.car.x - shape.x, third.car.z - shape.z)).toBeGreaterThanOrEqual(shape.r + 58 - 1e-6);
   });
 });
