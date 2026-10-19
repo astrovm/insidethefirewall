@@ -5,9 +5,8 @@ import type { GameEvent } from "./game.ts";
 
 /** Seconds the pieces of a broken virus fly. */
 export const SHARDS = 0.7;
-/** Colors of the pieces: ice for a frozen virus, the virus itself when it's stomped, the cube when it breaks. */
+/** Colors of the pieces: ice for a frozen virus, the cube when it breaks. */
 const ICE = ["#ffffff", "#66ccff", "#9a9a2a"];
-const VIRUS = ["#ff0000", "#b51000", "#000008"];
 const CUBE = ["#c0c0c0", "#808080", "#ff3d8b"];
 /** Seconds the HEV suit's warning stays on screen. */
 export const CRITICAL = 2.5;
@@ -32,10 +31,10 @@ export class Effects {
   handle(event: GameEvent): void {
     if (event.type === "shield") this.shake(0.1, 2);
     if (event.type === "critical") this.critical = CRITICAL;
-    if (event.type === "shatter" || event.type === "stomp" || event.type === "cube") {
+    if (event.type === "shatter" || event.type === "cube") {
       this.shake(0.15, 3);
       this.shardTime = 0;
-      this.shardColors = event.type === "stomp" ? VIRUS : event.type === "cube" ? CUBE : ICE;
+      this.shardColors = event.type === "cube" ? CUBE : ICE;
       this.shards = Array.from({ length: 14 }, () => {
         const angle = this.random() * Math.PI * 2;
         const speed = 120 + this.random() * 220;

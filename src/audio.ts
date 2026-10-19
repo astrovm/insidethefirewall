@@ -16,7 +16,7 @@ interface Song {
 }
 
 /** Short sounds made on the fly, for cues the 2013 game had no sound for. */
-export type Synth = "whoosh" | "appear" | "tick" | "shatter" | "boing" | "zap" | "portal" | "hev" | "brick" | "honk";
+export type Synth = "whoosh" | "appear" | "tick" | "shatter" | "zap" | "portal" | "hev" | "brick" | "honk";
 
 /** Square wave notes for the blip sounds: frequencies, how long each is, and how loud. */
 const blips: Partial<Record<Synth, { notes: number[]; length: number; level: number; type?: OscillatorType }>> = {
@@ -200,11 +200,11 @@ export class Audio {
       source.start(now);
       return;
     }
-    if (name === "boing" || name === "zap" || name === "portal") {
-      // A sweep: up for a bounce, down for the gravity gun, a wobble for a portal.
+    if (name === "zap" || name === "portal") {
+      // A sweep: down for the gravity gun, up for a portal.
       const oscillator = ctx.createOscillator();
       oscillator.type = name === "portal" ? "sine" : "square";
-      const [from, to, length] = name === "boing" ? [220, 880, 0.15] : name === "zap" ? [1400, 180, 0.18] : [300, 1200, 0.3];
+      const [from, to, length] = name === "zap" ? [1400, 180, 0.18] : [300, 1200, 0.3];
       oscillator.frequency.setValueAtTime(from, now);
       oscillator.frequency.exponentialRampToValueAtTime(to, now + length);
       gain.gain.setValueAtTime(name === "portal" ? 0.15 : 0.07, now);

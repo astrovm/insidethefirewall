@@ -100,9 +100,6 @@ const POWER_UP_WEIGHT: Record<PowerUpKind, number> = {
 };
 /** Speed shoes, like Sonic's: this much faster. */
 export const SHOES_SPEED = 1.6;
-/** Spinning down onto the virus, from at least this far above its middle, breaks it and bounces, like Sonic. */
-const STOMP_ABOVE = 10;
-const STOMP_BOUNCE = JUMP_SPEED * 0.8;
 /**
  * The gravity gun catches the flying virus this close to the player, holds it
  * for a moment, then fires it back at the monitor, where it breaks.
@@ -262,7 +259,6 @@ export type GameEvent =
   | { type: "escape"; x: number; y: number }
   | { type: "dive" }
   | { type: "shatter"; x: number; y: number }
-  | { type: "stomp"; x: number; y: number }
   | { type: "catch" }
   | { type: "fire" }
   | { type: "portal"; x: number; y: number }
@@ -644,11 +640,6 @@ export class Game {
     else if (jetpack && this.flying && this.canEscape && this.touchesScreen()) this.dive();
   }
 
-  /** Rolled up in a ball, like Sonic: in the air from a jump or a fall, not flying. */
-  get spinning(): boolean {
-    return this.phase === "playing" && !this.onGround && this.powers.jetpack === 0 && !this.third && !this.breakout && this.escapeTime === Infinity;
-  }
-
   /**
    * Walking into a wall with portals comes out of the other one, still going
    * the same way, like in Portal. Says whether the player went through.
@@ -880,11 +871,7 @@ export class Game {
     if (!this.virus.visible) return;
     // Frozen in place, and harmless: touching it breaks it, and a new one comes out of the monitor.
     if (this.powers.freeze > 0) {
-      if (this.virus.isTouching(this.player)) {
-        // Spinning into it bounces off it, too.
-        if (this.spinning) this.bounce();
-        this.shatter(this.virus.x, this.virus.y, () => this.respawnVirus());
-      }
+      if (this.virus.isTouching(this.player)) this.shatter(this.virus.x, this.virus.y, () => this.respawnVirus());
       return;
     }
     const virus = this.virus;
@@ -901,10 +888,6 @@ export class Game {
     const steps = Math.ceil(distance / VIRUS_STEP);
     for (let i = 0; i < steps; i++) {
       virus.move(distance / steps);
-      if (this.spinning && this.vy < 0 && this.player.y > virus.y + STOMP_ABOVE && virus.isTouching(this.player)) {
-        this.stomp();
-        return;
-      }
       if (this.hurts(virus)) {
         this.closeCall = false;
         this.respawnVirus();
@@ -926,20 +909,6 @@ export class Game {
         return;
       }
     }
-  }
-
-  /** Breaks the virus by landing on it, rolled up, and bounces off it. */
-  private stomp(): void {
-    const { virus } = this;
-    this.events.push({ type: "stomp", x: virus.x, y: virus.y });
-    this.bounce();
-    this.closeCall = false;
-    this.respawnVirus();
-  }
-
-  private bounce(): void {
-    this.vy = STOMP_BOUNCE;
-    this.jumpCut = true;
   }
 
   /**

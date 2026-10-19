@@ -248,16 +248,13 @@ export class RemasterRenderer {
         ctx.globalAlpha = playing ? this.alphaOf(game, sprite) : 1;
         if (matrix > 0.5) ctx.filter = sprite === game.virus ? CODE_RED : CODE_GREEN;
         if (playing && sprite === game.virus && game.powers.freeze > 0) ctx.filter = "hue-rotate(160deg) saturate(1.5)";
-        if (ctx.globalAlpha > 0) {
-          if (player && game.spinning) this.drawSpinBall(x, y, sprite.flipX, game.time, grown);
-          else this.drawSprite(sprite, x, y);
-        }
+        if (ctx.globalAlpha > 0) this.drawSprite(sprite, x, y);
         ctx.filter = "none";
         ctx.globalAlpha = 1;
         if (playing && sprite === game.player && game.powers.shield > 0) {
           this.drawShield(x, y, 0.7 * (game.powers.shield < 1.5 ? blink(game.powers.shield) : 1), grown);
         }
-        if (player && game.powers.gravity > 0 && !game.spinning) this.drawGravityGun(game, x, y, grown);
+        if (player && game.powers.gravity > 0) this.drawGravityGun(game, x, y, grown);
       }
       if (playing && sprite === game.monitor && game.third) this.drawPortal(game.third.time);
       if (playing && sprite === game.monitor && game.inside.length > 0) {
@@ -268,38 +265,6 @@ export class RemasterRenderer {
     }
     if (playing && game.breakout) this.drawBreakout(game);
     if (playing && game.car.visible && game.carHonk > 0) this.drawHonk(Math.sign(game.car.x), game.carHonk, game.car.y);
-  }
-
-  /** Rolled up and spinning, like Sonic: a ball in the player's colors. */
-  private drawSpinBall(x: number, y: number, flipX: number, time: number, grown: number): void {
-    const ctx = this.ctx;
-    const [cx, cy] = toCanvas(this.view, x, y - 8 * grown);
-    const r = 24 * grown * this.view.scale;
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(time * 25 * flipX);
-    ctx.fillStyle = "#0042ff";
-    ctx.beginPath();
-    ctx.arc(0, 0, r, 0, Math.PI * 2);
-    ctx.fill();
-    // Hair and a face going round.
-    ctx.strokeStyle = "#210000";
-    ctx.lineWidth = r * 0.3;
-    for (let k = 0; k < 3; k++) {
-      ctx.beginPath();
-      ctx.arc(0, 0, r * 0.6, k * 2.1, k * 2.1 + 1.1);
-      ctx.stroke();
-    }
-    ctx.fillStyle = "#ff9c9c";
-    ctx.beginPath();
-    ctx.arc(r * 0.45, 0, r * 0.28, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = colors.mortar;
-    ctx.lineWidth = Math.max(1, 2 * this.view.scale);
-    ctx.beginPath();
-    ctx.arc(0, 0, r, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
   }
 
   /** The gravity gun in the player's hands, and its beam while it holds the virus. */

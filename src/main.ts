@@ -360,9 +360,6 @@ async function main(): Promise<void> {
       case "shatter":
         audio.synth("shatter");
         break;
-      case "stomp":
-        audio.synth("boing");
-        break;
       case "catch":
       case "fire":
         audio.synth("zap");
