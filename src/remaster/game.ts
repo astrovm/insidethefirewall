@@ -192,7 +192,7 @@ const CAR_STEER_SPEED = 150;
 const CAR_STEER_DROP = 0.27;
 /** How far the car reaches from its middle, for running into things. */
 const CAR_RADIUS = 58;
-/** The shapes standing on the floor, which the car bumps off: where, and how wide. */
+/** The shapes standing on the floor in the first square, which the car bumps off: where, and how wide. */
 export const THIRD_PROPS = [
   { x: -340, z: 660, r: 64 },
   { x: 300, z: 780, r: 46 },
@@ -200,6 +200,74 @@ export const THIRD_PROPS = [
   { x: 270, z: 300, r: 26 },
   { x: -370, z: 520, r: 6 },
 ] as const;
+/**
+ * The 3D floor goes on forever, in squares this wide. The first one, where the
+ * player lands, is laid out by hand. Every other one gets its own shapes, made
+ * up from where it is, so it's the same each time.
+ */
+export const THIRD_CELL = 1600;
+/** The middle of the first square. */
+const FIRST_CELL_Z = 600;
+
+export type ShapeKind = "box" | "cone" | "cylinder" | "sphere";
+/** A made-up shape standing on the floor: how wide it is, and its color. */
+export interface ThirdShape {
+  kind: ShapeKind;
+  x: number;
+  z: number;
+  r: number;
+  color: [number, number, number];
+}
+
+const SHAPE_KINDS: ShapeKind[] = ["box", "cone", "cylinder", "sphere"];
+const SHAPE_COLORS: [number, number, number][] = [
+  [60, 90, 220],
+  [70, 100, 230],
+  [210, 100, 30],
+  [230, 30, 20],
+  [255, 210, 0],
+  [150, 70, 210],
+  [30, 170, 120],
+];
+
+/** The square a point is in. */
+export function thirdCell(x: number, z: number): [number, number] {
+  return [Math.floor(x / THIRD_CELL + 0.5), Math.floor((z - FIRST_CELL_Z) / THIRD_CELL + 0.5)];
+}
+
+/** A number from 0 to 1, always the same for the same square and `n`. */
+function cellRandom(i: number, j: number, n: number): number {
+  let h = Math.imul(i, 73856093) ^ Math.imul(j, 19349663) ^ Math.imul(n + 1, 83492791);
+  h = Math.imul(h ^ (h >>> 13), 0x5bd1e995);
+  h ^= h >>> 15;
+  return (h >>> 0) / 4294967296;
+}
+
+/** The made-up shapes in square `i`, `j`. The first square's are drawn by hand, so it has none. */
+export function cellShapes(i: number, j: number): ThirdShape[] {
+  if (i === 0 && j === 0) return [];
+  const random = (() => {
+    let n = 0;
+    return () => cellRandom(i, j, n++);
+  })();
+  const count = 4 + Math.floor(random() * 3);
+  const margin = 150;
+  return Array.from({ length: count }, () => ({
+    kind: SHAPE_KINDS[Math.floor(random() * SHAPE_KINDS.length)]!,
+    x: i * THIRD_CELL + (random() - 0.5) * (THIRD_CELL - 2 * margin),
+    z: FIRST_CELL_Z + j * THIRD_CELL + (random() - 0.5) * (THIRD_CELL - 2 * margin),
+    r: 30 + random() * 50,
+    color: SHAPE_COLORS[Math.floor(random() * SHAPE_COLORS.length)]!,
+  }));
+}
+
+/** Everything the car can bump into near `x`, `z`: the first square's shapes and the made-up ones around. */
+export function shapesNear(x: number, z: number): readonly { x: number; z: number; r: number }[] {
+  const [ci, cj] = thirdCell(x, z);
+  const shapes: { x: number; z: number; r: number }[] = [];
+  for (let i = ci - 1; i <= ci + 1; i++) for (let j = cj - 1; j <= cj + 1; j++) shapes.push(...(i === 0 && j === 0 ? THIRD_PROPS : cellShapes(i, j)));
+  return shapes;
+}
 
 /** Things in the 3D world. x is across, y up and z away from the camera. */
 export interface ThirdDimension {
@@ -770,7 +838,7 @@ export class Game {
     let x = car.x + Math.sin(car.heading) * car.speed * DT;
     let z = car.z + Math.cos(car.heading) * car.speed * DT;
     let bumped = false;
-    for (const prop of THIRD_PROPS) {
+    for (const prop of shapesNear(x, z)) {
       const distance = Math.hypot(x - prop.x, z - prop.z);
       const closest = prop.r + CAR_RADIUS;
       if (distance >= closest) continue;

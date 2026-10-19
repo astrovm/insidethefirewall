@@ -9,6 +9,8 @@
 import { STAGE_HEIGHT, STAGE_WIDTH, type Costume } from "../engine/sprite.ts";
 import type { CostumeImages } from "../render.ts";
 import {
+  cellShapes,
+  thirdCell,
   THIRD_IN,
   THIRD_OUT,
   THIRD_TIME,
@@ -113,6 +115,8 @@ const NEAR = 12;
 /** The floor's squares, and how far from the camera they're drawn. */
 const GRID = 50;
 const GRID_REACH = 1500;
+/** How far from the player the made-up shapes are drawn. */
+const SHAPES_SHOWN = 2000;
 
 export class ThirdRenderer {
   /** Draws Homer's car with its textures, where WebGL works. */
@@ -240,6 +244,20 @@ export class ThirdRenderer {
     this.addText(things, camera, "1782¹² + 1841¹² = 1922¹²", [-170, 150, 820], 30, "#c8b4e6");
     this.addText(things, camera, "P = NP", [360, 70, 560], 46, "#66ddee");
     this.addCard(things, camera);
+    // The made-up shapes in the squares around, out to where the floor fades.
+    const [ci, cj] = thirdCell(p.x, p.z);
+    for (let i = ci - 1; i <= ci + 1; i++) {
+      for (let j = cj - 1; j <= cj + 1; j++) {
+        for (const shape of cellShapes(i, j)) {
+          if (Math.hypot(shape.x - p.x, shape.z - p.z) > SHAPES_SHOWN) continue;
+          const { x, z, r, color } = shape;
+          if (shape.kind === "box") mesh(box([x, r * 0.7, z], [r * 1.4, r * 1.4, r * 1.4], color, t * 0.3 + x));
+          else if (shape.kind === "cone") mesh(cone([x, 0, z], r, r * 2.5, color));
+          else if (shape.kind === "cylinder") mesh(cylinder([x, 0, z], r, r * 1.4, color));
+          else this.addSphere(things, camera, [x, r, z], r, color);
+        }
+      }
+    }
 
     const v = third.virus;
     const end = third.time - THIRD_TIME;
