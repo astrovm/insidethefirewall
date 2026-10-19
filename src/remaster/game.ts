@@ -177,15 +177,19 @@ export const THIRD_CHEST = 40;
  */
 export const PARKED = { x: 150, z: 280 } as const;
 const GET_IN = 80;
-const CAR_TOP_SPEED = 480;
-const CAR_REVERSE = 180;
-const CAR_ACCELERATION = 420;
-const CAR_BRAKING = 800;
+/** Its top speed in Hit & Run, 120 km/h, at 32 world units to a meter, the size of its model. */
+const CAR_TOP_SPEED = 1070;
+const CAR_REVERSE = 360;
+/** Full speed in about 2.5 s. */
+const CAR_ACCELERATION = 430;
+const CAR_BRAKING = 1200;
 /** Slowing down on its own, with nothing pressed. */
-const CAR_COAST = 220;
+const CAR_COAST = 300;
 /** Radians a second at full steer, from this speed up. */
 const CAR_STEER = 2.6;
 const CAR_STEER_SPEED = 150;
+/** Steering softens at top speed by this much, as in Hit & Run. */
+const CAR_STEER_DROP = 0.27;
 /** How far the car reaches from its middle, for running into things. */
 const CAR_RADIUS = 58;
 /** The shapes standing on the floor, which the car bumps off: where, and how wide. */
@@ -759,9 +763,9 @@ export class Game {
     if (throttle > 0) car.speed = Math.min(CAR_TOP_SPEED, car.speed + (car.speed < 0 ? CAR_BRAKING : CAR_ACCELERATION) * DT);
     else if (throttle < 0) car.speed = Math.max(-CAR_REVERSE, car.speed - (car.speed > 0 ? CAR_BRAKING : CAR_ACCELERATION) * DT);
     else car.speed -= Math.sign(car.speed) * Math.min(Math.abs(car.speed), CAR_COAST * DT);
-    // It turns more the faster it goes, up to a point, and the other way backing up.
+    // It turns more the faster it goes, up to a point, a little less near top speed, and the other way backing up.
     const steer = Number(input.right) - Number(input.left);
-    const grip = Math.min(1, Math.abs(car.speed) / CAR_STEER_SPEED) * Math.sign(car.speed);
+    const grip = Math.min(1, Math.abs(car.speed) / CAR_STEER_SPEED) * Math.sign(car.speed) * (1 - CAR_STEER_DROP * Math.min(1, Math.abs(car.speed) / CAR_TOP_SPEED));
     car.heading += steer * CAR_STEER * grip * DT;
     let x = car.x + Math.sin(car.heading) * car.speed * DT;
     let z = car.z + Math.cos(car.heading) * car.speed * DT;
