@@ -1,11 +1,11 @@
 // The 3D world inside the monitor, like Homer³ in The Simpsons: a green neon
 // grid under a starry black sky, solid shapes, floating equations and the
-// X Y Z signpost. The player becomes Homer, as he looks and moves in The
-// Simpsons: Hit & Run, and the virus a smooth cartoon version of its pixel
+// X Y Z signpost. The player becomes a character in The Simpsons: Hit & Run,
+// moving like one, and the virus a smooth cartoon version of its pixel
 // art. Homer's pink sedan is parked there, to drive, with roads, traffic,
 // ramps and coins around, a chase camera, skid marks, smoke and explosions.
 // Drawn on the 2D canvas with a small software 3D renderer: shapes are
-// flat-shaded faces, sorted back to front. Homer, his car and the virus are
+// flat-shaded faces, sorted back to front. The player, the car and the virus are
 // drawn with WebGL and pasted in, where it works.
 
 import { STAGE_HEIGHT, STAGE_WIDTH, type Costume } from "../engine/sprite.ts";
@@ -17,6 +17,9 @@ import {
   thirdCell,
   THIRD_CHEST,
   THIRD_IN,
+  floorUnder,
+  KICK_TIME,
+  THIRD_JUMP,
   THIRD_OUT,
   THIRD_TIME,
   WRECK_BURN,
@@ -25,8 +28,9 @@ import {
 } from "./game.ts";
 import type { View } from "./render.ts";
 import { carDamage, carPoint, CENTER_AHEAD, METER, WHEELS, type Car } from "./car.ts";
-import { Homer, HomerMoves, type HomerData, type Move } from "./homer.ts";
-import { DRIVER_SEAT, SEDAN_SCALE, SedanRenderer, type ColoredFace, type HomerPlace, type SedanPlace, type SedanScene } from "./sedan.ts";
+import { playerSkin } from "./player-model.ts";
+import { Moves, Rig, type Move, type RigData } from "./rig.ts";
+import { DRIVER_SEAT, SEDAN_SCALE, SedanRenderer, type ColoredFace, type PersonPlace, type SedanPlace, type SedanScene } from "./sedan.ts";
 import { cellCoins, cellRamp, ground, LANE, ROAD_HALF_WIDTH, roadX, roadZ, TRAFFIC_HIT_POINTS, type Ramp } from "./streets.ts";
 import { VIRUS_HEIGHT, virusMesh } from "./virus.ts";
 import { SEDAN_MATERIALS, SEDAN_PARTS } from "./sedan-model.ts";
@@ -144,10 +148,10 @@ const MOST_PARTICLES = 450;
 /** A coin's size, and how fast it spins, as in Hit & Run. */
 const COIN_RADIUS = 0.35 * METER;
 const COIN_SPIN = 3;
-/** How fast Homer walks and runs when his moves play at their own speed, and the fastest he walks. */
-const HOMER_WALK = 1.4 * METER;
-const HOMER_RUN = 4.2 * METER;
-const HOMER_WALKS_UP_TO = 2.6 * METER;
+/** How fast the player walks and runs when their moves play at their own speed, and the fastest they walk. */
+const WALK = 1.4 * METER;
+const RUN = 4.2 * METER;
+const WALKS_UP_TO = 2.6 * METER;
 /** The virus's colors when frozen. */
 const ICE: Rgb = [150, 225, 255];
 
@@ -190,12 +194,14 @@ interface Particle {
 }
 
 export class ThirdRenderer {
-  /** Draws Homer's car and Homer with their textures, where WebGL works. */
+  /** Draws Homer's car and the player, where WebGL works. */
   private readonly sedan = SedanRenderer.create();
-  /** Homer, once he's loaded, posed this frame, and the move he's in. */
-  private homer: { model: Homer; positions: Float32Array; normals: Float32Array } | null = null;
-  private readonly homerMoves = new HomerMoves();
-  /** When Homer last landed, for his landing move. */
+  /** The player as a Hit & Run character, once their moves load, posed this frame, and the move they're in. */
+  private person: { rig: Rig; positions: Float32Array; normals: Float32Array } | null = null;
+  private readonly moves = new Moves();
+  /** How long ago the player last kicked, to start each kick's move over. */
+  private lastKick = Infinity;
+  /** When the player last landed, for their landing move. */
   private landed = -Infinity;
   private wasInAir = false;
   /** Where the camera looks, catching up with the player. */
@@ -215,12 +221,12 @@ export class ThirdRenderer {
     // Without WebGL, or until he loads, the player stays a blocky body.
     const sedan = this.sedan;
     if (!sedan) return;
-    fetch("assets/homer/homer.json")
-      .then((response) => response.json() as Promise<HomerData>)
+    fetch("assets/player/rig.json")
+      .then((response) => response.json() as Promise<RigData>)
       .then((data) => {
-        const model = new Homer(data);
-        sedan.setHomer(model, "assets/homer");
-        this.homer = { model, positions: new Float32Array(model.corners * 3), normals: new Float32Array(model.corners * 3) };
+        const rig = new Rig(data, playerSkin(data));
+        sedan.setPerson(rig);
+        this.person = { rig, positions: new Float32Array(rig.corners * 3), normals: new Float32Array(rig.corners * 3) };
       })
       .catch(() => {});
   }
@@ -268,10 +274,10 @@ export class ThirdRenderer {
     const things: Thing[] = [];
     const offset = (1 - fall) * 60;
     const at: Vec = [-offset + Math.sin(t * 5) * 15, offset * 0.7 - 43, -150 + 450 * fall];
-    if (this.homer) {
-      // Homer flails, falling.
-      this.poseHomer("flail", 1 / 60, 1);
-      this.addHomer(things, camera, { at: [at[0], at[1] - 15, at[2]], heading: t * 5, scale: 1, seated: false, roll: t * 7 });
+    if (this.person) {
+      // Flailing, falling.
+      this.pose("flail", 1 / 60, 1);
+      this.addPerson(things, camera, { at: [at[0], at[1] - 15, at[2]], heading: t * 5, scale: 1, seated: false, roll: t * 7 });
     } else this.addBody(things, camera, game, at, { facing: t * 5, roll: t * 7, shrink: 1, stride: 0, swing: 1 });
     for (const thing of things.sort((a, b) => b.depth - a.depth)) thing.draw();
   }
@@ -388,8 +394,8 @@ export class ThirdRenderer {
       this.addCarShadow(things, camera, car, place, 1 - sink);
       // The player sits on the driver's seat, and blinks by hiding.
       const driving = car.driving && playerAlpha === 1;
-      if (driving && this.homer) {
-        this.poseHomer("in_car_idle", elapsed, 1);
+      if (driving && this.person) {
+        this.pose("in_car_idle", elapsed, 1);
         this.addCar(things, camera, place, [], true);
       } else this.addCar(things, camera, place, driving ? this.driverFaces(game, place) : []);
     }
@@ -403,10 +409,10 @@ export class ThirdRenderer {
     this.addParticles(things, camera);
     for (const blast of third.blasts) this.addBlast(things, camera, blast, third.time - blast.time);
     // Blinks by hiding: a see-through body would show its insides.
-    if (!car.driving) this.moveHomer(game, third, elapsed);
+    if (!car.driving) this.movePlayer(game, third, elapsed);
     if (sucked < 1 && playerAlpha === 1 && !car.driving) {
-      this.addShadow(things, camera, [p.x, ground(p.x, p.z), p.z], 22 * (1 - sucked));
-      if (this.homer) this.addHomer(things, camera, { at: [p.x, p.y - sucked * 60, p.z], heading: p.facing + sucked * 14, scale: 1 - sucked, seated: false });
+      this.addShadow(things, camera, [p.x, floorUnder(p.x, p.z, p.y), p.z], 22 * (1 - sucked));
+      if (this.person) this.addPerson(things, camera, { at: [p.x, p.y - sucked * 60, p.z], heading: p.facing + sucked * 14, scale: 1 - sucked, seated: false });
       else {
         this.addBody(things, camera, game, [p.x, p.y - sucked * 60, p.z], {
           facing: p.facing + sucked * 14,
@@ -776,8 +782,8 @@ export class ThirdRenderer {
     });
   }
 
-  /** Homer's car at `place`, with `driver` in it, or Homer if `homer`: textured with WebGL, or flat where it doesn't work. */
-  private addCar(things: Thing[], camera: Camera, place: SedanPlace, driver: Face[], homer = false): void {
+  /** Homer's car at `place`, with `driver` in it, or the posed player if `posed`: textured with WebGL, or flat where it doesn't work. */
+  private addCar(things: Thing[], camera: Camera, place: SedanPlace, driver: Face[], posed = false): void {
     const sedan = this.sedan;
     if (!sedan) {
       this.addMesh(things, camera, [...placeFaces(CAR, place.at, place.heading, place.scale), ...driver]);
@@ -786,8 +792,8 @@ export class ThirdRenderer {
     const middle = camera.toCamera([place.at[0], place.at[1] + 20 * place.scale, place.at[2]]);
     const ctx = this.ctx;
     const lit = driver.map((face) => ({ corners: face.corners, color: face.color.map((c) => c * (0.35 + 0.65 * Math.max(0, dot(face.normal, LIGHT)))) as Rgb }));
-    const seated = homer && this.homer ? { positions: this.homer.positions, normals: this.homer.normals, at: place.at, heading: 0, scale: 1, seated: true } : undefined;
-    this.addScene(things, middle[2], camera, { car: place, homer: seated, faces: lit });
+    const seated = posed && this.person ? { positions: this.person.positions, normals: this.person.normals, at: place.at, heading: 0, scale: 1, seated: true } : undefined;
+    this.addScene(things, middle[2], camera, { car: place, person: seated, faces: lit });
   }
 
   /** Things drawn with WebGL, `depth` from the camera, pasted in. */
@@ -804,39 +810,47 @@ export class ThirdRenderer {
     });
   }
 
-  /** Homer standing at `place.at`, in the pose `poseHomer` last put him in. */
-  private addHomer(things: Thing[], camera: Camera, place: Omit<HomerPlace, "positions" | "normals">): void {
-    const homer = this.homer;
-    if (!homer) return;
+  /** The player standing at `place.at`, in the pose `pose` last put them in. */
+  private addPerson(things: Thing[], camera: Camera, place: Omit<PersonPlace, "positions" | "normals">): void {
+    const person = this.person;
+    if (!person) return;
     const middle = camera.toCamera([place.at[0], place.at[1] + 0.9 * METER * place.scale, place.at[2]]);
-    this.addScene(things, middle[2], camera, { homer: { ...place, positions: homer.positions, normals: homer.normals } });
+    this.addScene(things, middle[2], camera, { person: { ...place, positions: person.positions, normals: person.normals } });
   }
 
-  /** Moves Homer's pose on `dt` seconds in `move`, `rate` times as fast. */
-  private poseHomer(move: Move, dt: number, rate: number): void {
-    const homer = this.homer;
-    if (!homer) return;
-    this.homerMoves.update(move, dt, rate);
-    const { now, from, blend } = this.homerMoves;
-    homer.model.pose(now, from, blend, homer.positions, homer.normals);
+  /** Moves the player's pose on `dt` seconds in `move`, `rate` times as fast, from its start if `again`. */
+  private pose(move: Move, dt: number, rate: number, again = false): void {
+    const person = this.person;
+    if (!person) return;
+    this.moves.update(move, dt, rate, again);
+    const { now, from, blend } = this.moves;
+    person.rig.pose(now, from, blend, person.positions, person.normals);
   }
 
-  /** Homer on foot: standing, walking or running as fast as he goes, falling, landing, or flailing when hit. */
-  private moveHomer(game: Game, third: ThirdDimension, elapsed: number): void {
-    const homer = this.homer;
-    if (!homer) return;
+  /**
+   * The player on foot: standing, walking or running as fast as they go,
+   * jumping, double jumping, falling, landing, kicking, or flailing when hit.
+   */
+  private movePlayer(game: Game, third: ThirdDimension, elapsed: number): void {
+    const person = this.person;
+    if (!person) return;
     const p = third.player;
     const speed = Math.hypot(p.vx, p.vz);
-    const inAir = p.y > ground(p.x, p.z) + 1;
+    const inAir = p.vy !== 0;
     if (this.wasInAir && !inAir) this.landed = third.time;
     this.wasInAir = inAir;
+    const kicked = p.kick < this.lastKick;
+    this.lastKick = p.kick;
     let [move, rate]: [Move, number] = ["loco_idle_rest", 1];
     if (game.player.currentCostume.name === "hit") move = "flail";
+    else if (p.kick < KICK_TIME) move = "jump_kick";
+    else if (inAir && p.jumps === 2) move = "jump_dash_in_air";
+    else if (inAir && p.vy > THIRD_JUMP * 0.6) move = "jump_idle_take_off";
     else if (inAir) move = "jump_idle_in_air";
-    else if (speed > 15 && speed <= HOMER_WALKS_UP_TO) [move, rate] = ["loco_walk", speed / HOMER_WALK];
-    else if (speed > HOMER_WALKS_UP_TO) [move, rate] = ["loco_run", Math.min(1.8, speed / HOMER_RUN)];
-    else if (third.time - this.landed < homer.model.duration("jump_idle_land")) move = "jump_idle_land";
-    this.poseHomer(move, elapsed, rate);
+    else if (speed > 15 && speed <= WALKS_UP_TO) [move, rate] = ["loco_walk", speed / WALK];
+    else if (speed > WALKS_UP_TO) [move, rate] = ["loco_run", Math.min(1.8, speed / RUN)];
+    else if (third.time - this.landed < person.rig.duration("jump_idle_land")) move = "jump_idle_land";
+    this.pose(move, elapsed, rate, kicked && move === "jump_kick");
   }
 
   /** The virus at `at`, its feet's middle, facing `facing`, its legs wiggling, and icy blue if `frozen`. */
@@ -849,7 +863,7 @@ export class ThirdRenderer {
     const normals = mesh.normals.map(turn);
     const colors = mesh.colors.map((color, i) => {
       const base = frozen ? (color.map((c, k) => lerp(c, ICE[k]!, 0.7)) as Rgb) : color;
-      // Lit like Homer and his car, with a shine.
+      // Lit like the player and the car, with a shine.
       const light = dot(normals[i]!, LIGHT);
       const shine = Math.pow(Math.max(0, light), 12) * 70;
       return base.map((c) => Math.min(255, c * (0.45 + 0.55 * Math.max(0, light)) + shine)) as Rgb;

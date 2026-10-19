@@ -1,10 +1,10 @@
-// Homer's car and Homer from The Simpsons: Hit & Run, drawn with WebGL: with
-// their own textures, and a depth buffer so their parts, and Homer sitting in
-// the car, cover each other the right way. The rest of the 3D world is canvas
-// 2D, so they're drawn on their own canvas and pasted in.
+// Homer's car from The Simpsons: Hit & Run, and the player, drawn with WebGL:
+// the car with its own textures, and a depth buffer so their parts, and the
+// player sitting in the car, cover each other the right way. The rest of the
+// 3D world is canvas 2D, so they're drawn on their own canvas and pasted in.
 
 import { STAGE_HEIGHT, STAGE_WIDTH } from "../engine/sprite.ts";
-import type { Homer } from "./homer.ts";
+import type { Rig } from "./rig.ts";
 import type { View } from "./render.ts";
 import { SEDAN_MATERIALS, SEDAN_PARTS } from "./sedan-model.ts";
 
@@ -13,13 +13,13 @@ type Rgb = [number, number, number];
 
 /** World units in a centimeter of the car: about three times as long as the player is tall. */
 export const SEDAN_SCALE = 0.32;
-/** World units in a meter of Homer, and how high his middle is, in meters. */
+/** World units in a meter of the player, and how high their middle is, in meters. */
 const METER_UNITS = SEDAN_SCALE * 100;
-const HOMER_MIDDLE = 0.9;
+const PERSON_MIDDLE = 0.9;
 /** Where the driver's hips go, on the seat behind the wheel, in centimeters. */
 export const DRIVER_SEAT: Vec = [-48, 42, 6];
-/** Where Homer's feet go, sitting in the driver's seat, in centimeters. */
-export const HOMER_SEAT: Vec = [-48, 18, -20];
+/** Where the player's feet go, sitting in the driver's seat, in centimeters. */
+export const SEAT: Vec = [-48, 18, -20];
 
 /** What the car is drawn with: the 3D camera's view of the world. */
 export interface SedanCamera {
@@ -35,8 +35,8 @@ export interface ColoredFace {
   colors?: Rgb[];
 }
 
-/** Homer posed, in meters as modeled, and where he stands: or sitting in the car, if `seated`. `roll` tips him over, tumbling. */
-export interface HomerPlace {
+/** The player posed, in meters as modeled, and where they stand: or sitting in the car, if `seated`. `roll` tips them over, tumbling. */
+export interface PersonPlace {
   positions: Float32Array;
   normals: Float32Array;
   at: Vec;
@@ -49,7 +49,7 @@ export interface HomerPlace {
 /** What to draw together, covering each other the right way. */
 export interface SedanScene {
   car?: SedanPlace;
-  homer?: HomerPlace;
+  person?: PersonPlace;
   faces?: ColoredFace[];
 }
 
@@ -136,8 +136,8 @@ export class SedanRenderer {
   private readonly indexBuffer: WebGLBuffer;
   private readonly extraVertexBuffer: WebGLBuffer;
   private readonly extraIndexBuffer: WebGLBuffer;
-  /** Homer's skin, once he's loaded: a texture and triangles per part, and room for his corners. */
-  private homer: { parts: { texture: WebGLTexture; start: number; count: number }[]; uvs: Float32Array; vertices: Float32Array; vertexBuffer: WebGLBuffer; indexBuffer: WebGLBuffer } | null = null;
+  /** The player's skin, once it's loaded: its colors and triangles, and room for its corners. */
+  private person: { colors: Float32Array; count: number; vertices: Float32Array; vertexBuffer: WebGLBuffer; indexBuffer: WebGLBuffer } | null = null;
   /** Where each part's triangles start in the index buffer, and how many corners they have. */
   private readonly ranges: { material: number; start: number; count: number }[] = [];
   private readonly uniforms: Record<"center" | "focal" | "depth" | "alpha" | "paint" | "burnt", WebGLUniformLocation | null>;
@@ -231,29 +231,19 @@ export class SedanRenderer {
     return texture;
   }
 
-  /** Gets Homer's skin ready to draw, with his textures from `folder`. */
-  setHomer(homer: Homer, folder: string): void {
+  /** Gets the player's skin on `rig` ready to draw. */
+  setPerson(rig: Rig): void {
     const gl = this.gl;
-    const indices: number[] = [];
-    const parts: { texture: WebGLTexture; start: number; count: number }[] = [];
-    const uvs: number[] = [];
-    let offset = 0;
-    for (const part of homer.parts) {
-      parts.push({ texture: this.load(`${folder}/${part.texture}`, [255, 217, 15]), start: indices.length, count: part.indices.length });
-      for (const corner of part.indices) indices.push(corner + offset);
-      // Its textures are upside down to WebGL.
-      for (let i = 0; i < part.uv.length; i += 2) uvs.push(part.uv[i]!, 1 - part.uv[i + 1]!);
-      offset += part.position.length / 3;
-    }
     const indexBuffer = gl.createBuffer()!;
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
-    this.homer = { parts, uvs: new Float32Array(uvs), vertices: new Float32Array(offset * STRIDE), vertexBuffer: gl.createBuffer()!, indexBuffer };
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(rig.skin.indices), gl.STATIC_DRAW);
+    const colors = new Float32Array(rig.skin.color);
+    this.person = { colors, count: rig.skin.indices.length, vertices: new Float32Array(rig.corners * STRIDE), vertexBuffer: gl.createBuffer()!, indexBuffer };
   }
 
-  /** Whether Homer's skin is ready to draw. */
-  get hasHomer(): boolean {
-    return this.homer !== null;
+  /** Whether the player's skin is ready to draw. */
+  get hasPerson(): boolean {
+    return this.person !== null;
   }
 
   /** A texture that's `color` until its image at `src` loads. */
@@ -272,7 +262,7 @@ export class SedanRenderer {
   }
 
   /**
-   * Draws the car, Homer and the faces in `scene`, lit by `light`, on a
+   * Draws the car, the player and the faces in `scene`, lit by `light`, on a
    * see-through canvas as big as `size`, and returns where on it they are.
    */
   draw(camera: SedanCamera, size: { width: number; height: number }, scene: SedanScene, light: Vec): SedanDrawn {
@@ -374,43 +364,40 @@ export class SedanRenderer {
       gl.uniform1f(this.uniforms.burnt, 0);
     }
 
-    const homer = this.homer;
-    const person = scene.homer;
-    if (homer && person && (!person.seated || place)) {
+    const skin = this.person;
+    const person = scene.person;
+    if (skin && person && (!person.seated || place)) {
       const { positions, normals } = person;
       const [hCos, hSin] = [Math.cos(person.heading), Math.sin(person.heading)];
       const [rCos, rSin] = [Math.cos(person.roll ?? 0), Math.sin(person.roll ?? 0)];
       const m = METER_UNITS * person.scale;
-      const [sx, sy, sz] = HOMER_SEAT;
+      const [sx, sy, sz] = SEAT;
       for (let i = 0, j = 0; i < positions.length; i += 3, j += STRIDE) {
         let [x, y, z] = [positions[i]!, positions[i + 1]!, positions[i + 2]!];
         let [nx, ny, nz] = [normals[i]!, normals[i + 1]!, normals[i + 2]!];
         if (person.roll) {
-          // Tipped over around his middle.
-          [x, y] = [x * rCos - (y - HOMER_MIDDLE) * rSin, x * rSin + (y - HOMER_MIDDLE) * rCos + HOMER_MIDDLE];
+          // Tipped over around their middle.
+          [x, y] = [x * rCos - (y - PERSON_MIDDLE) * rSin, x * rSin + (y - PERSON_MIDDLE) * rCos + PERSON_MIDDLE];
           [nx, ny] = [nx * rCos - ny * rSin, nx * rSin + ny * rCos];
         }
         let corner: Vec;
         let shade: number;
-        // Sitting, he's part of the car's body, in its centimeters.
+        // Sitting, they're part of the car's body, in its centimeters.
         if (person.seated) [corner, shade] = onBody(sx + x * 100, sy + y * 100, sz + z * 100, nx, ny, nz);
         else {
           corner = seen([person.at[0] + (x * hCos + z * hSin) * m, person.at[1] + y * m, person.at[2] + (-x * hSin + z * hCos) * m]);
           shade = lit(nx * hCos + nz * hSin, ny, -nx * hSin + nz * hCos);
         }
-        homer.vertices.set(corner, j);
-        homer.vertices[j + 3] = homer.uvs[(i / 3) * 2]!;
-        homer.vertices[j + 4] = homer.uvs[(i / 3) * 2 + 1]!;
-        homer.vertices[j + 5] = homer.vertices[j + 6] = homer.vertices[j + 7] = shade;
+        skin.vertices.set(corner, j);
+        skin.vertices[j + 3] = skin.vertices[j + 4] = 0;
+        for (const k of [0, 1, 2]) skin.vertices[j + 5 + k] = skin.colors[i + k]! * shade;
       }
-      gl.bindBuffer(gl.ARRAY_BUFFER, homer.vertexBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, homer.vertices, gl.DYNAMIC_DRAW);
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, homer.indexBuffer);
+      gl.bindBuffer(gl.ARRAY_BUFFER, skin.vertexBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, skin.vertices, gl.DYNAMIC_DRAW);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, skin.indexBuffer);
       this.attributes();
-      for (const part of homer.parts) {
-        gl.bindTexture(gl.TEXTURE_2D, part.texture);
-        gl.drawElements(gl.TRIANGLES, part.count, gl.UNSIGNED_SHORT, part.start * 2);
-      }
+      gl.bindTexture(gl.TEXTURE_2D, this.white);
+      gl.drawElements(gl.TRIANGLES, skin.count, gl.UNSIGNED_SHORT, 0);
     }
 
     const extra = scene.faces ?? [];

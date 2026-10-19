@@ -31,7 +31,7 @@ export async function build(): Promise<void> {
   await cp(join(root, "icon.png"), join(out, "icon.png"));
   await cp(join(assets, "sounds"), join(out, "assets/sounds"), { recursive: true });
   await cp(join(assets, "sedan"), join(out, "assets/sedan"), { recursive: true });
-  await cp(join(assets, "homer"), join(out, "assets/homer"), { recursive: true });
+  await cp(join(assets, "player"), join(out, "assets/player"), { recursive: true });
   await cp(join(assets, "fonts"), join(out, "assets/fonts"), { recursive: true });
 
   // SVG costumes drawn as images can't see the page's fonts, so embed the

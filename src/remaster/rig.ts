@@ -1,19 +1,39 @@
-// Homer, as he walks, runs and drives in The Simpsons: Hit & Run: his model,
-// its skeleton and its moves, from assets/homer. Each frame his bones take the
-// pose of a move at a moment, blending from the last move into the next, and
-// each corner of his skin follows the bones it hangs on.
+// A character's skeleton and moves, from The Simpsons: Hit & Run, in
+// assets/player: how they stand, walk, run, jump, kick, flail and sit at the
+// wheel. Each frame the bones take the pose of a move at a moment, blending
+// from the last move into the next, and each corner of the skin hung on them
+// follows the bones it hangs on.
 
-/** Homer's model as converted: in meters, standing on y 0 and facing +z. */
-export interface HomerData {
-  /** Each bone's parent, before it, and where it sits on it: a 4×4 matrix, column by column. */
+/** The skeleton and moves as converted: in meters, standing on y 0 and facing +z. */
+export interface RigData {
+  /** Each bone's name, its parent, before it, and where it sits on it: a 4×4 matrix, column by column. */
   bones: { name: string; parent: number; matrix: number[] }[];
-  /** The skin in parts, one per texture. Four bones per corner, with how much each pulls it. */
-  parts: { texture: string; position: number[]; uv: number[]; normal: number[]; joints: number[]; weights: number[]; indices: number[] }[];
   /** The moves, by name: each bone's turn as quaternions, x y z w, and some bones' place, over time. */
   animations: Record<string, { duration: number; tracks: { bone: number; kind: "position" | "quaternion"; times: number[]; values: number[] }[] }>;
 }
 
-export type Move = "loco_idle_rest" | "loco_walk" | "loco_run" | "jump_idle_in_air" | "jump_idle_land" | "flail" | "get_up" | "in_car_idle";
+/** A skin to hang on the bones: corners with normals and colors, 0 to 1, and four bones per corner, with how much each pulls it. */
+export interface Skin {
+  position: number[];
+  normal: number[];
+  color: number[];
+  joints: number[];
+  weights: number[];
+  /** Triangles, three corners each. */
+  indices: number[];
+}
+
+export type Move =
+  | "loco_idle_rest"
+  | "loco_walk"
+  | "loco_run"
+  | "jump_idle_take_off"
+  | "jump_idle_in_air"
+  | "jump_dash_in_air"
+  | "jump_idle_land"
+  | "jump_kick"
+  | "flail"
+  | "in_car_idle";
 
 /** A move at a moment, `time` seconds in. Looping moves wrap, the others hold their end. */
 export interface MoveAt {
@@ -28,21 +48,21 @@ type Vec = [number, number, number];
 export const BLEND = 0.15;
 const LOOPING = new Set<Move>(["loco_idle_rest", "loco_walk", "loco_run", "jump_idle_in_air", "flail", "in_car_idle"]);
 
-export class Homer {
-  readonly parts: HomerData["parts"];
-  /** The skin, all parts together, ready to pose fast. */
-  private readonly skin: { position: Float32Array; normal: Float32Array; joints: Uint8Array; weights: Float32Array };
+export class Rig {
+  readonly skin: Skin;
+  /** The skin, ready to pose fast. */
+  private readonly fast: { position: Float32Array; normal: Float32Array; joints: Uint8Array; weights: Float32Array };
   private readonly parents: number[];
   /** Each bone's resting place and turn on its parent. */
   private readonly rest: { at: Vec; turn: Quat }[];
   /** Undoes each bone's resting place in the model, so a pose moves the skin from where it was modeled. */
   private readonly unbind: Float32Array;
-  private readonly animations: HomerData["animations"];
+  private readonly animations: RigData["animations"];
   /** Each bone's matrix this pose, from the model as modeled to posed. */
   private readonly skinning: Float32Array;
 
-  constructor(data: HomerData) {
-    this.parts = data.parts;
+  constructor(data: RigData, skin: Skin) {
+    this.skin = skin;
     this.animations = data.animations;
     this.parents = data.bones.map((bone, i) => (i === 0 ? -1 : bone.parent));
     this.rest = data.bones.map(({ matrix: m }) => ({ at: [m[12]!, m[13]!, m[14]!], turn: toQuat(m) }));
@@ -50,8 +70,7 @@ export class Homer {
     this.unbind = new Float32Array(data.bones.length * 16);
     for (let i = 0; i < data.bones.length; i++) this.unbind.set(invert(world.subarray(i * 16, i * 16 + 16)), i * 16);
     this.skinning = new Float32Array(data.bones.length * 16);
-    const all = (key: "position" | "normal" | "joints" | "weights") => data.parts.flatMap((part) => part[key]);
-    this.skin = { position: new Float32Array(all("position")), normal: new Float32Array(all("normal")), joints: new Uint8Array(all("joints")), weights: new Float32Array(all("weights")) };
+    this.fast = { position: new Float32Array(skin.position), normal: new Float32Array(skin.normal), joints: new Uint8Array(skin.joints), weights: new Float32Array(skin.weights) };
   }
 
   /** How long a move takes. */
@@ -62,7 +81,7 @@ export class Homer {
   /**
    * Puts the bones in `now`'s pose, or part of the way there from `from`'s,
    * `blend` of the way, then moves the skin with them into `positions` and
-   * `normals`: three numbers per corner, part after part.
+   * `normals`: three numbers per corner.
    */
   pose(now: MoveAt, from: MoveAt | null, blend: number, positions: Float32Array, normals: Float32Array): void {
     let locals = this.sample(now);
@@ -73,7 +92,7 @@ export class Homer {
     const world = this.world(locals);
     for (let i = 0; i < this.parents.length; i++) multiplyInto(this.skinning, i * 16, world, i * 16, this.unbind, i * 16);
     const m = this.skinning;
-    const { position, normal, joints, weights } = this.skin;
+    const { position, normal, joints, weights } = this.fast;
     for (let v = 0, at = 0; v < position.length / 3; v++, at += 3) {
       const x = position[at]!, y = position[at + 1]!, z = position[at + 2]!;
       const nx = normal[at]!, ny = normal[at + 1]!, nz = normal[at + 2]!;
@@ -99,9 +118,9 @@ export class Homer {
     }
   }
 
-  /** How many corners the skin has, all parts together. */
+  /** How many corners the skin has. */
   get corners(): number {
-    return this.parts.reduce((sum, part) => sum + part.position.length / 3, 0);
+    return this.skin.position.length / 3;
   }
 
   /** Each bone's place and turn on its parent, `at.time` seconds into its move. */
@@ -142,16 +161,33 @@ export class Homer {
   }
 }
 
-/** The move Homer is in, and the one he's blending from, moved along as the game goes. */
-export class HomerMoves {
+/** Where each bone is in the resting pose, in the model: for hanging a skin on them. */
+export function restingJoints(data: RigData): Record<string, Vec> {
+  const parents = data.bones.map((bone, i) => (i === 0 ? -1 : bone.parent));
+  const world: Float32Array[] = [];
+  const joints: Record<string, Vec> = {};
+  for (const [i, bone] of data.bones.entries()) {
+    const m = bone.matrix;
+    const local = fromTurn(toQuat(m), [m[12]!, m[13]!, m[14]!]);
+    const out = new Float32Array(16);
+    if (parents[i]! < 0) out.set(local);
+    else multiplyInto(out, 0, world[parents[i]!]!, 0, local, 0);
+    world.push(out);
+    joints[bone.name] = [out[12]!, out[13]!, out[14]!];
+  }
+  return joints;
+}
+
+/** The move a character is in, and the one it's blending from, moved along as the game goes. */
+export class Moves {
   now: MoveAt = { move: "loco_idle_rest", time: 0 };
   from: MoveAt | null = null;
   /** How far into the blend from `from`, in seconds. */
   private blending = BLEND;
 
-  /** Moves on `dt` seconds, `rate` times as fast, into `move` if it's a new one. */
-  update(move: Move, dt: number, rate = 1): void {
-    if (move !== this.now.move) {
+  /** Moves on `dt` seconds, `rate` times as fast, into `move` if it's a new one, or from its start `again`. */
+  update(move: Move, dt: number, rate = 1, again = false): void {
+    if (move !== this.now.move || again) {
       this.from = this.now;
       this.now = { move, time: 0 };
       this.blending = 0;

@@ -72,14 +72,25 @@ export function keyLabel(key: string): string {
  * Moves held by any source: keys, gamepad buttons or touch buttons. Presses
  * are kept until the next game update reads them, so quick taps still count.
  */
+/** What jumps on foot in the 3D world: Space, or a gamepad's A. The other ways to jump walk forward there. */
+const HOPS = new Set(["key:Space", "pad:a"]);
+
 export class Controls {
   private readonly held = new Map<string, Move>();
   private jumpPressed = false;
+  private hopPressed = false;
+  private kickPressed = false;
 
   press(source: string, move: Move): void {
     if (this.held.has(source)) return;
     this.held.set(source, move);
     if (move === "jump") this.jumpPressed = true;
+    if (HOPS.has(source)) this.hopPressed = true;
+  }
+
+  /** A kick, on foot in the 3D world. */
+  kick(): void {
+    this.kickPressed = true;
   }
 
   release(source: string): void {
@@ -106,8 +117,11 @@ export class Controls {
       // Space jumps, and while driving it's the handbrake, so the gas is up held some other way.
       gas: [...this.held].some(([source, move]) => move === "jump" && source !== "key:Space"),
       handbrake: this.held.has("key:Space"),
+      forward: [...this.held].some(([source, move]) => move === "jump" && !HOPS.has(source)),
+      hopPressed: this.hopPressed,
+      kickPressed: this.kickPressed,
     };
-    this.jumpPressed = false;
+    this.jumpPressed = this.hopPressed = this.kickPressed = false;
     return input;
   }
 }
