@@ -52,6 +52,7 @@ import {
   THIRD_IN,
   thirdCell,
 } from "../src/remaster/game.ts";
+import { bounceCar, driveCar, METER, parkedCar, type Car, type CarControls } from "../src/remaster/car.ts";
 import { ESCAPE_ZOOM, escapeZoom, fitStage, formatTime, toCanvas, toStage, zoomView } from "../src/remaster/render.ts";
 import { seeded } from "./support.ts";
 
@@ -1169,7 +1170,7 @@ describe("controls", () => {
     controls.press("key:Space", "jump");
     controls.read();
     controls.press("key:Space", "jump");
-    expect(controls.read()).toEqual({ ...noInput, jump: true });
+    expect(controls.read()).toEqual({ ...noInput, jump: true, handbrake: true });
   });
 });
 
@@ -1637,9 +1638,104 @@ describe("the 3D world", () => {
     const shape = cellShapes(5, 3)[0]!;
     expect(Math.hypot(shape.x, shape.z)).toBeGreaterThan(5 * THIRD_CELL);
     // Heading straight at it from just outside its reach.
-    Object.assign(third.car, { x: shape.x, z: shape.z - shape.r - 70, heading: 0, speed: 600 });
-    run(game, 0.1, { jump: true });
+    Object.assign(third.car, { x: shape.x, z: shape.z - shape.r - 70, heading: 0, vx: 0, vz: 600, speed: 600 });
+    run(game, 0.1, { jump: true, gas: true });
     expect(third.car.speed).toBeLessThan(0);
     expect(Math.hypot(third.car.x - shape.x, third.car.z - shape.z)).toBeGreaterThanOrEqual(shape.r + 58 - 1e-6);
+  });
+});
+
+describe("Homer's car", () => {
+  const still: CarControls = { gas: false, brake: false, handbrake: false, steer: 0 };
+  function drive(car: Car, seconds: number, controls: Partial<CarControls> = {}): void {
+    for (let t = 0; t < seconds; t += DT) driveCar(car, { ...still, ...controls }, DT);
+  }
+  /** The angle between where it points and where it goes. */
+  function slide(car: Car): number {
+    return Math.abs(Math.atan2(car.vx, car.vz) - car.heading);
+  }
+
+  test("tops out at Hit & Run's 120 km/h", () => {
+    const car = parkedCar(0, 0);
+    drive(car, 2, { gas: true });
+    const early = car.speed;
+    drive(car, 40, { gas: true });
+    expect(early).toBeGreaterThan(300);
+    expect(car.speed / METER * 3.6).toBeCloseTo(120, 0);
+    expect(car.vx).toBeCloseTo(0, 6);
+  });
+
+  test("brakes to a stop, then backs up", () => {
+    const car = parkedCar(0, 0);
+    drive(car, 3, { gas: true });
+    let stopped = Infinity;
+    for (let t = 0; t < 3 && stopped === Infinity; t += DT) {
+      driveCar(car, { ...still, brake: true }, DT);
+      if (car.speed <= 0) stopped = t;
+    }
+    expect(stopped).toBeLessThan(1.5);
+    drive(car, 1, { brake: true });
+    expect(car.speed).toBeLessThan(-100);
+  });
+
+  test("coasts to a stop with nothing pressed", () => {
+    const car = parkedCar(0, 0);
+    drive(car, 3, { gas: true });
+    drive(car, 20);
+    expect([car.vx, car.vz, car.spin, car.speed]).toEqual([0, 0, 0, 0]);
+  });
+
+  test("steering turns it, right to the right, and holds its grip", () => {
+    const car = parkedCar(0, 0);
+    drive(car, 3, { gas: true });
+    drive(car, 0.5, { gas: true, steer: 1 });
+    expect(car.heading).toBeGreaterThan(0.3);
+    expect(car.grip).toBe("normal");
+    expect(slide(car)).toBeLessThan(0.2);
+    const left = parkedCar(0, 0);
+    drive(left, 3, { gas: true });
+    drive(left, 0.5, { gas: true, steer: -1 });
+    expect(left.heading).toBeCloseTo(-car.heading, 6);
+  });
+
+  test("doesn't turn standing still", () => {
+    const car = parkedCar(0, 0);
+    drive(car, 1, { steer: 1 });
+    expect([car.heading, car.x, car.z]).toEqual([0, 0, 0]);
+  });
+
+  test("the handbrake swings the back out into a slide", () => {
+    const turning = (handbrake: boolean) => {
+      const car = parkedCar(0, 0);
+      drive(car, 4, { gas: true });
+      drive(car, 1, { gas: true, steer: 1, handbrake });
+      return car;
+    };
+    const plain = turning(false);
+    const sliding = turning(true);
+    expect([plain.grip, sliding.grip]).toEqual(["normal", "handbrake"]);
+    expect(sliding.heading).toBeGreaterThan(plain.heading);
+    expect(slide(sliding)).toBeGreaterThan(slide(plain) + 0.1);
+    // Letting go, it grips again once it's going straight.
+    drive(sliding, 3, { gas: true });
+    expect(sliding.grip).toBe("normal");
+  });
+
+  test("Space is the handbrake, and up held some other way is the gas", () => {
+    const controls = new Controls();
+    controls.press("key:Space", "jump");
+    expect(controls.read()).toMatchObject({ jump: true, gas: false, handbrake: true });
+    controls.press("key:KeyW", "jump");
+    expect(controls.read()).toMatchObject({ jump: true, gas: true, handbrake: true });
+    controls.release("key:Space");
+    expect(controls.read()).toMatchObject({ jump: true, gas: true, handbrake: false });
+  });
+
+  test("bounces off what it runs into, a third as fast", () => {
+    const car = Object.assign(parkedCar(0, -100), { vz: 600, speed: 600 });
+    expect(bounceCar(car, 0, 0, 120)).toBeCloseTo(600, 9);
+    expect([car.z, car.vz]).toEqual([-120, -180]);
+    expect(bounceCar(car, 0, 0, 120)).toBe(0);
+    expect(bounceCar(car, 500, 500, 120)).toBe(0);
   });
 });

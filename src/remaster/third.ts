@@ -18,6 +18,7 @@ import {
   type ThirdDimension,
 } from "./game.ts";
 import type { View } from "./render.ts";
+import { CENTER_AHEAD } from "./car.ts";
 import { DRIVER_SEAT, SEDAN_SCALE, SedanRenderer } from "./sedan.ts";
 import { SEDAN_MATERIALS, SEDAN_PARTS } from "./sedan-model.ts";
 
@@ -269,8 +270,10 @@ export class ThirdRenderer {
     // Homer's car, parked or driven, sucked in at the end with the player at the wheel.
     if (sucked < 1) {
       const sink = car.driving ? sucked : 0;
-      const place = { at: [car.x, -sink * 60, car.z] as Vec, heading: car.heading + sink * 14, scale: 1 - sink };
-      this.addShadow(things, camera, [car.x, 0, car.z], 72 * (1 - sink));
+      // Its x and z are its center of mass, a little ahead of the middle of the model.
+      const [x, z] = [car.x - Math.sin(car.heading) * CENTER_AHEAD, car.z - Math.cos(car.heading) * CENTER_AHEAD];
+      const place = { at: [x, -sink * 60, z] as Vec, heading: car.heading + sink * 14, scale: 1 - sink };
+      this.addShadow(things, camera, [x, 0, z], 72 * (1 - sink));
       // The player sits on the driver's seat, and blinks by hiding.
       const driver = car.driving && playerAlpha === 1 ? this.driverFaces(game, place) : [];
       this.addCar(things, camera, place, driver);

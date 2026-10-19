@@ -103,6 +103,9 @@ export class Controls {
       down: this.isHeld("down"),
       jump: this.isHeld("jump"),
       jumpPressed: this.jumpPressed,
+      // Space jumps, and while driving it's the handbrake, so the gas is up held some other way.
+      gas: [...this.held].some(([source, move]) => move === "jump" && source !== "key:Space"),
+      handbrake: this.held.has("key:Space"),
     };
     this.jumpPressed = false;
     return input;
