@@ -8,7 +8,6 @@ import { Effects } from "./remaster/effects.ts";
 import { Fader } from "./remaster/fader.ts";
 import {
   BRICKS_PER_HEART,
-  carCostumes,
   DT,
   flameCostumes,
   Game,
@@ -89,7 +88,6 @@ async function main(): Promise<void> {
     ...project.sprites.flatMap(({ sprite }) => sprite.costumes),
     ...powerUpCostumes,
     ...flameCostumes,
-    ...carCostumes,
     title,
   ];
   const soundFiles = [
@@ -391,9 +389,15 @@ async function main(): Promise<void> {
           status.textContent = "Every brick broken! Full hearts.";
         }
         break;
-      case "honk":
+      case "drive":
         audio.synth("honk");
-        status.textContent = `A car is coming from the ${event.side < 0 ? "left" : "right"}. Jump over it.`;
+        status.textContent = "Homer's car! Steer with left and right, speed up with up, brake with down. Run over the virus.";
+        break;
+      case "smash":
+        audio.synth("shatter");
+        break;
+      case "bump":
+        audio.synth("brick");
         break;
       case "appear":
         audio.synth("appear");

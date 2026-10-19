@@ -128,17 +128,6 @@ export const BRICKS_RISE = 0.8;
 const BALL_WAIT = 1.4;
 /** Clearing every brick also gives a shield for this long. */
 const BREAKOUT_SHIELD = 3;
-/**
- * Homer's pink sedan drives across the floor now and then, from 45 s on. It
- * honks first, on the side it comes from. Jump over it.
- */
-export const CAR_FIRST = 45;
-const CAR_EVERY = [35, 50] as const;
-export const CAR_HONK = 1;
-const CAR_SPEED = 380;
-const CAR_Y = GROUND_Y - 22;
-/** The car starts and ends this far past the side of the stage. */
-const CAR_AWAY = 300;
 /** With the red pill the room is code, and time slows down this much while the flying virus is this close. */
 export const BULLET_TIME = 0.3;
 const BULLET_TIME_RANGE = 90;
@@ -180,7 +169,7 @@ export const ESCAPE_STUCK = 1.5;
  * back into the room.
  */
 export const THIRD_IN = 1.6;
-export const THIRD_TIME = 10;
+export const THIRD_TIME = 15;
 export const THIRD_OUT = 0.6;
 /** The 3D floor: as wide as the stage, and this deep. */
 export const THIRD_DEPTH = 600;
@@ -194,6 +183,36 @@ const THIRD_TURN = 14;
 const THIRD_HIT = 34;
 /** Where the player's chest is in 3D, for the virus to aim at. */
 export const THIRD_CHEST = 40;
+/**
+ * Homer's pink sedan, from The Simpsons: Hit & Run, is parked in the 3D world.
+ * Walking into it gets in. Up speeds up, down brakes and backs up, left and
+ * right steer. It runs the virus over, and bumps off the shapes.
+ */
+export const PARKED = { x: 150, z: 280 } as const;
+const GET_IN = 46;
+const CAR_TOP_SPEED = 480;
+const CAR_REVERSE = 180;
+const CAR_ACCELERATION = 420;
+const CAR_BRAKING = 800;
+/** Slowing down on its own, with nothing pressed. */
+const CAR_COAST = 220;
+/** Radians a second at full steer, from this speed up. */
+const CAR_STEER = 2.6;
+const CAR_STEER_SPEED = 150;
+/** How far the car reaches from its middle, for running into things. */
+const CAR_RADIUS = 34;
+/** The car can drive over the whole floor, out to here. */
+export const DRIVE_SIDE = 520;
+export const DRIVE_NEAR = -200;
+export const DRIVE_FAR = 1100;
+/** The shapes standing on the floor, which the car bumps off: where, and how wide. */
+export const THIRD_PROPS = [
+  { x: -340, z: 660, r: 64 },
+  { x: 300, z: 780, r: 46 },
+  { x: -110, z: 920, r: 52 },
+  { x: 270, z: 300, r: 26 },
+  { x: -370, z: 520, r: 6 },
+] as const;
 
 /** Things in the 3D world. x is across, y up and z away from the camera. */
 export interface ThirdDimension {
@@ -202,6 +221,8 @@ export interface ThirdDimension {
   /** `facing` is the way the player looks: 0 away from the camera, π towards it. `step` is how far they've walked, for the stride. */
   player: { x: number; z: number; vx: number; vz: number; facing: number; step: number };
   virus: { x: number; y: number; z: number; dx: number; dy: number; dz: number; warning: number };
+  /** `heading` is the way it points, like the player's `facing`. */
+  car: { x: number; z: number; heading: number; speed: number; driving: boolean };
 }
 
 /** The bonus round. */
@@ -238,7 +259,7 @@ export interface Input {
 }
 
 /** Shortcuts for trying things out while making the game. */
-export type Cheat = PowerUpKind | "heart" | "god" | "dive" | "escape" | "powerUpNow" | "penguinNow" | "carNow" | "skip";
+export type Cheat = PowerUpKind | "heart" | "god" | "dive" | "drive" | "escape" | "powerUpNow" | "penguinNow" | "skip";
 /** The skip cheat jumps this many seconds ahead, so the virus gets faster. */
 export const CHEAT_SKIP = 30;
 
@@ -269,7 +290,9 @@ export type GameEvent =
   | { type: "brick"; x: number; y: number; heart: boolean }
   | { type: "paddle" }
   | { type: "breakoutEnd"; cleared: boolean }
-  | { type: "honk"; side: number }
+  | { type: "drive" }
+  | { type: "smash" }
+  | { type: "bump" }
   | { type: "lost"; time: number };
 
 /** The player's size, in percent, as in 2013. */
@@ -290,7 +313,6 @@ const pixelArt = (name: string, width: number, height: number): Costume => ({
 /** Costumes for the power-ups, and the jetpack's flame. Drawn 3 stage pixels per pixel. */
 export const powerUpCostumes = POWER_UPS.map((kind) => pixelArt(kind, 12, 12));
 export const flameCostumes = [pixelArt("flame1", 12, 4), pixelArt("flame2", 12, 4)];
-export const carCostumes = [pixelArt("car", 32, 14)];
 
 /** A sprite as it looked in one update, for the replay. */
 export interface SpriteShot {
@@ -355,7 +377,6 @@ export class Game {
   readonly gameOver = sprite("gameOver", costumes.gameOver, 117, -87, 150, "all around");
   readonly hl3 = sprite("hl3", costumes.hl3, -116, 43, 100, "all around", -75);
   readonly powerUp = sprite("powerUp", powerUpCostumes, 0, GROUND_Y, 300, "don't rotate");
-  readonly car = sprite("car", carCostumes, CAR_AWAY, CAR_Y, 300, "left-right");
   /** Back to front. */
   layers: Sprite[] = [];
   /** Where sprites were before the last update, for drawing between updates. */
@@ -404,9 +425,6 @@ export class Game {
   private ported = false;
   /** The bonus round, while it's on. */
   breakout: Breakout | null = null;
-  /** Seconds the car honks before it comes, while it's waiting. */
-  carHonk = 0;
-  private carTimer = CAR_FIRST;
   /** Nothing hurts the player. A cheat. */
   god = false;
   /** Cheats were used this run, so its time can't be a best. */
@@ -487,8 +505,6 @@ export class Game {
     this.caught = null;
     this.thrown = false;
     this.ported = false;
-    this.carHonk = 0;
-    this.carTimer = CAR_FIRST;
     this.sinceThird = Infinity;
     this.timeScale = 1;
     this.powerUpTimer = POWER_UP_FIRST;
@@ -510,7 +526,7 @@ export class Game {
     virus.visible = true;
     this.respawnVirus();
     pickup.setXY(pickup.x, PICKUP_Y);
-    this.layers = [pickup, this.powerUp, player, monitor, virus, this.car];
+    this.layers = [pickup, this.powerUp, player, monitor, virus];
     this.events.push({ type: "music", playing: true });
   }
 
@@ -539,12 +555,10 @@ export class Game {
       this.updateThird(input);
     } else if (this.breakout) {
       this.updateBreakout(input);
-      this.moveCar();
     } else {
       if (!this.updateEscape()) this.movePlayer(input);
       this.moveVirus();
       this.updatePickup();
-      this.moveCar();
     }
     this.updatePowerUps();
     this.updateDifficulty();
@@ -674,6 +688,7 @@ export class Game {
       time: 0,
       player: { x: 0, z: 120, vx: 0, vz: 0, facing: Math.PI, step: 0 },
       virus: { x: 0, y: 0, z: 0, dx: 0, dy: 0, dz: 0, warning: 0 },
+      car: { ...PARKED, heading: 0, speed: 0, driving: false },
     };
     this.respawnThirdVirus();
     this.events.push({ type: "dive" });
@@ -681,7 +696,10 @@ export class Game {
 
   private respawnThirdVirus(): void {
     const third = this.third!;
-    Object.assign(third.virus, { x: this.randomInt(-150, 150), y: 120, z: THIRD_DEPTH, warning: this.aimWarning() });
+    const p = third.player;
+    // Ahead of the player, far enough to see it coming.
+    const z = Math.min(DRIVE_FAR + 200, Math.max(THIRD_DEPTH, p.z + 480));
+    Object.assign(third.virus, { x: p.x + this.randomInt(-150, 150), y: 120, z, warning: this.aimWarning() });
   }
 
   /** The 3D world: diving in, moving around on the floor and dodging the virus, then back to the room. */
@@ -705,6 +723,11 @@ export class Game {
     }
     if (third.time >= THIRD_TIME) return;
     const p = third.player;
+    if (third.car.driving) {
+      this.drive(input);
+      this.moveThirdVirus();
+      return;
+    }
     // Arrows move along the floor as seen from the camera: up goes away, down comes back.
     const across = Number(input.right) - Number(input.left);
     const ahead = Number(input.jump) - Number(input.down);
@@ -730,11 +753,52 @@ export class Game {
     this.walkTime = moving ? this.walkTime + DT : 0;
     this.hitTime += DT;
     this.player.setCostume(this.playerCostume(noInput, moving));
+    if (Math.hypot(p.x - third.car.x, p.z - third.car.z) < GET_IN) this.getInCar();
     this.moveThirdVirus();
   }
 
+  private getInCar(): void {
+    const { car, player } = this.third!;
+    car.driving = true;
+    [player.x, player.z, player.vx, player.vz] = [car.x, car.z, 0, 0];
+    this.events.push({ type: "drive" });
+  }
+
+  /** Driving Homer's car: speeding up, braking, steering, and bumping off the edge and the shapes. */
+  private drive(input: Input): void {
+    const { car, player } = this.third!;
+    const throttle = Number(input.jump) - Number(input.down);
+    if (throttle > 0) car.speed = Math.min(CAR_TOP_SPEED, car.speed + (car.speed < 0 ? CAR_BRAKING : CAR_ACCELERATION) * DT);
+    else if (throttle < 0) car.speed = Math.max(-CAR_REVERSE, car.speed - (car.speed > 0 ? CAR_BRAKING : CAR_ACCELERATION) * DT);
+    else car.speed -= Math.sign(car.speed) * Math.min(Math.abs(car.speed), CAR_COAST * DT);
+    // It turns more the faster it goes, up to a point, and the other way backing up.
+    const steer = Number(input.right) - Number(input.left);
+    const grip = Math.min(1, Math.abs(car.speed) / CAR_STEER_SPEED) * Math.sign(car.speed);
+    car.heading += steer * CAR_STEER * grip * DT;
+    let x = car.x + Math.sin(car.heading) * car.speed * DT;
+    let z = car.z + Math.cos(car.heading) * car.speed * DT;
+    let bumped = false;
+    const inside = (value: number, low: number, high: number) => Math.max(low, Math.min(high, value));
+    const [keptX, keptZ] = [inside(x, -DRIVE_SIDE, DRIVE_SIDE), inside(z, DRIVE_NEAR, DRIVE_FAR)];
+    if (keptX !== x || keptZ !== z) [x, z, bumped] = [keptX, keptZ, true];
+    for (const prop of THIRD_PROPS) {
+      const distance = Math.hypot(x - prop.x, z - prop.z);
+      const closest = prop.r + CAR_RADIUS;
+      if (distance >= closest) continue;
+      const k = closest / (distance || 1);
+      [x, z, bumped] = [prop.x + (x - prop.x) * k, prop.z + (z - prop.z) * k, true];
+    }
+    if (bumped) {
+      if (Math.abs(car.speed) > 60) this.events.push({ type: "bump" });
+      car.speed *= -0.3;
+    }
+    [car.x, car.z] = [x, z];
+    [player.x, player.z, player.facing] = [x, z, car.heading];
+    player.step += Math.abs(car.speed) * DT;
+  }
+
   private moveThirdVirus(): void {
-    const { player: p, virus: v } = this.third!;
+    const { player: p, virus: v, car } = this.third!;
     if (this.powers.freeze > 0) {
       if (Math.hypot(v.x - p.x, v.y - THIRD_CHEST, v.z - p.z) < THIRD_HIT) this.shatter(v.x, v.y, () => this.respawnThirdVirus());
       return;
@@ -758,12 +822,19 @@ export class Game {
       v.x += v.dx * step;
       v.y += v.dy * step;
       v.z += v.dz * step;
+      // Hit and run: the car runs it over.
+      if (car.driving && v.y < 70 && Math.hypot(v.x - car.x, v.z - car.z) < CAR_RADIUS + 12) {
+        this.closeCall = false;
+        this.events.push({ type: "smash" });
+        this.respawnThirdVirus();
+        return;
+      }
       if (this.invincible === 0 && Math.hypot(v.x - p.x, v.y - THIRD_CHEST, v.z - p.z) < THIRD_HIT) {
         this.takeHit();
         this.respawnThirdVirus();
         return;
       }
-      if (v.z < -60 || Math.abs(v.x) > 320 || v.y < -20) {
+      if (v.z < p.z - 300 || Math.abs(v.x - p.x) > 400 || v.y < -20) {
         this.respawnThirdVirus();
         return;
       }
@@ -1158,32 +1229,6 @@ export class Game {
     this.events.push({ type: "breakoutEnd", cleared });
   }
 
-  /** Homer's car: honks off one side, then drives across the floor. */
-  private moveCar(): void {
-    const car = this.car;
-    if (car.visible) {
-      if (this.carHonk > 0) {
-        this.carHonk = Math.max(0, this.carHonk - DT);
-        return;
-      }
-      car.x += (car.direction > 0 ? 1 : -1) * CAR_SPEED * DT;
-      this.hurts(car);
-      if (Math.abs(car.x) > CAR_AWAY) car.visible = false;
-      return;
-    }
-    this.carTimer -= DT;
-    if (this.carTimer > 1e-9 || this.breakout) return;
-    const [low, high] = CAR_EVERY;
-    this.carTimer = low + this.random() * (high - low);
-    const side = this.random() < 0.5 ? -1 : 1;
-    car.setDirection(side < 0 ? 90 : -90);
-    car.x = side * CAR_AWAY;
-    car.y = CAR_Y;
-    car.visible = true;
-    this.carHonk = CAR_HONK;
-    this.events.push({ type: "honk", side });
-  }
-
   private updatePickup(): void {
     const pickup = this.pickup;
     if (pickup.visible) {
@@ -1228,6 +1273,10 @@ export class Game {
       case "dive":
         if (inRoom) this.dive();
         break;
+      case "drive":
+        if (inRoom) this.dive();
+        if (this.third && !this.third.car.driving) this.getInCar();
+        break;
       case "escape":
         if (inRoom) this.escape();
         break;
@@ -1236,9 +1285,6 @@ export class Game {
         break;
       case "penguinNow":
         this.pickupTimer = 0;
-        break;
-      case "carNow":
-        if (!this.car.visible) this.carTimer = 0;
         break;
       case "skip":
         this.time += CHEAT_SKIP;
@@ -1260,8 +1306,6 @@ export class Game {
     this.breakout = null;
     this.caught = null;
     this.thrown = false;
-    this.car.visible = false;
-    this.carHonk = 0;
     this.timeScale = 1;
     this.endEscape();
     this.phase = "over";
@@ -1313,7 +1357,7 @@ export class Game {
   }
 
   private allSprites(): Sprite[] {
-    return [this.player, this.virus, this.monitor, this.pickup, this.gameOver, this.hl3, this.powerUp, this.car];
+    return [this.player, this.virus, this.monitor, this.pickup, this.gameOver, this.hl3, this.powerUp];
   }
 }
 

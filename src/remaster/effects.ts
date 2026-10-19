@@ -10,6 +10,8 @@ const ICE = ["#ffffff", "#66ccff", "#9a9a2a"];
 const CUBE = ["#c0c0c0", "#808080", "#ff3d8b"];
 /** Seconds the HEV suit's warning stays on screen. */
 export const CRITICAL = 2.5;
+/** Seconds "HIT & RUN!" shows after running the virus over. */
+export const SMASH = 0.8;
 
 export class Effects {
   /** Seconds of shake left, and how strong it is in stage pixels. */
@@ -25,12 +27,19 @@ export class Effects {
   shardColors = ICE;
   /** Seconds left of the HEV suit's warning. */
   critical = 0;
+  /** Seconds left of the "HIT & RUN!" text. */
+  smash = 0;
 
   constructor(private readonly random: () => number = Math.random) {}
 
   handle(event: GameEvent): void {
     if (event.type === "shield") this.shake(0.1, 2);
     if (event.type === "critical") this.critical = CRITICAL;
+    if (event.type === "smash") {
+      this.smash = SMASH;
+      this.shake(0.2, 4);
+    }
+    if (event.type === "bump") this.shake(0.12, 3);
     if (event.type === "shatter" || event.type === "cube") {
       this.shake(0.15, 3);
       this.shardTime = 0;
@@ -78,6 +87,7 @@ export class Effects {
     if (this.shakeTime === 0) this.shakeStrength = 0;
     this.flash = Math.max(0, this.flash - seconds * 4);
     this.critical = Math.max(0, this.critical - seconds);
+    this.smash = Math.max(0, this.smash - seconds);
   }
 
   clear(): void {
@@ -86,5 +96,6 @@ export class Effects {
     this.shakeStrength = 0;
     this.flash = 0;
     this.critical = 0;
+    this.smash = 0;
   }
 }

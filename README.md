@@ -19,8 +19,7 @@ Power-ups and surprises pay tribute to other games:
 - The **gravity gun** from Half-Life 2 catches the virus when it gets close and fires it back at the monitor. Dropping to your last heart, the HEV suit warns you.
 - The **portal gun** puts a portal on each wall. Walk into one and come out of the other, like in Portal. The virus can go through too. The rare **Companion Cube** takes a hit for you, and the game over screen may tell you the cake is a lie.
 - The **bonus round** is Breakout: you're the paddle, the virus is the ball, and the floor's bricks float up. Every 8 bricks give a heart, and breaking them all fills your hearts.
-- From 45 s on, Homer's pink sedan from The Simpsons: Hit & Run drives across the floor. It honks first. Jump over it.
-- The red pill from The Matrix, and a Homer³ 3D world inside the monitor.
+- The red pill from The Matrix, and a Homer³ 3D world inside the monitor. Homer's pink sedan from The Simpsons: Hit & Run is parked there. Walk into it to drive, and run the virus over.
 
 The music is the 2013 song, "Flight" by Tristam, then "Nightcore - How Do You Do" (Nightcore Lab NCL), "Nightcore - Bad boy" (AliceBloodRabbit) and "Meg & Dia - Monster (Nightcore Dubstep Remix)" (theHimeyukichan), from YouTube. Each game starts with the 2013 song, then plays the rest in a random order, and each song fades into the next. Its title shows at the bottom when it starts.
 
@@ -43,7 +42,7 @@ bun run test    # typecheck and unit tests
 bun run build   # writes docs/, commit it with your change
 ```
 
-With `?cheats` in the address, which the dev server adds, a **Cheats** panel lets you grab any power-up, add a heart, bring the car, turn on god mode, jump into the 3D world or escape, bring the next power-up or penguin right away, and skip 30 s ahead. Press the key shown next to each one, or <kbd>`</kbd> to hide the panel. A run with cheats can't set a best time.
+With `?cheats` in the address, which the dev server adds, a **Cheats** panel lets you grab any power-up, add a heart, turn on god mode, jump into the 3D world, straight into the car, or escape, bring the next power-up or penguin right away, and skip 30 s ahead. Press the key shown next to each one, or <kbd>`</kbd> to hide the panel. A run with cheats can't set a best time.
 
 The browser test plays the game in Chromium:
 

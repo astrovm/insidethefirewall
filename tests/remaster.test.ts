@@ -106,7 +106,7 @@ describe("starting", () => {
     expect(game.player.x).toBeGreaterThanOrEqual(-205);
     expect(game.player.x).toBeLessThanOrEqual(205);
     expect([game.virus.x, game.virus.y]).toEqual([VIRUS_SPAWN.x, VIRUS_SPAWN.y]);
-    expect(game.layers.map((s) => s.name)).toEqual(["pickup", "powerUp", "player", "monitor", "virus", "car"]);
+    expect(game.layers.map((s) => s.name)).toEqual(["pickup", "powerUp", "player", "monitor", "virus"]);
     expect(game.pickup.visible).toBe(false);
     expect(game.events.at(-1)).toEqual({ type: "music", playing: true });
   });
@@ -1065,7 +1065,7 @@ describe("power-ups", () => {
 
     game.start();
     expect([Object.values(game.powers).every((left) => left === 0), game.powerUp.visible, game.flying]).toEqual([true, false, false]);
-    expect(game.layers.map((s) => s.name)).toEqual(["pickup", "powerUp", "player", "monitor", "virus", "car"]);
+    expect(game.layers.map((s) => s.name)).toEqual(["pickup", "powerUp", "player", "monitor", "virus"]);
   });
 });
 

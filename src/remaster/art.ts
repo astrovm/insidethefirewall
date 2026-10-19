@@ -14,8 +14,6 @@ export const palette: Record<string, string> = {
   o: "#ff9900",
   y: "#ffcc00",
   O: "#cc6600",
-  p: "#ff9ccc",
-  P: "#e0609f",
   h: "#ff3d8b",
 };
 
@@ -163,24 +161,6 @@ export const ball = [
   "..kssssssk..",
 ];
 
-/** Homer's pink sedan, from The Simpsons: Hit & Run, driving right. */
-export const car = [
-  "..........kkkkkkkkkkk...........",
-  ".........kpBBBBkBBBBBk..........",
-  "........kpBBBBBkBBBBBBk.........",
-  ".......kppBBBBBkBBBBBBBk........",
-  "..kkkkkppppppppppppppppPkkkkk...",
-  ".kpppppppppppppppppppppppppppk..",
-  ".kpPPPPPPPPPPPPPPPPPPPPPPPPPpyk.",
-  "kppppppppppppppppppppppppppppppk",
-  "kpppkkkkpppppppppppppkkkkppppppk",
-  "kSSkSSSSkSSSSSSSSSSSkSSSSkSSSSSk",
-  ".kkkSkkSkkkkkkkkkkkkkSkkSkkkkkk.",
-  "...kSwwSk...........kSwwSk......",
-  "...kSwwSk...........kSwwSk......",
-  "....kkkk.............kkkk.......",
-];
-
 /** Flame out of the jetpack's two nozzles, two frames so it flickers. */
 export const flame = [
   [".yoy....yoy.", ".yoy....yoy.", "..o......o..", "..r......r.."],
@@ -209,7 +189,7 @@ export function toSvg(rows: string[]): string {
   ].join("\n");
 }
 
-/** The SVG files for the power-ups, the flame and the car, by file name. */
+/** The SVG files for the power-ups and the flame, by file name. */
 export function artFiles(): Map<string, string> {
   return new Map([
     ["jetpack.svg", toSvg(jetpack)],
@@ -223,6 +203,5 @@ export function artFiles(): Map<string, string> {
     ["ball.svg", toSvg(ball)],
     ["flame1.svg", toSvg(flame[0]!)],
     ["flame2.svg", toSvg(flame[1]!)],
-    ["car.svg", toSvg(car)],
   ]);
 }

@@ -2,12 +2,24 @@
 // grid under a starry black sky, solid shapes, floating equations and the
 // X Y Z signpost. The player becomes a blocky 3D body in their pixel art's
 // colors that walks and turns, and the virus a chunky figure built from its
-// pixel art. Drawn on the 2D canvas with a small software 3D
+// pixel art. Homer's pink sedan from The Simpsons: Hit & Run is parked there,
+// to drive. Drawn on the 2D canvas with a small software 3D
 // renderer: shapes are flat-shaded faces, sorted back to front.
 
 import { STAGE_HEIGHT, STAGE_WIDTH, type Costume } from "../engine/sprite.ts";
 import type { CostumeImages } from "../render.ts";
-import { THIRD_DEPTH, THIRD_IN, THIRD_OUT, THIRD_SIDE, THIRD_TIME, type Game, type ThirdDimension } from "./game.ts";
+import {
+  DRIVE_FAR,
+  DRIVE_NEAR,
+  DRIVE_SIDE,
+  THIRD_DEPTH,
+  THIRD_IN,
+  THIRD_OUT,
+  THIRD_SIDE,
+  THIRD_TIME,
+  type Game,
+  type ThirdDimension,
+} from "./game.ts";
 import type { View } from "./render.ts";
 
 /** Diving into the screen: the camera zooms in this long, then the player falls down the grid tunnel. */
@@ -105,7 +117,7 @@ const NEAR = 12;
 export class ThirdRenderer {
   private readonly figures = new Map<Costume, Figure>();
   /** Where the camera looks, catching up with the player. */
-  private follow: { third: ThirdDimension; time: number; x: number; z: number } | null = null;
+  private follow: { third: ThirdDimension; time: number; x: number; z: number; yaw: number } | null = null;
   private readonly stars = Array.from({ length: 90 }, (_, i) => [hash01(i * 3), hash01(i * 3 + 1) * 0.55, hash01(i * 3 + 2)] as const);
 
   constructor(
@@ -171,17 +183,27 @@ export class ThirdRenderer {
     const { x: left, y: top, scale } = view;
     const t = third.time - THIRD_IN;
     const p = third.player;
-    // The camera catches up with the player, from behind and above.
-    if (this.follow?.third !== third) this.follow = { third, time: third.time, x: p.x, z: p.z };
+    const car = third.car;
+    // The camera catches up with the player, from behind and above. Walking, it
+    // leans a little to the side the player is on. Driving, it swings round
+    // behind the car and looks ahead of it.
+    if (this.follow?.third !== third) this.follow = { third, time: third.time, x: p.x, z: p.z, yaw: 0 };
     const follow = this.follow;
-    const catchUp = 1 - Math.exp(-Math.max(0, third.time - follow.time) * 5);
+    const elapsed = Math.max(0, third.time - follow.time);
+    const catchUp = 1 - Math.exp(-elapsed * (car.driving ? 8 : 5));
     follow.x += (p.x - follow.x) * catchUp;
     follow.z += (p.z - follow.z) * catchUp;
+    const wantedYaw = car.driving ? car.heading : (-follow.x / THIRD_SIDE) * 0.18;
+    const turn = wantedYaw - follow.yaw;
+    follow.yaw += Math.atan2(Math.sin(turn), Math.cos(turn)) * (1 - Math.exp(-elapsed * 4));
     follow.time = third.time;
-    // It swoops down from high above at the start, and leans a little to the side the player is on.
+    // It swoops down from high above at the start.
     const swoop = ease(Math.min(1, t / 1.4));
-    const yaw = lerp(1.3, (-follow.x / THIRD_SIDE) * 0.18, swoop);
-    const camera = new Camera(view, [follow.x * 0.85, 38, follow.z + 70], lerp(1300, 360, swoop), yaw, lerp(1.05, 0.4, swoop), 360);
+    const yaw = lerp(1.3, follow.yaw, swoop);
+    const target: Vec = car.driving
+      ? [follow.x + Math.sin(follow.yaw) * 70, 30, follow.z + Math.cos(follow.yaw) * 70]
+      : [follow.x * 0.85, 38, follow.z + 70];
+    const camera = new Camera(view, target, lerp(1300, car.driving ? 320 : 360, swoop), yaw, lerp(1.05, car.driving ? 0.32 : 0.4, swoop), 360);
 
     // The sky: black, a little blue near the horizon, with stars.
     ctx.fillStyle = "#000";
@@ -202,7 +224,7 @@ export class ThirdRenderer {
     }
     ctx.globalAlpha = 1;
 
-    this.drawGrid(camera, horizonY);
+    this.drawGrid(camera, horizonY, car.driving);
 
     // Everything standing in the world, far things first.
     const things: Thing[] = [];
@@ -225,8 +247,16 @@ export class ThirdRenderer {
     // Sucked into the black hole at the end: spinning, shrinking and sinking.
     const sucked = Math.max(0, Math.min(1, end / THIRD_OUT));
     const playerAlpha = invincibleBlink(game);
-    // Blinks by hiding: a see-through body would show its insides.
-    if (sucked < 1 && playerAlpha === 1) {
+    // Homer's car, parked or driven, sucked in with the player at the end.
+    if (sucked < 1) {
+      const sink = car.driving ? sucked : 0;
+      this.addShadow(things, camera, [car.x, 0, car.z], 40 * (1 - sink));
+      if (!car.driving || playerAlpha === 1) {
+        this.addMesh(things, camera, placeFaces(CAR, [car.x, -sink * 60, car.z], car.heading + sink * 14, 1 - sink));
+      }
+    }
+    // Blinks by hiding: a see-through body would show its insides. In the car, it's inside.
+    if (sucked < 1 && playerAlpha === 1 && !car.driving) {
       this.addShadow(things, camera, [p.x, 0, p.z], 22 * (1 - sucked));
       this.addBody(things, camera, game, [p.x, -sucked * 60, p.z], {
         facing: p.facing + sucked * 14,
@@ -252,8 +282,8 @@ export class ThirdRenderer {
     for (const thing of things.sort((a, b) => b.depth - a.depth)) thing.draw();
   }
 
-  /** The glowing floor grid, fading into the dark. */
-  private drawGrid(camera: Camera, horizonY: number): void {
+  /** The glowing floor grid, fading into the dark, with the edge of where the player can go. */
+  private drawGrid(camera: Camera, horizonY: number, driving: boolean): void {
     const ctx = this.ctx;
     const { view } = camera;
     ctx.save();
@@ -276,7 +306,7 @@ export class ThirdRenderer {
     for (let z = -400; z <= 1800; z += 50) segment([-900, 0, z], [900, 0, z]);
     ctx.stroke();
     // The edge of where the player can walk, brighter.
-    const [x, near, far] = [THIRD_SIDE + 20, 0, THIRD_DEPTH - 20];
+    const [x, near, far] = driving ? [DRIVE_SIDE + 34, DRIVE_NEAR - 34, DRIVE_FAR + 34] : [THIRD_SIDE + 20, 0, THIRD_DEPTH - 20];
     ctx.beginPath();
     segment([-x, 0, near], [x, 0, near]);
     segment([x, 0, near], [x, 0, far]);
@@ -641,6 +671,42 @@ export class ThirdRenderer {
     });
   }
 }
+
+/** Faces built pointing +z, standing on y 0, turned to `heading`, shrunk by `scale` and put at `at`. */
+function placeFaces(faces: Face[], at: Vec, heading: number, scale: number): Face[] {
+  const [cos, sin] = [Math.cos(heading), Math.sin(heading)];
+  const turn = ([x, y, z]: Vec): Vec => [x * cos + z * sin, y, -x * sin + z * cos];
+  return faces.map((face) => ({
+    color: face.color,
+    normal: turn(face.normal),
+    corners: face.corners.map((corner) => {
+      const [x, y, z] = turn(corner);
+      return [at[0] + x * scale, at[1] + y * scale, at[2] + z * scale] as Vec;
+    }),
+  }));
+}
+
+/** Homer's pink sedan, blocky, pointing +z. */
+const CAR: Face[] = (() => {
+  const PINK: Rgb = [255, 140, 190];
+  const GLASS: Rgb = [140, 200, 245];
+  const TIRE: Rgb = [30, 30, 36];
+  const faces: Face[] = [];
+  const part = (center: Vec, size: Vec, color: Rgb) => faces.push(...box(center, size, color, 0));
+  part([0, 15, 0], [46, 18, 92], PINK);
+  part([0, 32, -6], [40, 16, 46], GLASS);
+  part([0, 41, -6], [42, 3, 48], PINK);
+  // Pillars at the corners and between the side windows.
+  for (const side of [-1, 1]) for (const z of [-28, -6, 16]) part([side * 19.5, 32, z], [2, 16, 3], PINK);
+  part([0, 9, 46.5], [48, 6, 3], [200, 200, 205]);
+  part([0, 9, -46.5], [48, 6, 3], [200, 200, 205]);
+  for (const side of [-1, 1]) {
+    part([side * 15, 17, 46.2], [9, 5, 1.5], [255, 230, 90]);
+    part([side * 16, 17, -46.2], [8, 5, 1.5], [230, 30, 30]);
+    for (const z of [-29, 29]) part([side * 22, 8, z], [7, 16, 17], TIRE);
+  }
+  return faces;
+})();
 
 /** The point where a line from behind the camera crosses into view. */
 function cut(behind: Vec, ahead: Vec): Vec {
