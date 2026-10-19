@@ -77,6 +77,50 @@
     .pill.dark:hover {
       background: #005d20;
     }
+    #cheats {
+      position: absolute;
+      top: 56px;
+      right: 8px;
+      display: grid;
+      gap: 4px;
+      padding: 8px;
+      border-radius: 8px;
+      background: #000c;
+      color: #fff;
+      font-size: 13px;
+    }
+    #cheats[hidden] {
+      display: none;
+    }
+    #cheats h2 {
+      margin: 0 0 2px;
+      font-size: 13px;
+      color: #fe9501;
+    }
+    #cheats button {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      padding: 3px 8px;
+      border: 0;
+      border-radius: 4px;
+      background: #fff2;
+      color: #fff;
+      text-align: left;
+      cursor: pointer;
+    }
+    #cheats button:hover {
+      background: #fff4;
+    }
+    #cheats button[aria-pressed=true] {
+      background: #00cc44;
+      color: #003311;
+    }
+    #cheats kbd {
+      min-width: 1em;
+      font: inherit;
+      opacity: 0.6;
+    }
     #corner {
       position: absolute;
       top: 8px;
@@ -440,6 +484,20 @@
         <button id="repair" type="button" data-action="restart">Repair (R)</button>
       </section>
     </div>
+    <section id="cheats" aria-labelledby="cheats-title" hidden>
+      <h2 id="cheats-title">Cheats (`)</h2>
+      <button type="button" data-cheat="jetpack"><kbd>1</kbd>Jetpack</button>
+      <button type="button" data-cheat="shield"><kbd>2</kbd>Shield</button>
+      <button type="button" data-cheat="freeze"><kbd>3</kbd>Freeze</button>
+      <button type="button" data-cheat="pill"><kbd>4</kbd>Red pill</button>
+      <button type="button" data-cheat="heart"><kbd>5</kbd>Heart</button>
+      <button type="button" data-cheat="god" aria-pressed="false"><kbd>6</kbd>God mode</button>
+      <button type="button" data-cheat="dive"><kbd>7</kbd>3D world</button>
+      <button type="button" data-cheat="escape"><kbd>8</kbd>Escape</button>
+      <button type="button" data-cheat="powerUpNow"><kbd>9</kbd>Power-up now</button>
+      <button type="button" data-cheat="penguinNow"><kbd>0</kbd>Penguin now</button>
+      <button type="button" data-cheat="skip"><kbd>-</kbd>Skip 30 s</button>
+    </section>
     <div id="corner">
       <button id="open-settings" class="icon" type="button" title="Settings" aria-label="Settings" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 1h4l.6 2.6 1.6.9 2.5-.9 2 3.4-2 1.8v2.4l2 1.8-2 3.4-2.5-.9-1.6.9L12 19H8l-.6-2.6-1.6-.9-2.5.9-2-3.4 2-1.8V8.8l-2-1.8 2-3.4 2.5.9 1.6-.9zm2 6a3 3 0 100 6 3 3 0 000-6z"/></svg></button>
       <button id="fullscreen-game" class="icon" type="button" data-fullscreen title="Full screen" aria-label="Full screen"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 3h5v2H5v3H3zm9 0h5v5h-2V5h-3zM3 12h2v3h3v2H3zm12 0h2v5h-5v-2h3z"/></svg></button>

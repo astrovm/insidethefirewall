@@ -13,6 +13,7 @@ import {
   PENGUIN_SHIELD,
   POWER_UP_TIME,
   powerUpCostumes,
+  type Cheat,
   type GameEvent,
   type Grab,
   type PowerUpKind,
@@ -358,7 +359,8 @@ async function main(): Promise<void> {
         effects.clear();
         fader.fadeIn();
         lastTime = event.time;
-        const isBest = best.record(event.time, runSpeed);
+        // A run with cheats can't be a best.
+        const isBest = !game.cheated && best.record(event.time, runSpeed);
         status.textContent = `Game over. You lasted ${formatTime(event.time)} seconds.${isBest ? " New best!" : ""}`;
         $("over-time").textContent = formatTime(event.time);
         $("over-best").textContent = best.label;
@@ -430,6 +432,24 @@ async function main(): Promise<void> {
     button.addEventListener("click", () => toggleFullscreen());
   }
 
+  // Cheats, for trying things out, with ?cheats in the address. The dev server adds it. ` hides them.
+  const cheats = new URLSearchParams(location.search).has("cheats") ? $("cheats") : null;
+  const cheatKeys = new Map<string, Cheat>();
+  const doCheat = (cheat: Cheat) => {
+    game.cheat(cheat);
+    for (const button of $("cheats").querySelectorAll<HTMLButtonElement>("[data-cheat=god]")) button.setAttribute("aria-pressed", String(game.god));
+  };
+  for (const button of $("cheats").querySelectorAll<HTMLButtonElement>("[data-cheat]")) {
+    const cheat = button.dataset.cheat as Cheat;
+    cheatKeys.set(button.querySelector("kbd")!.textContent!, cheat);
+    button.addEventListener("click", () => {
+      doCheat(cheat);
+      // So Space jumps instead of pressing it again.
+      button.blur();
+    });
+  }
+  if (cheats) cheats.hidden = false;
+
   // Keyboard.
   window.addEventListener("keydown", (event) => {
     audio.unlock();
@@ -443,6 +463,16 @@ async function main(): Promise<void> {
     }
     if (settingsOpen) {
       if (key === "Escape" || key === "p") closeSettings();
+      return;
+    }
+    if (cheats && key === "`") {
+      cheats.hidden = !cheats.hidden;
+      return;
+    }
+    const cheat = cheats && !cheats.hidden ? cheatKeys.get(key) : undefined;
+    if (cheat) {
+      event.preventDefault();
+      doCheat(cheat);
       return;
     }
     if (key === "f") return toggleFullscreen();

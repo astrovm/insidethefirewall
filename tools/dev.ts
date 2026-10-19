@@ -19,7 +19,10 @@ const server = Bun.serve({
   hostname: "127.0.0.1",
   port,
   async fetch(request) {
-    let path = decodeURIComponent(new URL(request.url).pathname);
+    const url = new URL(request.url);
+    // The game, with the cheats panel for trying things out.
+    if (url.pathname === "/" && url.search === "") return Response.redirect("/?cheats", 302);
+    let path = decodeURIComponent(url.pathname);
     if (path.endsWith("/")) path += "index.html";
     const file = Bun.file(normalize(join(docs, path)));
     if (!file.name?.startsWith(docs) || !(await file.exists())) return new Response("Not found", { status: 404 });
