@@ -432,9 +432,8 @@ async function main(): Promise<void> {
     button.addEventListener("click", () => toggleFullscreen());
   }
 
-  // Cheats, for trying things out: on the dev server, or with ?cheats in the address. ` shows them.
-  const cheatsOn = ["127.0.0.1", "localhost"].includes(location.hostname) || new URLSearchParams(location.search).has("cheats");
-  const cheats = cheatsOn ? $("cheats") : null;
+  // Cheats, for trying things out, with ?cheats in the address. The dev server adds it. ` hides them.
+  const cheats = new URLSearchParams(location.search).has("cheats") ? $("cheats") : null;
   const cheatKeys = new Map<string, Cheat>();
   const doCheat = (cheat: Cheat) => {
     game.cheat(cheat);
