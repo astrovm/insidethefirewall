@@ -5,8 +5,6 @@ import type { GameEvent } from "./game.ts";
 
 /** Seconds the pieces of a broken virus fly. */
 export const SHARDS = 0.7;
-/** Seconds "HIT & RUN!" shows after running the virus over. */
-export const SMASH = 0.8;
 
 export class Effects {
   /** Seconds of shake left, and how strong it is in stage pixels. */
@@ -19,17 +17,12 @@ export class Effects {
   shards: { x: number; y: number; vx: number; vy: number; spin: number; size: number }[] = [];
   /** Seconds since the virus broke. */
   shardTime = Infinity;
-  /** Seconds left of the "HIT & RUN!" text. */
-  smash = 0;
 
   constructor(private readonly random: () => number = Math.random) {}
 
   handle(event: GameEvent): void {
     if (event.type === "shield") this.shake(0.1, 2);
-    if (event.type === "smash") {
-      this.smash = SMASH;
-      this.shake(0.2, 4);
-    }
+    if (event.type === "smash") this.shake(0.2, 4);
     if (event.type === "bump") this.shake(0.12, 3);
     if (event.type === "shatter") {
       this.shake(0.15, 3);
@@ -76,7 +69,6 @@ export class Effects {
     this.shakeTime = Math.max(0, this.shakeTime - seconds);
     if (this.shakeTime === 0) this.shakeStrength = 0;
     this.flash = Math.max(0, this.flash - seconds * 4);
-    this.smash = Math.max(0, this.smash - seconds);
   }
 
   clear(): void {
@@ -84,6 +76,5 @@ export class Effects {
     this.shakeTime = 0;
     this.shakeStrength = 0;
     this.flash = 0;
-    this.smash = 0;
   }
 }

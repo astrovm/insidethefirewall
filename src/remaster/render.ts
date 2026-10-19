@@ -1,6 +1,6 @@
 import { STAGE_HEIGHT, STAGE_WIDTH, type Costume, type Sprite } from "../engine/sprite.ts";
 import { interpolate, type CostumeImages } from "../render.ts";
-import { SHARDS, SMASH, type Effects } from "./effects.ts";
+import { SHARDS, type Effects } from "./effects.ts";
 import { DIVE_ZOOM, ThirdRenderer } from "./third.ts";
 import {
   BALL_RADIUS,
@@ -169,7 +169,6 @@ export class RemasterRenderer {
     }
     if (third && third.time >= DIVE_ZOOM) {
       this.third.draw(game, third, this.view);
-      if (effects.smash > 0) this.drawSmash(effects.smash);
     } else this.drawRoom(game, between, playing);
     if (playing && !third) this.drawShards(effects);
     const white = whiteOut(game);
@@ -265,29 +264,6 @@ export class RemasterRenderer {
       }
     }
     if (playing && game.breakout) this.drawBreakout(game);
-  }
-
-  /** "HIT & RUN!" popping up after the car runs the virus over, like the game. */
-  private drawSmash(left: number): void {
-    const ctx = this.ctx;
-    const age = SMASH - left;
-    const pop = 1 + 0.4 * Math.max(0, 1 - age / 0.15);
-    const [x, y] = toCanvas(this.view, 0, 90);
-    const s = this.view.scale * pop;
-    ctx.save();
-    ctx.globalAlpha = Math.min(1, left / 0.25);
-    ctx.translate(x, y);
-    ctx.rotate(-0.08);
-    ctx.font = `900 ${36 * s}px 'Noto Sans', sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.lineJoin = "round";
-    ctx.lineWidth = 8 * s;
-    ctx.strokeStyle = colors.mortar;
-    ctx.strokeText("HIT & RUN!", 0, 0);
-    ctx.fillStyle = "#ffd400";
-    ctx.fillText("HIT & RUN!", 0, 0);
-    ctx.restore();
   }
 
   /** The gravity gun in the player's hands, and its beam while it holds the virus. */
