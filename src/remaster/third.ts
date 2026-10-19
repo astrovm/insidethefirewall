@@ -1,12 +1,13 @@
 // The 3D world inside the monitor, like Homer³ in The Simpsons: a green neon
 // grid under a starry black sky, solid shapes, floating equations and the
-// X Y Z signpost. The player and the virus turn into chunky 3D figures built
-// from their pixel art. Drawn on the 2D canvas with a small software 3D
+// X Y Z signpost. The player becomes a blocky 3D body in their pixel art's
+// colors that walks and turns, and the virus a chunky figure built from its
+// pixel art. Drawn on the 2D canvas with a small software 3D
 // renderer: shapes are flat-shaded faces, sorted back to front.
 
 import { STAGE_HEIGHT, STAGE_WIDTH, type Costume } from "../engine/sprite.ts";
 import type { CostumeImages } from "../render.ts";
-import { THIRD_IN, THIRD_OUT, THIRD_TIME, type Game, type ThirdDimension } from "./game.ts";
+import { THIRD_DEPTH, THIRD_IN, THIRD_OUT, THIRD_SIDE, THIRD_TIME, type Game, type ThirdDimension } from "./game.ts";
 import type { View } from "./render.ts";
 
 /** Diving into the screen: the camera zooms in this long, then the player falls down the grid tunnel. */
@@ -35,6 +36,15 @@ interface Figure {
 }
 
 const LIGHT = normalize([-0.45, 0.8, -0.4]);
+
+/** The player's colors, from their pixel art. */
+const HAIR: Rgb = [45, 8, 8];
+const SKIN: Rgb = [255, 156, 156];
+const HOODIE: Rgb = [0, 66, 255];
+const STRAP: Rgb = [57, 57, 57];
+const PANTS: Rgb = [0, 24, 99];
+const SHOES: Rgb = [20, 20, 28];
+const WHITE: Rgb = [255, 255, 255];
 const GREEN = "#19ff3c";
 
 function normalize([x, y, z]: Vec): Vec {
@@ -94,6 +104,8 @@ const NEAR = 12;
 
 export class ThirdRenderer {
   private readonly figures = new Map<Costume, Figure>();
+  /** Where the camera looks, catching up with the player. */
+  private follow: { third: ThirdDimension; time: number; x: number; z: number } | null = null;
   private readonly stars = Array.from({ length: 90 }, (_, i) => [hash01(i * 3), hash01(i * 3 + 1) * 0.55, hash01(i * 3 + 2)] as const);
 
   constructor(
@@ -141,16 +153,17 @@ export class ThirdRenderer {
     ctx.restore();
     // The player tumbles down the middle, smaller and smaller.
     const fall = Math.min(1, t / (THIRD_IN - DIVE_ZOOM));
-    const costume = game.player.currentCostume;
-    const image = this.images.get(costume);
-    if (!image) return;
-    const size = (game.player.size / 100) * (2.6 - 2.2 * fall) * scale;
-    ctx.save();
-    ctx.translate(cx + (1 - fall) * -60 * scale, cy + (1 - fall) * 40 * scale);
-    ctx.rotate(t * 7);
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(image, (-costume.width / 2) * size, (-costume.height / 2) * size, costume.width * size, costume.height * size);
-    ctx.restore();
+    const camera = new Camera(view, [0, 0, 0], 300, 0, 0, 360);
+    const things: Thing[] = [];
+    const offset = (1 - fall) * 60;
+    this.addBody(things, camera, game, [-offset + Math.sin(t * 5) * 15, offset * 0.7 - 43, -150 + 450 * fall], {
+      facing: t * 5,
+      roll: t * 7,
+      shrink: 1,
+      stride: 0,
+      swing: 1,
+    });
+    for (const thing of things.sort((a, b) => b.depth - a.depth)) thing.draw();
   }
 
   private drawWorld(game: Game, third: ThirdDimension, view: View): void {
@@ -158,22 +171,22 @@ export class ThirdRenderer {
     const { x: left, y: top, scale } = view;
     const t = third.time - THIRD_IN;
     const p = third.player;
-    // The camera swoops down from high above, then sways from side to side, following the player.
+    // The camera catches up with the player, from behind and above.
+    if (this.follow?.third !== third) this.follow = { third, time: third.time, x: p.x, z: p.z };
+    const follow = this.follow;
+    const catchUp = 1 - Math.exp(-Math.max(0, third.time - follow.time) * 5);
+    follow.x += (p.x - follow.x) * catchUp;
+    follow.z += (p.z - follow.z) * catchUp;
+    follow.time = third.time;
+    // It swoops down from high above at the start, and leans a little to the side the player is on.
     const swoop = ease(Math.min(1, t / 1.4));
-    const sway = Math.sin(t * 0.6) * 0.5;
-    const camera = new Camera(
-      view,
-      [p.x * 0.5, 40, 180 + p.z * 0.45],
-      lerp(1300, 430, swoop),
-      lerp(1.3, sway, swoop),
-      lerp(1.05, 0.33, swoop),
-      360,
-    );
+    const yaw = lerp(1.3, (-follow.x / THIRD_SIDE) * 0.18, swoop);
+    const camera = new Camera(view, [follow.x * 0.85, 38, follow.z + 70], lerp(1300, 360, swoop), yaw, lerp(1.05, 0.4, swoop), 360);
 
     // The sky: black, a little blue near the horizon, with stars.
     ctx.fillStyle = "#000";
     ctx.fillRect(left, top, STAGE_WIDTH * scale, STAGE_HEIGHT * scale);
-    const horizon = camera.toCamera([camera.x + Math.sin(sway) * 1e5, 0, camera.z + Math.cos(sway) * 1e5]);
+    const horizon = camera.toCamera([camera.x + Math.sin(yaw) * 1e5, 0, camera.z + Math.cos(yaw) * 1e5]);
     const horizonY = horizon[2] > 0 ? camera.toCanvas(horizon)[1] : top;
     const glow = ctx.createLinearGradient(0, horizonY - 90 * scale, 0, horizonY + 10 * scale);
     glow.addColorStop(0, "rgba(20, 30, 90, 0)");
@@ -200,7 +213,7 @@ export class ThirdRenderer {
     mesh(box([330, 150 + Math.sin(t * 2) * 10, 430], [22, 22, 22], [255, 210, 0], t * 2));
     this.addSphere(things, camera, [270, 26, 300], 26, [230, 30, 20]);
     this.addSphere(things, camera, [130, 230, 1050], 75, [60, 120, 200], true);
-    this.addSignpost(things, camera, [-300, 0, 260]);
+    this.addSignpost(things, camera, [-370, 0, 520]);
     this.addText(things, camera, "1782¹² + 1841¹² = 1922¹²", [-170, 150, 820], 30, "#c8b4e6");
     this.addText(things, camera, "P = NP", [360, 70, 560], 46, "#66ddee");
     this.addCard(things, camera);
@@ -212,14 +225,15 @@ export class ThirdRenderer {
     // Sucked into the black hole at the end: spinning, shrinking and sinking.
     const sucked = Math.max(0, Math.min(1, end / THIRD_OUT));
     const playerAlpha = invincibleBlink(game);
-    if (sucked < 1) {
-      this.addShadow(things, camera, [p.x, 0, p.z], 26 * (1 - sucked));
-      this.addFigure(things, camera, game.player.currentCostume, game.player.size / 100, [p.x, -sucked * 60, p.z], {
-        flip: game.player.flipX,
-        spin: sucked * 14,
+    // Blinks by hiding: a see-through body would show its insides.
+    if (sucked < 1 && playerAlpha === 1) {
+      this.addShadow(things, camera, [p.x, 0, p.z], 22 * (1 - sucked));
+      this.addBody(things, camera, game, [p.x, -sucked * 60, p.z], {
+        facing: p.facing + sucked * 14,
+        roll: 0,
         shrink: 1 - sucked,
-        depth: 10,
-        alpha: playerAlpha,
+        stride: p.step,
+        swing: Math.min(1, Math.hypot(p.vx, p.vz) / 150),
       });
     }
     if (end < 0) {
@@ -228,9 +242,9 @@ export class ThirdRenderer {
       const blinking = v.warning > 0 && Math.floor(v.warning / 0.08) % 2 === 1;
       this.addFigure(things, camera, game.virus.currentCostume, virusSize, [v.x, v.y - (game.virus.currentCostume.height * virusSize) / 2, v.z], {
         flip: v.dx < 0 ? -1 : 1,
-        spin: Math.sin(t * 3) * 0.4,
+        spin: t * 2.5,
         shrink: 1,
-        depth: 8,
+        depth: 12,
         alpha: blinking ? 0.3 : 1,
         frozen: game.powers.freeze > 0,
       });
@@ -260,6 +274,19 @@ export class ThirdRenderer {
     };
     for (let x = -900; x <= 900; x += 50) segment([x, 0, -400], [x, 0, 1800]);
     for (let z = -400; z <= 1800; z += 50) segment([-900, 0, z], [900, 0, z]);
+    ctx.stroke();
+    // The edge of where the player can walk, brighter.
+    const [x, near, far] = [THIRD_SIDE + 20, 0, THIRD_DEPTH - 20];
+    ctx.beginPath();
+    segment([-x, 0, near], [x, 0, near]);
+    segment([x, 0, near], [x, 0, far]);
+    segment([x, 0, far], [-x, 0, far]);
+    segment([-x, 0, far], [-x, 0, near]);
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = "#b6ffc4";
+    ctx.shadowColor = GREEN;
+    ctx.shadowBlur = 6 * view.scale;
+    ctx.lineWidth = Math.max(1, 2.5 * view.scale);
     ctx.stroke();
     ctx.restore();
     // Fog: the grid fades out toward the horizon.
@@ -308,6 +335,72 @@ export class ThirdRenderer {
         ctx.restore();
       },
     });
+  }
+
+  /**
+   * The player as a blocky 3D body, standing at `at`: legs and arms swing
+   * with `stride`, as much as `swing` says, and it turns to `facing`.
+   * `roll` tips it over, for tumbling down the tunnel.
+   */
+  private addBody(
+    things: Thing[],
+    camera: Camera,
+    game: Game,
+    at: Vec,
+    options: { facing: number; roll: number; shrink: number; stride: number; swing: number },
+  ): void {
+    const s = (game.player.size / 100) * options.shrink;
+    const swing = Math.sin(options.stride / 11) * 0.75 * options.swing;
+    // A little bounce with each step.
+    const bob = Math.abs(Math.cos(options.stride / 11)) * 0.8 * options.swing;
+    const faces: Face[] = [];
+    // A box from `low` to `high`, in pixels of the art, standing on y 0 and facing +z, swung around `pivot`.
+    const part = (low: Vec, high: Vec, color: Rgb, pivot?: Vec, angle = 0) => {
+      const center: Vec = [(low[0] + high[0]) / 2, (low[1] + high[1]) / 2, (low[2] + high[2]) / 2];
+      for (const face of box(center, [high[0] - low[0], high[1] - low[1], high[2] - low[2]], color, 0)) {
+        faces.push(pivot ? { color, normal: pitch(face.normal, [0, 0, 0], angle), corners: face.corners.map((c) => pitch(c, pivot, angle)) } : face);
+      }
+    };
+    for (const side of [-1, 1]) {
+      const legSwing = swing * side;
+      const hip: Vec = [side * 3.2, 13, 0];
+      part([side * 3.2 - 2.8, 3, -3], [side * 3.2 + 2.8, 13, 3], PANTS, hip, legSwing);
+      part([side * 3.2 - 3, 0, -3.5], [side * 3.2 + 3, 3, 5], SHOES, hip, legSwing);
+      const shoulder: Vec = [side * 9.5, 29, 0];
+      part([side * 9.5 - 2.5, 16, -2.5], [side * 9.5 + 2.5, 30, 2.5], HOODIE, shoulder, -legSwing);
+      part([side * 9.5 - 2, 13, -2], [side * 9.5 + 2, 16, 2], SKIN, shoulder, -legSwing);
+      // Backpack straps, and the eyes.
+      part([side * 4.5 - 1.2, 15, 4], [side * 4.5 + 1.2, 31, 4.6], STRAP);
+      part([side * 3 - 1.6, 36, 6.4], [side * 3 + 1.6, 39.5, 7], WHITE);
+      part([side * 3 - 0.2, 36, 6.8], [side * 3 + 1.4, 38.5, 7.3], HAIR);
+    }
+    part([-7, 13, -4], [7, 31, 4], HOODIE);
+    part([-5.5, 16, -8], [5.5, 29, -4], STRAP);
+    part([-7.5, 31, -6.5], [7.5, 44, 6.5], SKIN);
+    // Hair: on top, at the back and a fringe swept to one side.
+    part([-8, 43, -7.5], [8, 47.5, 7.5], HAIR);
+    part([-8, 34, -7.5], [8, 43, -4.5], HAIR);
+    part([-8, 36, -7.5], [-7.4, 43, 4], HAIR);
+    part([7.4, 36, -7.5], [8, 43, 4], HAIR);
+    part([-8, 40.5, 6], [3, 43, 7.5], HAIR);
+    const [cos, sin] = [Math.cos(options.facing), Math.sin(options.facing)];
+    const [rollCos, rollSin] = [Math.cos(options.roll), Math.sin(options.roll)];
+    // Turned round, tipped over around its middle, then put in place.
+    const orient = ([x, y, z]: Vec, middle: number): Vec => {
+      const [tx, tz] = [x * cos + z * sin, -x * sin + z * cos];
+      const ty = y - middle;
+      return [tx * rollCos - ty * rollSin, tx * rollSin + ty * rollCos + middle, tz];
+    };
+    const middle = options.roll === 0 ? 0 : 24;
+    const placed = faces.map((face) => ({
+      color: face.color,
+      normal: orient(face.normal, 0),
+      corners: face.corners.map((c) => {
+        const [x, y, z] = orient(c, middle);
+        return [at[0] + x * s, at[1] + (y + bob) * s, at[2] + z * s] as Vec;
+      }),
+    }));
+    this.addMesh(things, camera, placed);
   }
 
   /** A costume as a 3D figure, standing at `at`, facing the camera at the start. */
@@ -603,6 +696,13 @@ function cone([cx, cy, cz]: Vec, radius: number, height: number, color: Rgb): Fa
     const at = (angle: number): Vec => [cx + Math.cos(angle) * radius, cy, cz + Math.sin(angle) * radius];
     return { corners: [[cx, cy + height, cz], at(b), at(a)], normal: normalize([Math.cos(mid), slope, Math.sin(mid)]), color };
   });
+}
+
+/** Turns a point around the x axis through `pivot`, for swinging arms and legs. */
+function pitch([x, y, z]: Vec, [, py, pz]: Vec, angle: number): Vec {
+  const [cos, sin] = [Math.cos(angle), Math.sin(angle)];
+  const [dy, dz] = [y - py, z - pz];
+  return [x, py + dy * cos - dz * sin, pz + dy * sin + dz * cos];
 }
 
 const dot = (a: Vec, b: Vec) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
