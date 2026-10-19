@@ -798,7 +798,7 @@ describe("power-ups", () => {
       expect(game.powerUp.visible).toBe(false);
       run(game, DT);
       expect(game.powerUp.visible).toBe(true);
-      expect(["jetpack", "shield", "freeze"]).toContain(game.powerUpKind);
+      expect(["jetpack", "shield", "freeze", "pill"]).toContain(game.powerUpKind);
       expect(Math.abs(game.powerUp.x)).toBeLessThanOrEqual(200);
       expect(game.powerUp.y).toBeGreaterThanOrEqual(GROUND_Y);
       expect(game.powerUp.y).toBeLessThanOrEqual(GROUND_Y + 60);
@@ -824,7 +824,7 @@ describe("power-ups", () => {
         last = game.time;
       }
     }
-    expect([...kinds].sort()).toEqual(["freeze", "jetpack", "shield"]);
+    expect([...kinds].sort()).toEqual(["freeze", "jetpack", "pill", "shield"]);
     expect(Math.min(...gaps)).toBeGreaterThanOrEqual(30 - 1e-6);
     expect(Math.max(...gaps)).toBeLessThanOrEqual(45 + 1e-6);
   });
@@ -876,7 +876,7 @@ describe("power-ups", () => {
   });
 
   test("grabbing one gives its power for a while", () => {
-    for (const kind of ["jetpack", "shield", "freeze"] as const) {
+    for (const kind of ["jetpack", "shield", "freeze", "pill"] as const) {
       const game = withPowerUp(kind);
       parkVirus(game);
       game.events.length = 0;
