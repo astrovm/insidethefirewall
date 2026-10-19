@@ -67,13 +67,12 @@ const PICKUP_LEFTMOST = -120;
 const PICKUP_RIGHTMOST = 260;
 /** A penguin grabbed with full hearts gives a short shield instead. */
 export const PENGUIN_SHIELD = 3;
-export type PowerUpKind = "jetpack" | "shield" | "freeze" | "pill" | "shoes" | "gravity" | "portal" | "cube" | "ball";
+export type PowerUpKind = "jetpack" | "shield" | "freeze" | "pill" | "shoes" | "gravity" | "portal" | "ball";
 /** Things the player can grab. */
 export type Grab = "penguin" | PowerUpKind;
-export const POWER_UPS: PowerUpKind[] = ["jetpack", "shield", "freeze", "pill", "shoes", "gravity", "portal", "cube", "ball"];
+export const POWER_UPS: PowerUpKind[] = ["jetpack", "shield", "freeze", "pill", "shoes", "gravity", "portal", "ball"];
 /**
- * Seconds each power-up lasts. A shield and the Companion Cube also end when
- * they block a hit, and the bonus round when the ball is lost or every brick is broken.
+ * Seconds each power-up lasts. A shield also ends when it blocks a hit, and the bonus round when the ball is lost or every brick is broken.
  */
 export const POWER_UP_TIME: Record<PowerUpKind, number> = {
   jetpack: 6,
@@ -83,20 +82,7 @@ export const POWER_UP_TIME: Record<PowerUpKind, number> = {
   shoes: 8,
   gravity: 10,
   portal: 10,
-  cube: 60,
   ball: 20,
-};
-/** How often each power-up shows up, next to the others. The Companion Cube is rare. */
-const POWER_UP_WEIGHT: Record<PowerUpKind, number> = {
-  jetpack: 1,
-  shield: 1,
-  freeze: 1,
-  pill: 1,
-  shoes: 1,
-  gravity: 1,
-  portal: 1,
-  cube: 0.4,
-  ball: 1,
 };
 /** Speed shoes, like Sonic's: this much faster. */
 export const SHOES_SPEED = 1.6;
@@ -276,7 +262,6 @@ export type GameEvent =
   | { type: "catch" }
   | { type: "fire" }
   | { type: "portal"; x: number; y: number }
-  | { type: "cube"; x: number; y: number }
   | { type: "critical" }
   | { type: "breakout" }
   | { type: "brick"; x: number; y: number; heart: boolean }
@@ -1031,13 +1016,6 @@ export class Game {
       this.events.push({ type: "shield", x: this.player.x, y: this.player.y });
       return;
     }
-    if (this.powers.cube > 0) {
-      // The Companion Cube takes it, and is gone.
-      this.powers.cube = 0;
-      this.invincible = INVINCIBLE;
-      this.events.push({ type: "cube", x: this.player.x, y: this.player.y });
-      return;
-    }
     this.health -= 1;
     this.hitTime = 0;
     this.invincible = INVINCIBLE;
@@ -1079,7 +1057,7 @@ export class Game {
     if (this.powerUpTimer > 1e-9) return;
     const [low, high] = POWER_UP_EVERY;
     this.powerUpTimer = low + this.random() * (high - low);
-    powerUp.setCostume(this.pickPowerUp());
+    powerUp.setCostume(POWER_UPS[Math.floor(this.random() * POWER_UPS.length)]!);
     let x = this.randomInt(-200, 200);
     if (Math.abs(x - this.player.x) < POWER_UP_AWAY) x += x < this.player.x ? -2 * POWER_UP_AWAY : 2 * POWER_UP_AWAY;
     if (Math.abs(x) > 200) x -= Math.sign(x) * 4 * POWER_UP_AWAY;
@@ -1087,17 +1065,6 @@ export class Game {
     powerUp.visible = true;
     this.powerUpShown = 0;
     this.events.push({ type: "appear", thing: this.powerUpKind });
-  }
-
-  /** A power-up at random, the rare ones less often. */
-  private pickPowerUp(): PowerUpKind {
-    const total = POWER_UPS.reduce((sum, kind) => sum + POWER_UP_WEIGHT[kind], 0);
-    let left = this.random() * total;
-    for (const kind of POWER_UPS) {
-      left -= POWER_UP_WEIGHT[kind];
-      if (left < 0) return kind;
-    }
-    return POWER_UPS[POWER_UPS.length - 1]!;
   }
 
   /** Gives the player a power-up, grabbed at `x`, `y`. */

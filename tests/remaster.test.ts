@@ -884,7 +884,7 @@ describe("power-ups", () => {
   });
 
   test("grabbing one gives its power for a while", () => {
-    for (const kind of ["jetpack", "shield", "freeze", "pill", "shoes", "gravity", "portal", "cube"] as const) {
+    for (const kind of ["jetpack", "shield", "freeze", "pill", "shoes", "gravity", "portal"] as const) {
       const game = withPowerUp(kind);
       parkVirus(game);
       game.events.length = 0;

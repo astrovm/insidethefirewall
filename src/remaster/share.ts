@@ -12,7 +12,6 @@ const grabEmoji: Record<Grab, string> = {
   shoes: "👟",
   gravity: "🧲",
   portal: "🌀",
-  cube: "📦",
   ball: "🧱",
 };
 /** Enough emoji to tell the story of a run without flooding the message. */

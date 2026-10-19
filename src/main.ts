@@ -45,7 +45,6 @@ const powerUpMessages: Record<PowerUpKind, (seconds: number) => string> = {
   gravity: (seconds) => `Gravity gun for ${seconds} seconds. It catches the virus when it gets close and fires it back.`,
   portal: (seconds) =>
     `Portal gun for ${seconds} seconds. Walk into a wall to come out of the other one. The virus can go through too.`,
-  cube: () => "Companion Cube. It takes the next hit for you.",
   ball: () => `Bonus round! You're the paddle. Keep the virus bouncing. Every ${BRICKS_PER_HEART} bricks give a heart.`,
 };
 
@@ -59,7 +58,6 @@ const grabIcons: Record<Grab, { file: string; name: string }> = {
   shoes: { file: "shoes.svg", name: "Speed shoes" },
   gravity: { file: "gravity.svg", name: "Gravity guns" },
   portal: { file: "portal.svg", name: "Portal guns" },
-  cube: { file: "cube.svg", name: "Companion Cubes" },
   ball: { file: "ball.svg", name: "Bonus rounds" },
 };
 
@@ -367,10 +365,6 @@ async function main(): Promise<void> {
       case "portal":
         audio.synth("portal");
         break;
-      case "cube":
-        audio.synth("shatter");
-        status.textContent = "The Companion Cube took the hit";
-        break;
       case "critical":
         audio.play("hev");
         status.textContent = "Major fracture detected";
@@ -429,8 +423,8 @@ async function main(): Promise<void> {
         $("over-best").textContent = best.label;
         $("new-best").hidden = !isBest;
         showGrabs(game.grabbed);
-        // GLaDOS promised cake. Always after carrying the Companion Cube, sometimes otherwise.
-        $("over-cake").hidden = !game.grabbed.includes("cube") && Math.random() >= 0.25;
+        // GLaDOS promised cake, sometimes.
+        $("over-cake").hidden = Math.random() >= 0.25;
         $("share").textContent = "Share";
         showBest();
         showMenus();

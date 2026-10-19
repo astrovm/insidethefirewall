@@ -14,7 +14,6 @@ export const palette: Record<string, string> = {
   o: "#ff9900",
   y: "#ffcc00",
   O: "#cc6600",
-  h: "#ff3d8b",
 };
 
 /** Two fuel tanks with red caps. */
@@ -129,22 +128,6 @@ export const portal = [
   "............",
 ];
 
-/** The Weighted Companion Cube, with its pink heart. */
-export const cube = [
-  "kkkkkkkkkkkk",
-  "kssSSSSSSssk",
-  "ksSswwwwsSsk",
-  "kSswhhwhhwSk",
-  "kSswhhhhhwSk",
-  "kSswhhhhhwSk",
-  "kSsswhhhwsSk",
-  "kSssswhwssSk",
-  "ksSssswssSsk",
-  "kssSSSSSSssk",
-  "kkkkkkkkkkkk",
-  "............",
-];
-
 /** Breakout: rows of bricks, the ball and the paddle. */
 export const ball = [
   "............",
@@ -199,7 +182,6 @@ export function artFiles(): Map<string, string> {
     ["shoes.svg", toSvg(shoes)],
     ["gravity.svg", toSvg(gravity)],
     ["portal.svg", toSvg(portal)],
-    ["cube.svg", toSvg(cube)],
     ["ball.svg", toSvg(ball)],
     ["flame1.svg", toSvg(flame[0]!)],
     ["flame2.svg", toSvg(flame[1]!)],

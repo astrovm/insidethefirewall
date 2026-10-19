@@ -235,7 +235,6 @@ export class RemasterRenderer {
       const copies = wraps ? wrapCopies(x, this.playerReach(game)) : [x];
       const player = playing && sprite === game.player;
       for (const x of copies) {
-        if (player && game.powers.cube > 0) this.drawCostume(powerUpCostume("cube"), x - sprite.flipX * 30 * grown, y - 30 * grown, 0, 2.2 * grown, 2.2 * grown);
         // Speed shoes: a blur of the player behind them.
         if (player && game.powers.shoes > 0 && Math.abs(game.vx) > PLAYER_SPEED * 1.05) {
           for (let k = 3; k >= 1; k--) {
@@ -412,7 +411,7 @@ export class RemasterRenderer {
       ctx.translate(x, y);
       ctx.rotate(shard.spin * effects.shardTime);
       ctx.globalAlpha = fade;
-      ctx.fillStyle = effects.shardColors[i % 3]!;
+      ctx.fillStyle = i % 3 === 0 ? "#ffffff" : i % 3 === 1 ? "#66ccff" : "#9a9a2a";
       ctx.fillRect(-size / 2, -size / 2, size, size);
       ctx.restore();
     }
