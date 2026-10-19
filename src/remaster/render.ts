@@ -3,8 +3,17 @@ import { interpolate, type CostumeImages } from "../render.ts";
 import { SHARDS, type Effects } from "./effects.ts";
 import { DIVE_ZOOM, ThirdRenderer } from "./third.ts";
 import {
+  BALL_RADIUS,
+  BRICKS,
+  BRICKS_RISE,
+  brickTop,
   ESCAPE_BURST,
   flameCostumes,
+  PADDLE,
+  PLAYER_SPEED,
+  PORTAL_BOTTOM,
+  PORTAL_TOP,
+  PORTAL_X,
   PICKUP_BLINK,
   POWER_UP_TIME,
   POWER_UPS,
@@ -117,6 +126,8 @@ export class RemasterRenderer {
   view: View = { x: 0, y: 0, scale: 1 };
   /** 0 shows the game, 1 is fully black. Used for fades between screens. */
   fade = 0;
+  /** The song that just started, and when, in milliseconds. */
+  private song = { title: "", at: -Infinity };
 
   constructor(
     readonly canvas: HTMLCanvasElement,
@@ -156,8 +167,9 @@ export class RemasterRenderer {
       ctx.rect(shaken.x, shaken.y, Math.round(STAGE_WIDTH * shaken.scale), Math.round(STAGE_HEIGHT * shaken.scale));
       ctx.clip();
     }
-    if (third && third.time >= DIVE_ZOOM) this.third.draw(game, third, this.view);
-    else this.drawRoom(game, between, playing);
+    if (third && third.time >= DIVE_ZOOM) {
+      this.third.draw(game, third, this.view);
+    } else this.drawRoom(game, between, playing);
     if (playing && !third) this.drawShards(effects);
     const white = whiteOut(game);
     if (white > 0) {
@@ -196,6 +208,7 @@ export class RemasterRenderer {
       this.drawCodeRain(game.time, matrix);
     }
 
+    if (playing && game.powers.portal > 0) this.drawPortals(game.powers.portal);
     // Bursting out of the screen or diving into it, the player is in front of the monitor.
     const bursting = playing && (game.escapeTime <= ESCAPE_BURST || game.third !== null);
     const layers = bursting ? [...game.layers.filter((s) => s !== game.player), game.player] : game.layers;
@@ -219,7 +232,16 @@ export class RemasterRenderer {
       // Wrapping around the sides, the player shows on both at once.
       const wraps = playing && sprite === game.player && game.powers.jetpack > 0;
       const copies = wraps ? wrapCopies(x, this.playerReach(game)) : [x];
+      const player = playing && sprite === game.player;
       for (const x of copies) {
+        // Speed shoes: a blur of the player behind them.
+        if (player && game.powers.shoes > 0 && Math.abs(game.vx) > PLAYER_SPEED * 1.05) {
+          for (let k = 3; k >= 1; k--) {
+            ctx.globalAlpha = 0.12 * (4 - k);
+            this.drawSprite(sprite, x - game.vx * k * 0.018, y);
+          }
+          ctx.globalAlpha = 1;
+        }
         if (playing && sprite === game.player && game.powers.jetpack > 0) {
           this.drawJetpack(x, y, sprite.flipX, game.powers.jetpack < 1 ? blink(game.powers.jetpack) : 1, game.flying, game.time, grown);
         }
@@ -232,6 +254,7 @@ export class RemasterRenderer {
         if (playing && sprite === game.player && game.powers.shield > 0) {
           this.drawShield(x, y, 0.7 * (game.powers.shield < 1.5 ? blink(game.powers.shield) : 1), grown);
         }
+        if (player && game.powers.gravity > 0) this.drawGravityGun(game, x, y, grown);
       }
       if (playing && sprite === game.monitor && game.third) this.drawPortal(game.third.time);
       if (playing && sprite === game.monitor && game.inside.length > 0) {
@@ -240,6 +263,115 @@ export class RemasterRenderer {
         if (flash > 0) this.fillScreen(`rgba(255, 255, 255, ${flash})`);
       }
     }
+    if (playing && game.breakout) this.drawBreakout(game);
+  }
+
+  /** The gravity gun in the player's hands, and its beam while it holds the virus. */
+  private drawGravityGun(game: Game, x: number, y: number, grown: number): void {
+    const flip = game.player.flipX;
+    const left = game.powers.gravity;
+    this.ctx.globalAlpha = left < 1 ? blink(left) : 1;
+    // The art points left.
+    this.drawCostume(powerUpCostume("gravity"), x + flip * 24 * grown, y - 6 * grown, 0, -flip * 2 * grown, 2 * grown);
+    this.ctx.globalAlpha = 1;
+    if (game.caught === null) return;
+    const ctx = this.ctx;
+    const [ax, ay] = toCanvas(this.view, x + flip * 38 * grown, y - 4 * grown);
+    const [bx, by] = toCanvas(this.view, game.virus.x, game.virus.y);
+    const s = this.view.scale;
+    ctx.save();
+    ctx.strokeStyle = "#ffb03a";
+    ctx.shadowColor = "#ff9900";
+    ctx.shadowBlur = 10 * s;
+    ctx.lineWidth = 3 * s;
+    ctx.globalAlpha = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
+    ctx.stroke();
+    ctx.lineWidth = 2 * s;
+    ctx.beginPath();
+    ctx.arc(bx, by, (22 + Math.sin(game.time * 40) * 3) * s, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /** A blue portal on the left wall and an orange one on the right, opening and closing. */
+  private drawPortals(left: number): void {
+    const ctx = this.ctx;
+    const s = this.view.scale;
+    const open = Math.min(1, (POWER_UP_TIME.portal - left) / 0.3, left / 0.3);
+    const middle = (PORTAL_TOP + PORTAL_BOTTOM) / 2;
+    const height = ((PORTAL_TOP - PORTAL_BOTTOM) / 2) * open;
+    for (const [side, color, light] of [[-1, "#1f8fff", "#bfe2ff"], [1, "#ff8a00", "#ffe0b0"]] as const) {
+      const [x, y] = toCanvas(this.view, side * PORTAL_X, middle);
+      ctx.save();
+      ctx.globalAlpha = left < 1 ? blink(left) : 1;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 14 * s;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.ellipse(x, y, 8 * s * open, height * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = light;
+      ctx.beginPath();
+      ctx.ellipse(x, y, 4 * s * open, Math.max(0, height - 6) * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  /** The bonus round: bricks floating up from the floor, the paddle and the virus as the ball. */
+  private drawBreakout(game: Game): void {
+    const round = game.breakout!;
+    const ctx = this.ctx;
+    const s = this.view.scale;
+    const rise = Math.min(1, round.time / BRICKS_RISE);
+    const eased = rise * rise * (3 - 2 * rise);
+    ctx.save();
+    round.bricks.forEach((there, i) => {
+      if (!there) return;
+      const top = -150 + (brickTop(i) + 150) * eased;
+      const [x, y] = toCanvas(this.view, BRICKS.left + (i % BRICKS.columns) * BRICKS.width, top);
+      ctx.fillStyle = colors.mortar;
+      ctx.fillRect(x, y, BRICKS.width * s, BRICKS.height * s);
+      ctx.fillStyle = Math.floor(i / BRICKS.columns) % 2 === 0 ? colors.brick : "#d42a10";
+      ctx.fillRect(x + 2 * s, y + 2 * s, (BRICKS.width - 4) * s, (BRICKS.height - 4) * s);
+    });
+    // The paddle, grey with red ends, like Arkanoid's Vaus.
+    const [px, py] = toCanvas(this.view, round.paddle - PADDLE.width / 2, PADDLE.y + PADDLE.height / 2);
+    const [w, h] = [PADDLE.width * s, PADDLE.height * s];
+    ctx.fillStyle = colors.mortar;
+    ctx.beginPath();
+    ctx.roundRect(px - s, py - s, w + 2 * s, h + 2 * s, h / 2);
+    ctx.fill();
+    ctx.fillStyle = "#c0c0c0";
+    ctx.beginPath();
+    ctx.roundRect(px, py, w, h, h / 2);
+    ctx.fill();
+    ctx.fillStyle = colors.red;
+    ctx.fillRect(px + h / 2, py, 6 * s, h);
+    ctx.fillRect(px + w - h / 2 - 6 * s, py, 6 * s, h);
+    ctx.restore();
+    const ball = round.ball;
+    const size = (BALL_RADIUS * 2) / game.virus.currentCostume.height;
+    this.drawCostume(game.virus.currentCostume, ball.x, ball.y, game.time * 8, size, size);
+  }
+
+  /**
+   * How far down the stage, in stage pixels, text must start to clear the
+   * buttons in the window's top right corner, which are 40 CSS pixels, 8 from the top.
+   */
+  private underCornerButtons(): number {
+    const pixelRatio = this.canvas.width / (this.canvas.clientWidth || this.canvas.width);
+    const bottom = (8 + 40 + 4) * pixelRatio;
+    return Math.max(10, (bottom - this.view.y) / this.view.scale + 8);
+  }
+
+  /** Shows the song's title for a few seconds. */
+  showSong(title: string): void {
+    this.song = { title, at: performance.now() };
   }
 
   /** Ice pieces of a broken virus. */
@@ -568,6 +700,21 @@ export class RemasterRenderer {
       ctx.fillStyle = colors.orange;
       ctx.fillRect(left + 1, 97, 34 * Math.min(1, game.powers[kind] / POWER_UP_TIME[kind]), 4);
     });
+    // The song that just started: small, at the top right under the corner buttons, sliding in, then fading out.
+    const age = (performance.now() - this.song.at) / 1000;
+    if (age < SONG_SHOWN) {
+      const slide = Math.min(1, age / 0.3);
+      ctx.globalAlpha = Math.min(1, (SONG_SHOWN - age) / 0.6);
+      ctx.font = "500 8px 'Noto Sans', sans-serif";
+      ctx.textAlign = "right";
+      ctx.lineWidth = 2.5;
+      ctx.fillStyle = "#ffffff";
+      const x = STAGE_WIDTH - 8 + (1 - slide * (2 - slide)) * 150;
+      const y = this.underCornerButtons();
+      ctx.strokeText(`♪ ${this.song.title}`, x, y);
+      ctx.fillText(`♪ ${this.song.title}`, x, y);
+      ctx.globalAlpha = 1;
+    }
     ctx.restore();
     active.forEach((kind, i) => {
       const costume = powerUpCostumes[POWER_UPS.indexOf(kind)]!;
@@ -575,6 +722,11 @@ export class RemasterRenderer {
     });
   }
 }
+
+/** Seconds a new song's title stays on screen. */
+const SONG_SHOWN = 4;
+
+const powerUpCostume = (kind: (typeof POWER_UPS)[number]) => powerUpCostumes[POWER_UPS.indexOf(kind)]!;
 
 /** Where to draw the player, `reach` wide each way: once, or twice while it's partly off a side and wraps around to the other. */
 export function wrapCopies(x: number, reach: number): number[] {

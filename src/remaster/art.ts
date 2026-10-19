@@ -13,6 +13,7 @@ export const palette: Record<string, string> = {
   c: "#66ccff",
   o: "#ff9900",
   y: "#ffcc00",
+  O: "#cc6600",
 };
 
 /** Two fuel tanks with red caps. */
@@ -79,6 +80,70 @@ export const pill = [
   "............",
 ];
 
+/** Sonic's red shoe, with its white strap. */
+export const shoes = [
+  "............",
+  "..kkkk......",
+  ".kRrrrk.....",
+  ".kRrrrrkk...",
+  ".kwwwwrrrkk.",
+  ".kRrrwrrrrrk",
+  ".kRrrwrrrrrk",
+  ".kRrrrrrrrrk",
+  "kwwwwwwwwwwk",
+  "kSSSSSSSSSSk",
+  ".kkkkkkkkkk.",
+  "............",
+];
+
+/** Half-Life 2's gravity gun: orange prongs on a grey body. */
+export const gravity = [
+  "............",
+  "oo....kkkkk.",
+  ".ok..kSSSSSk",
+  "..okkossssSk",
+  "ooookoooooSk",
+  "..okkossssSk",
+  ".ok..kSSSSSk",
+  "oo....kkkkk.",
+  "......kSk...",
+  "......kSk...",
+  "......kkk...",
+  "............",
+];
+
+/** Portal's portal gun: white, with a blue glow at the tip. */
+export const portal = [
+  "............",
+  "....kkkkk...",
+  "..kkwwwwwk..",
+  ".kBkwsswwwk.",
+  "kBbkwwwwwwwk",
+  "kBbkwsSSwwwk",
+  ".kBkwwwwwwk.",
+  "..kkwwkkkk..",
+  "....kwk.....",
+  "....kwk.....",
+  "....kkk.....",
+  "............",
+];
+
+/** Breakout: rows of bricks, the ball and the paddle. */
+export const ball = [
+  "............",
+  "rrrr.oooo.yy",
+  "RRRR.OOOO.oo",
+  "............",
+  "yy.rrrr.oooo",
+  "oo.RRRR.OOOO",
+  "............",
+  "......kk....",
+  ".....kwwk...",
+  "......kk....",
+  "..kkkkkkkk..",
+  "..kssssssk..",
+];
+
 /** Flame out of the jetpack's two nozzles, two frames so it flickers. */
 export const flame = [
   [".yoy....yoy.", ".yoy....yoy.", "..o......o..", "..r......r.."],
@@ -107,13 +172,17 @@ export function toSvg(rows: string[]): string {
   ].join("\n");
 }
 
-/** The SVG files for the power-ups, by file name. */
+/** The SVG files for the power-ups and the flame, by file name. */
 export function artFiles(): Map<string, string> {
   return new Map([
     ["jetpack.svg", toSvg(jetpack)],
     ["shield.svg", toSvg(shield)],
     ["freeze.svg", toSvg(freeze)],
     ["pill.svg", toSvg(pill)],
+    ["shoes.svg", toSvg(shoes)],
+    ["gravity.svg", toSvg(gravity)],
+    ["portal.svg", toSvg(portal)],
+    ["ball.svg", toSvg(ball)],
     ["flame1.svg", toSvg(flame[0]!)],
     ["flame2.svg", toSvg(flame[1]!)],
   ]);

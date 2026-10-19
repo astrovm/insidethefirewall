@@ -7,6 +7,7 @@ import type { CostumeImages } from "./render.ts";
 import { Effects } from "./remaster/effects.ts";
 import { Fader } from "./remaster/fader.ts";
 import {
+  BRICKS_PER_HEART,
   DT,
   flameCostumes,
   Game,
@@ -23,9 +24,16 @@ import { shareText } from "./remaster/share.ts";
 import { formatTime, RemasterRenderer, toStage } from "./remaster/render.ts";
 import { gameSpeed, loadSettings, saveSettings, showTouch, type TouchControls } from "./remaster/settings.ts";
 
-const MAX_UPDATES_PER_FRAME = 8;
+const MAX_UPDATES_PER_FRAME = 48;
 /** The 2013 song first, then nightcore songs in the same spirit, in a random order each game. */
 const SONGS = ["music", "how-do-you-do", "bad-boy", "monster"];
+/** What the screen shows when each song starts. */
+const SONG_TITLES: Record<string, string> = {
+  music: "Tristam - Flight",
+  "how-do-you-do": "Nightcore - How Do You Do",
+  "bad-boy": "Nightcore - Bad Boy",
+  monster: "Meg & Dia - Monster (Nightcore Dubstep Remix)",
+};
 
 /** What the screen reader says when the player grabs a power-up. */
 const powerUpMessages: Record<PowerUpKind, (seconds: number) => string> = {
@@ -33,6 +41,11 @@ const powerUpMessages: Record<PowerUpKind, (seconds: number) => string> = {
   shield: (seconds) => `Shield for ${seconds} seconds`,
   freeze: (seconds) => `Virus frozen for ${seconds} seconds. Touch it to break it.`,
   pill: (seconds) => `Red pill for ${seconds} seconds. The room is code, and time slows down when the virus is close.`,
+  shoes: (seconds) => `Speed shoes for ${seconds} seconds`,
+  gravity: (seconds) => `Gravity gun for ${seconds} seconds. It catches the virus when it gets close and fires it back.`,
+  portal: (seconds) =>
+    `Portal gun for ${seconds} seconds. Walk into a wall to come out of the other one. The virus can go through too.`,
+  ball: () => `Bonus round! You're the paddle. Keep the virus bouncing. Every ${BRICKS_PER_HEART} bricks give a heart.`,
 };
 
 /** The run summary on the game over screen: an icon and a count for each thing grabbed. */
@@ -42,6 +55,10 @@ const grabIcons: Record<Grab, { file: string; name: string }> = {
   shield: { file: "shield.svg", name: "Shields" },
   freeze: { file: "freeze.svg", name: "Freezes" },
   pill: { file: "pill.svg", name: "Red pills" },
+  shoes: { file: "shoes.svg", name: "Speed shoes" },
+  gravity: { file: "gravity.svg", name: "Gravity guns" },
+  portal: { file: "portal.svg", name: "Portal guns" },
+  ball: { file: "ball.svg", name: "Bonus rounds" },
 };
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -59,6 +76,8 @@ async function loadFont(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  // Installed as an app, the game works offline. Only over HTTPS, so the dev server always serves fresh files.
+  if ("serviceWorker" in navigator && location.protocol === "https:") void navigator.serviceWorker.register("sw.js").catch(console.error);
   const project = createClassic();
   // The 2013 title, credited to @astrovm instead of the old @astrolince.
   const title: Costume = { ...costumes.title[0]!, file: "title-remaster.png" };
@@ -96,6 +115,8 @@ async function main(): Promise<void> {
 
   /** The song the last run played after the 2013 one. */
   let secondSong: string | null = null;
+  /** The last run's songs and the one it reached, for a retry to pick up from. */
+  let reached: { playlist: string[]; index: number } | null = null;
 
   const game = new Game();
   const controls = new Controls();
@@ -337,6 +358,38 @@ async function main(): Promise<void> {
       case "shatter":
         audio.synth("shatter");
         break;
+      case "catch":
+      case "fire":
+        audio.synth("zap");
+        break;
+      case "portal":
+        audio.synth("portal");
+        break;
+      case "breakout":
+        audio.synth("appear");
+        break;
+      case "brick":
+        audio.synth(event.heart ? "appear" : "brick");
+        break;
+      case "paddle":
+        audio.synth("tick");
+        break;
+      case "breakoutEnd":
+        if (event.cleared) {
+          audio.play("laser");
+          status.textContent = "Every brick broken! Full hearts.";
+        }
+        break;
+      case "drive":
+        audio.synth("honk");
+        status.textContent = "Homer's car! Steer with left and right, speed up with up, brake with down. Run over the virus.";
+        break;
+      case "smash":
+        audio.synth("shatter");
+        break;
+      case "bump":
+        audio.synth("brick");
+        break;
       case "appear":
         audio.synth("appear");
         break;
@@ -347,13 +400,21 @@ async function main(): Promise<void> {
         status.textContent = "The shield blocked a hit";
         break;
       case "music":
-        if (event.playing) {
-          // Each run starts with the 2013 song, then plays the rest in a new random order.
+        if (event.playing && reached) {
+          // A retry picks up from the song the last run reached, in the same order.
+          audio.setMusic(reached.playlist, reached.index);
+        } else if (event.playing) {
+          // A new game starts with the 2013 song, then plays the rest in a new random order.
           const [original, ...rest] = SONGS;
           const playlist = [original!, ...shuffled(rest, secondSong)];
           secondSong = playlist[1]!;
           audio.setMusic(playlist);
-        } else audio.setMusic(null);
+        } else {
+          // Game over keeps the song for a retry. Going back to the title starts over.
+          const song = audio.songName;
+          reached = game.phase === "over" && song ? { playlist: [...audio.playlist], index: audio.playlist.indexOf(song) } : null;
+          audio.setMusic(null);
+        }
         break;
       case "lost": {
         effects.clear();
@@ -392,19 +453,19 @@ async function main(): Promise<void> {
   // Share the run: the phone's share sheet, or the clipboard.
   $("share").addEventListener("click", async () => {
     const text = shareText(lastTime, game.grabbed, location.origin + location.pathname);
-    try {
-      if (navigator.share) {
+    // Phones share through their share sheet. Computers copy instead: their share
+    // sheet is often missing, or has nothing to share to and fails without a word.
+    if (navigator.share && touchScreen.matches) {
+      try {
         await navigator.share({ text });
         return;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
       }
-      await navigator.clipboard.writeText(text);
-      $("share").textContent = "Copied";
-      status.textContent = "Copied to the clipboard";
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") return;
-      $("share").textContent = "Couldn't copy";
-      status.textContent = "Couldn't copy the result";
     }
+    const copied = await copyText(text);
+    $("share").textContent = copied ? "Copied" : "Couldn't copy";
+    status.textContent = copied ? "Copied to the clipboard" : "Couldn't copy the result";
   });
 
   // Buttons.
@@ -583,6 +644,7 @@ async function main(): Promise<void> {
 
   let last = performance.now();
   let pending = 0;
+  let shownSong: string | null = null;
   const frame = (now: number) => {
     const elapsed = Math.min(250, now - last);
     last = now;
@@ -598,8 +660,14 @@ async function main(): Promise<void> {
     }
     if (updates === MAX_UPDATES_PER_FRAME) pending = 0;
     // Bullet time slows the music down too.
-    if (game.phase === "playing") audio.setMusicRate(game.timeScale);
+    // Speed shoes speed the music up, like in Sonic.
+    if (game.phase === "playing") audio.setMusicRate(game.timeScale * (game.powers.shoes > 0 ? 1.25 : 1));
     audio.update();
+    // A new song: show its title.
+    if (audio.songName !== shownSong) {
+      shownSong = audio.songName;
+      if (shownSong && game.phase === "playing") renderer.showSong(SONG_TITLES[shownSong] ?? shownSong);
+    }
     if (!paused) effects.update(elapsed / 1000);
     renderer.fade = fader.value;
     renderer.draw(game, paused || game.frozen > 0 ? 1 : Math.min(1, pending / DT), effects);
@@ -610,6 +678,24 @@ async function main(): Promise<void> {
 }
 
 /** localStorage, or nothing when the browser blocks it. */
+/** Copies text to the clipboard, the old way if the browser won't allow the new one. Says whether it worked. */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.append(area);
+    area.select();
+    const copied = document.execCommand("copy");
+    area.remove();
+    return copied;
+  }
+}
+
 function storage(): Storage | null {
   try {
     return window.localStorage;

@@ -9,7 +9,7 @@ export interface Settings {
   music: number;
   effects: number;
   touch: TouchControls;
-  /** Game speed, from 0.7 to 1, for players who need more time to react. */
+  /** Game speed, from 0.05 to 5: slower for players who need more time to react, faster for a challenge. */
   speed: number;
   keys: Keys;
 }
@@ -18,14 +18,15 @@ const KEY = "insidethefirewall.settings";
 
 export const defaults: Settings = { music: 0.8, effects: 1, touch: "auto", speed: 1, keys: defaultKeys };
 
-export const SLOWEST = 0.7;
+export const SLOWEST = 0.05;
+export const FASTEST = 5;
 /** The speed slider moves in 5% steps. */
 const STEPS_PER_ONE = 20;
 
 /** A speed from the slider's range, on a 5% step. */
 export function gameSpeed(value: unknown, fallback = 1): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
-  const clamped = Math.min(1, Math.max(SLOWEST, value));
+  const clamped = Math.min(FASTEST, Math.max(SLOWEST, value));
   return Math.round(clamped * STEPS_PER_ONE) / STEPS_PER_ONE;
 }
 

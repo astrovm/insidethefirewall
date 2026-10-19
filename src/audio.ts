@@ -16,7 +16,16 @@ interface Song {
 }
 
 /** Short sounds made on the fly, for cues the 2013 game had no sound for. */
-export type Synth = "whoosh" | "appear" | "tick" | "shatter";
+export type Synth = "whoosh" | "appear" | "tick" | "shatter" | "zap" | "portal" | "brick" | "honk";
+
+/** Square wave notes for the blip sounds: frequencies, how long each is, and how loud. */
+const blips: Partial<Record<Synth, { notes: number[]; length: number; level: number; type?: OscillatorType }>> = {
+  appear: { notes: [660, 990], length: 0.07, level: 0.08 },
+  tick: { notes: [1200], length: 0.04, level: 0.06 },
+  brick: { notes: [880], length: 0.05, level: 0.07 },
+  // Two low notes at once would be a chord; one after the other honks.
+  honk: { notes: [330, 262, 330, 262], length: 0.12, level: 0.09, type: "sawtooth" },
+};
 
 /** Plays the game's sounds. Each sprite plays one copy of a sound at a time, like Scratch. */
 export class Audio {
@@ -189,13 +198,26 @@ export class Audio {
       source.start(now);
       return;
     }
+    if (name === "zap" || name === "portal") {
+      // A sweep: down for the gravity gun, up for a portal.
+      const oscillator = ctx.createOscillator();
+      oscillator.type = name === "portal" ? "sine" : "square";
+      const [from, to, length] = name === "zap" ? [1400, 180, 0.18] : [300, 1200, 0.3];
+      oscillator.frequency.setValueAtTime(from, now);
+      oscillator.frequency.exponentialRampToValueAtTime(to, now + length);
+      gain.gain.setValueAtTime(name === "portal" ? 0.15 : 0.07, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + length);
+      oscillator.connect(gain);
+      oscillator.start(now);
+      oscillator.stop(now + length);
+      return;
+    }
     // Square wave blips, in the 8-bit style of the art.
-    const notes = name === "appear" ? [660, 990] : [1200];
-    const length = name === "appear" ? 0.07 : 0.04;
-    gain.gain.value = name === "appear" ? 0.08 : 0.06;
+    const { notes, length, level, type = "square" } = blips[name]!;
+    gain.gain.value = level;
     notes.forEach((frequency, i) => {
       const oscillator = ctx.createOscillator();
-      oscillator.type = "square";
+      oscillator.type = type;
       oscillator.frequency.value = frequency;
       oscillator.connect(gain);
       oscillator.start(now + i * length);

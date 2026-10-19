@@ -349,7 +349,7 @@ try:
         }""")
         day.click("#play")
         day.wait_for_function("() => insideTheFirewall.game.phase === 'playing'", timeout=5000)
-        day.evaluate("() => { insideTheFirewall.game.invincible = Infinity; insideTheFirewall.game.pickupTimer = 0.05 }")
+        day.evaluate("() => { insideTheFirewall.game.invincible = Infinity; insideTheFirewall.game.nextDrop = 'penguin'; insideTheFirewall.game.dropTimer = 0.05 }")
         day.wait_for_function("() => synths.includes('appear')", timeout=2000)
         day.evaluate("() => { insideTheFirewall.game.powers.freeze = 1.05 }")
         day.wait_for_function("() => synths.includes('tick')", timeout=2000)
@@ -390,13 +390,19 @@ try:
         assert replay_border[:3] == [254, 149, 1], f"No replay window on the game over screen: {replay_border}"
         print("Game over shows the run summary and a replay")
 
-        # A blocked clipboard says so.
+        # A blocked clipboard, with the old way of copying blocked too, says so.
         day.evaluate("""() => {
           window.realWrite = navigator.clipboard.writeText.bind(navigator.clipboard);
+          window.realExec = document.execCommand.bind(document);
           navigator.clipboard.writeText = () => Promise.reject(new DOMException('Blocked', 'NotAllowedError'));
+          document.execCommand = () => false;
         }""")
         day.click("#share")
         day.wait_for_function("() => document.querySelector('#share').textContent === \"Couldn't copy\"", timeout=2000)
+        # With only the new way blocked, the old way still copies.
+        day.evaluate("() => { document.execCommand = realExec }")
+        day.click("#share")
+        day.wait_for_function("() => document.querySelector('#share').textContent === 'Copied'", timeout=2000)
         day.evaluate("() => { navigator.clipboard.writeText = realWrite }")
         day.click("#share")
         day.wait_for_function("() => document.querySelector('#share').textContent === 'Copied'", timeout=2000)
@@ -407,9 +413,11 @@ try:
         # Focus is still on Share, so Space would share again. Up jumps.
         day.keyboard.press("ArrowUp")
         day.wait_for_function("() => insideTheFirewall.game.phase === 'playing'", timeout=5000)
-        day.wait_for_function("() => insideTheFirewall.audio.songName === 'music'", timeout=2000)
+        # It picks up from the song the run reached, the second one, in the same order.
+        day.wait_for_function(f"() => insideTheFirewall.audio.songName === '{playlist[1]}'", timeout=2000)
+        assert day.evaluate("[...insideTheFirewall.audio.playlist]") == playlist
         assert day.evaluate("insideTheFirewall.audio.song.source.playbackRate.value") == 1
-        print("Jump starts again, with the 2013 song")
+        print("Jump starts again, from the song the last run reached")
 
         # Settings: a slower game speed, and a new jump key.
         day.click("#pause-game")

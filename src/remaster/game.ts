@@ -5,7 +5,8 @@
 import { Sprite, type Bounds, type Costume, type RotationStyle } from "../engine/sprite.ts";
 import { costumes, sounds } from "../game/classic.ts";
 
-export const HZ = 60;
+/** Updates a second. 120, so the game moves as smoothly as fast screens can show. */
+export const HZ = 120;
 export const DT = 1 / HZ;
 
 /** The 2013 game moved things once per Scratch frame, 30 times a second. */
@@ -34,7 +35,7 @@ const HIT_FACE = 0.3;
 /** After a hit the player blinks and can't be hit again for a moment. */
 export const INVINCIBLE = 1.25;
 /** Everything stops for a moment on a hit, so it lands. */
-export const HIT_STOP = 4 * DT;
+export const HIT_STOP = 4 / 60;
 /** The last hit holds a little longer before the game over screen. */
 export const DEATH_PAUSE = 0.7;
 /** At most this many hearts, so lives can't pile up. */
@@ -54,9 +55,16 @@ export const WARNING_SHORTEST = 0.3;
 export const AIM_LOCK = 0.15;
 /** A virus that flies by this close, in stage pixels, without a hit is a near miss. */
 export const NEAR_MISS = 8;
-/** The penguin, an extra life, comes after 20 s, then every 20 to 30 s. In 2013 it came every 10 s. */
-export const PICKUP_FIRST = 20;
-const PICKUP_EVERY = [20, 30] as const;
+/**
+ * Hearts and power-ups share one cycle: something shows up after 10 s, then
+ * every 10 to 15 s. It's the penguin, an extra life, half the time, and a
+ * power-up otherwise. With full hearts it's always a power-up. In 2013 the
+ * penguin came every 10 s.
+ */
+export const DROP_FIRST = 10;
+const DROP_EVERY = [10, 15] as const;
+export const PENGUIN_CHANCE = 0.5;
+/** The penguin stays 2 s. */
 export const PICKUP_SHOWN = 2;
 /** The penguin blinks before it goes. */
 export const PICKUP_BLINK = 0.6;
@@ -66,18 +74,57 @@ const PICKUP_LEFTMOST = -120;
 const PICKUP_RIGHTMOST = 260;
 /** A penguin grabbed with full hearts gives a short shield instead. */
 export const PENGUIN_SHIELD = 3;
-export type PowerUpKind = "jetpack" | "shield" | "freeze" | "pill";
+export type PowerUpKind = "jetpack" | "shield" | "freeze" | "pill" | "shoes" | "gravity" | "portal" | "ball";
 /** Things the player can grab. */
 export type Grab = "penguin" | PowerUpKind;
-export const POWER_UPS: PowerUpKind[] = ["jetpack", "shield", "freeze", "pill"];
-/** Seconds each power-up lasts. A shield also ends when it blocks a hit. */
-export const POWER_UP_TIME: Record<PowerUpKind, number> = { jetpack: 6, shield: 10, freeze: 4, pill: 8 };
+export const POWER_UPS: PowerUpKind[] = ["jetpack", "shield", "freeze", "pill", "shoes", "gravity", "portal", "ball"];
+/**
+ * Seconds each power-up lasts. A shield also ends when it blocks a hit, and the bonus round when the ball is lost or every brick is broken.
+ */
+export const POWER_UP_TIME: Record<PowerUpKind, number> = {
+  jetpack: 6,
+  shield: 10,
+  freeze: 4,
+  pill: 8,
+  shoes: 8,
+  gravity: 10,
+  portal: 10,
+  ball: 20,
+};
+/** Speed shoes, like Sonic's: this much faster. */
+export const SHOES_SPEED = 1.6;
+/**
+ * The gravity gun catches the flying virus this close to the player, holds it
+ * for a moment, then fires it back at the monitor, where it breaks.
+ */
+const GRAVITY_RANGE = 60;
+export const GRAVITY_HOLD = 0.35;
+const GRAVITY_FIRE_SPEED = 900;
+/** The portal gun puts a portal on each wall, this far from the middle, over the floor. */
+export const PORTAL_X = 234;
+export const PORTAL_BOTTOM = GROUND_Y - 45;
+export const PORTAL_TOP = GROUND_Y + 45;
+/**
+ * The bonus round, like Breakout: the player is the paddle, the virus the
+ * ball, and the floor's bricks float up to the top of the room, where the
+ * monitor was, to be broken. Every few bricks give a heart.
+ */
+export const BRICKS = { columns: 8, rows: 4, left: -224, top: 170, width: 56, height: 16 } as const;
+export const BRICKS_PER_HEART = 8;
+export const PADDLE = { y: GROUND_Y - 22, width: 72, height: 10 } as const;
+const PADDLE_SPEED = PLAYER_SPEED * 0.8;
+export const BALL_RADIUS = 9;
+const BALL_SPEED = 240;
+const BALL_SPEEDUP = 4;
+/** The bricks float up this long, then the ball goes on its own if jump wasn't pressed. */
+export const BRICKS_RISE = 0.8;
+const BALL_WAIT = 1.4;
+/** Clearing every brick also gives a shield for this long. */
+const BREAKOUT_SHIELD = 3;
 /** With the red pill the room is code, and time slows down this much while the flying virus is this close. */
 export const BULLET_TIME = 0.3;
 const BULLET_TIME_RANGE = 90;
-/** Power-ups are rare: the first comes after 30 s, then one every 30 to 45 s, for 5 s each. */
-export const POWER_UP_FIRST = 30;
-const POWER_UP_EVERY = [30, 45] as const;
+/** Power-ups stay 5 s. */
 export const POWER_UP_SHOWN = 5;
 /** Power-ups float within a jump of the floor, and never right on the player. */
 const POWER_UP_LOWEST = GROUND_Y;
@@ -113,12 +160,8 @@ export const ESCAPE_STUCK = 1.5;
  * back into the room.
  */
 export const THIRD_IN = 1.6;
-export const THIRD_TIME = 10;
+export const THIRD_TIME = 15;
 export const THIRD_OUT = 0.6;
-/** The 3D floor: as wide as the stage, and this deep. */
-export const THIRD_DEPTH = 600;
-/** How far the player can go to each side in 3D. */
-export const THIRD_SIDE = 240;
 /** Walking speed in 3D, the same every way, diagonals too. */
 const THIRD_SPEED = 300;
 /** How fast the player turns to face where they walk, in radians a second. */
@@ -127,6 +170,32 @@ const THIRD_TURN = 14;
 const THIRD_HIT = 34;
 /** Where the player's chest is in 3D, for the virus to aim at. */
 export const THIRD_CHEST = 40;
+/**
+ * Homer's pink sedan, from The Simpsons: Hit & Run, is parked in the 3D world.
+ * Walking into it gets in. Up speeds up, down brakes and backs up, left and
+ * right steer. It runs the virus over, and bumps off the shapes.
+ */
+export const PARKED = { x: 150, z: 280 } as const;
+const GET_IN = 80;
+const CAR_TOP_SPEED = 480;
+const CAR_REVERSE = 180;
+const CAR_ACCELERATION = 420;
+const CAR_BRAKING = 800;
+/** Slowing down on its own, with nothing pressed. */
+const CAR_COAST = 220;
+/** Radians a second at full steer, from this speed up. */
+const CAR_STEER = 2.6;
+const CAR_STEER_SPEED = 150;
+/** How far the car reaches from its middle, for running into things. */
+const CAR_RADIUS = 58;
+/** The shapes standing on the floor, which the car bumps off: where, and how wide. */
+export const THIRD_PROPS = [
+  { x: -340, z: 660, r: 64 },
+  { x: 300, z: 780, r: 46 },
+  { x: -110, z: 920, r: 52 },
+  { x: 270, z: 300, r: 26 },
+  { x: -370, z: 520, r: 6 },
+] as const;
 
 /** Things in the 3D world. x is across, y up and z away from the camera. */
 export interface ThirdDimension {
@@ -135,6 +204,20 @@ export interface ThirdDimension {
   /** `facing` is the way the player looks: 0 away from the camera, π towards it. `step` is how far they've walked, for the stride. */
   player: { x: number; z: number; vx: number; vz: number; facing: number; step: number };
   virus: { x: number; y: number; z: number; dx: number; dy: number; dz: number; warning: number };
+  /** `heading` is the way it points, like the player's `facing`. */
+  car: { x: number; z: number; heading: number; speed: number; driving: boolean };
+}
+
+/** The bonus round. */
+export interface Breakout {
+  /** Seconds since it started. */
+  time: number;
+  /** Where the paddle's middle is across the stage. */
+  paddle: number;
+  ball: { x: number; y: number; vx: number; vy: number; stuck: boolean };
+  /** Row by row from the top, whether each brick is still there. */
+  bricks: boolean[];
+  broken: number;
 }
 /** A power-up ticks at these seconds left, so the player hears it ending. */
 const TICKS = [3, 2, 1];
@@ -159,7 +242,7 @@ export interface Input {
 }
 
 /** Shortcuts for trying things out while making the game. */
-export type Cheat = PowerUpKind | "heart" | "god" | "dive" | "escape" | "powerUpNow" | "penguinNow" | "skip";
+export type Cheat = PowerUpKind | "heart" | "god" | "dive" | "drive" | "escape" | "powerUpNow" | "penguinNow" | "skip";
 /** The skip cheat jumps this many seconds ahead, so the virus gets faster. */
 export const CHEAT_SKIP = 30;
 
@@ -181,6 +264,16 @@ export type GameEvent =
   | { type: "escape"; x: number; y: number }
   | { type: "dive" }
   | { type: "shatter"; x: number; y: number }
+  | { type: "catch" }
+  | { type: "fire" }
+  | { type: "portal"; x: number; y: number }
+  | { type: "breakout" }
+  | { type: "brick"; x: number; y: number; heart: boolean }
+  | { type: "paddle" }
+  | { type: "breakoutEnd"; cleared: boolean }
+  | { type: "drive" }
+  | { type: "smash" }
+  | { type: "bump" }
   | { type: "lost"; time: number };
 
 /** The player's size, in percent, as in 2013. */
@@ -283,7 +376,7 @@ export class Game {
   /** Seconds the game stays frozen after a hit. */
   frozen = 0;
   /** Seconds left of each power-up the player has. */
-  powers: Record<PowerUpKind, number> = { jetpack: 0, shield: 0, freeze: 0, pill: 0 };
+  powers: Record<PowerUpKind, number> = noPowers();
   /** In the air with a jetpack. */
   flying = false;
   /** Everything grabbed this run, in order. */
@@ -305,13 +398,25 @@ export class Game {
   sinceThird = Infinity;
   /** How fast time goes: slower in bullet time. */
   timeScale = 1;
+  /** Seconds the gravity gun has held the virus, or null when it isn't holding it. */
+  caught: number | null = null;
+  /** The gravity gun fired the virus, and it's flying back at the monitor. */
+  thrown = false;
+  /** The virus went through a portal on this flight. */
+  private ported = false;
+  /** The bonus round, while it's on. */
+  breakout: Breakout | null = null;
   /** Nothing hurts the player. A cheat. */
   god = false;
   /** Cheats were used this run, so its time can't be a best. */
   cheated = false;
   /** Where the player was across the room, which is where they come out. */
   private escapeX = 0;
-  private powerUpTimer = POWER_UP_FIRST;
+  /** Seconds until the next penguin or power-up, and which one, when a cheat asks for it. */
+  private dropTimer = DROP_FIRST;
+  private nextDrop: "penguin" | "powerUp" | null = null;
+  /** Power-ups still to come before any repeats, like a shuffled deck. */
+  private bag: PowerUpKind[] = [];
   private powerUpShown = 0;
   /** The flying virus came close to the player without a hit. */
   private closeCall = false;
@@ -320,7 +425,6 @@ export class Game {
   private jumpBuffer = 0;
   private walkTime = 0;
   private hitTime = Infinity;
-  private pickupTimer = PICKUP_FIRST;
   private pickupShown = 0;
   private gladosTimer = new Timer(GLADOS_AFTER);
   private hl3Clicked = false;
@@ -367,7 +471,9 @@ export class Game {
     this.time = 0;
     this.health = 1;
     this.speed = VIRUS_START_SPEED;
-    this.pickupTimer = PICKUP_FIRST;
+    this.dropTimer = DROP_FIRST;
+    this.bag = [];
+    this.nextDrop = null;
     this.pickupShown = 0;
     this.vx = 0;
     this.vy = 0;
@@ -378,12 +484,15 @@ export class Game {
     this.invincible = 0;
     this.frozen = 0;
     this.dying = 0;
-    this.powers = { jetpack: 0, shield: 0, freeze: 0, pill: 0 };
+    this.powers = noPowers();
     this.flying = false;
     this.third = null;
+    this.breakout = null;
+    this.caught = null;
+    this.thrown = false;
+    this.ported = false;
     this.sinceThird = Infinity;
     this.timeScale = 1;
-    this.powerUpTimer = POWER_UP_FIRST;
     this.powerUpShown = 0;
     this.closeCall = false;
     this.grabbed = [];
@@ -429,12 +538,15 @@ export class Game {
     this.sinceThird += DT;
     if (this.third) {
       this.updateThird(input);
+    } else if (this.breakout) {
+      this.updateBreakout(input);
     } else {
       if (!this.updateEscape()) this.movePlayer(input);
       this.moveVirus();
       this.updatePickup();
     }
     this.updatePowerUps();
+    if (!this.third && !this.breakout) this.updateDrops();
     this.updateDifficulty();
     this.updateBulletTime();
     if (!this.third) this.record();
@@ -460,7 +572,8 @@ export class Game {
   private movePlayer(input: Input): void {
     const player = this.player;
     const sideways = input.left !== input.right;
-    const wanted = sideways ? (input.left ? -PLAYER_SPEED : PLAYER_SPEED) : 0;
+    const top = PLAYER_SPEED * (this.powers.shoes > 0 ? SHOES_SPEED : 1);
+    const wanted = sideways ? (input.left ? -top : top) : 0;
     // Speed up toward the held direction. Stopping and turning brake harder.
     const braking = wanted === 0 || Math.sign(wanted) === -Math.sign(this.vx);
     const change = (braking ? RUN_BRAKING : RUN_ACCELERATION) * DT;
@@ -515,7 +628,7 @@ export class Game {
     if (jetpack) {
       player.x = wrapAround(x);
       player.y = y;
-    } else {
+    } else if (!this.throughPortal(x, y)) {
       player.setXY(x, y);
       // The edge of the stage stops the player.
       if (player.x !== x) this.vx = 0;
@@ -526,6 +639,22 @@ export class Game {
     player.setCostume(this.playerCostume(input, sideways));
     if (escaping) this.escape();
     else if (jetpack && this.flying && this.canEscape && this.touchesScreen()) this.dive();
+  }
+
+  /**
+   * Walking into a wall with portals comes out of the other one, still going
+   * the same way, like in Portal. Says whether the player went through.
+   */
+  private throughPortal(x: number, y: number): boolean {
+    if (this.powers.portal === 0 || y > PORTAL_TOP) return false;
+    const player = this.player;
+    const bounds = player.bounds();
+    const half = (bounds.right - bounds.left) / 2;
+    const side = x - half < -PORTAL_X && this.vx < 0 ? -1 : x + half > PORTAL_X && this.vx > 0 ? 1 : 0;
+    if (side === 0) return false;
+    player.setXY(-side * (PORTAL_X - half - 2), y);
+    this.events.push({ type: "portal", x: player.x, y: player.y });
+    return true;
   }
 
   /** Whether the player is touching the monitor's screen. */
@@ -545,6 +674,7 @@ export class Game {
       time: 0,
       player: { x: 0, z: 120, vx: 0, vz: 0, facing: Math.PI, step: 0 },
       virus: { x: 0, y: 0, z: 0, dx: 0, dy: 0, dz: 0, warning: 0 },
+      car: { ...PARKED, heading: 0, speed: 0, driving: false },
     };
     this.respawnThirdVirus();
     this.events.push({ type: "dive" });
@@ -552,7 +682,13 @@ export class Game {
 
   private respawnThirdVirus(): void {
     const third = this.third!;
-    Object.assign(third.virus, { x: this.randomInt(-150, 150), y: 120, z: THIRD_DEPTH, warning: this.aimWarning() });
+    const p = third.player;
+    // Ahead of where the camera looks, far enough to see it coming.
+    const heading = third.car.driving ? third.car.heading : 0;
+    const [ahead, aside] = [480, this.randomInt(-150, 150)];
+    const x = p.x + Math.sin(heading) * ahead + Math.cos(heading) * aside;
+    const z = p.z + Math.cos(heading) * ahead - Math.sin(heading) * aside;
+    Object.assign(third.virus, { x, y: 120, z, warning: this.aimWarning() });
   }
 
   /** The 3D world: diving in, moving around on the floor and dodging the virus, then back to the room. */
@@ -576,6 +712,11 @@ export class Game {
     }
     if (third.time >= THIRD_TIME) return;
     const p = third.player;
+    if (third.car.driving) {
+      this.drive(input);
+      this.moveThirdVirus();
+      return;
+    }
     // Arrows move along the floor as seen from the camera: up goes away, down comes back.
     const across = Number(input.right) - Number(input.left);
     const ahead = Number(input.jump) - Number(input.down);
@@ -586,8 +727,7 @@ export class Game {
     };
     p.vx = approach(p.vx, (across / length) * THIRD_SPEED);
     p.vz = approach(p.vz, (ahead / length) * THIRD_SPEED);
-    const x = Math.max(-THIRD_SIDE, Math.min(THIRD_SIDE, p.x + p.vx * DT));
-    const z = Math.max(20, Math.min(THIRD_DEPTH - 40, p.z + p.vz * DT));
+    const [x, z] = [p.x + p.vx * DT, p.z + p.vz * DT];
     p.step += Math.hypot(x - p.x, z - p.z);
     [p.x, p.z] = [x, z];
     const moving = across !== 0 || ahead !== 0;
@@ -601,11 +741,49 @@ export class Game {
     this.walkTime = moving ? this.walkTime + DT : 0;
     this.hitTime += DT;
     this.player.setCostume(this.playerCostume(noInput, moving));
+    if (Math.hypot(p.x - third.car.x, p.z - third.car.z) < GET_IN) this.getInCar();
     this.moveThirdVirus();
   }
 
+  private getInCar(): void {
+    const { car, player } = this.third!;
+    car.driving = true;
+    [player.x, player.z, player.vx, player.vz] = [car.x, car.z, 0, 0];
+    this.events.push({ type: "drive" });
+  }
+
+  /** Driving Homer's car: speeding up, braking, steering, and bumping off the shapes. */
+  private drive(input: Input): void {
+    const { car, player } = this.third!;
+    const throttle = Number(input.jump) - Number(input.down);
+    if (throttle > 0) car.speed = Math.min(CAR_TOP_SPEED, car.speed + (car.speed < 0 ? CAR_BRAKING : CAR_ACCELERATION) * DT);
+    else if (throttle < 0) car.speed = Math.max(-CAR_REVERSE, car.speed - (car.speed > 0 ? CAR_BRAKING : CAR_ACCELERATION) * DT);
+    else car.speed -= Math.sign(car.speed) * Math.min(Math.abs(car.speed), CAR_COAST * DT);
+    // It turns more the faster it goes, up to a point, and the other way backing up.
+    const steer = Number(input.right) - Number(input.left);
+    const grip = Math.min(1, Math.abs(car.speed) / CAR_STEER_SPEED) * Math.sign(car.speed);
+    car.heading += steer * CAR_STEER * grip * DT;
+    let x = car.x + Math.sin(car.heading) * car.speed * DT;
+    let z = car.z + Math.cos(car.heading) * car.speed * DT;
+    let bumped = false;
+    for (const prop of THIRD_PROPS) {
+      const distance = Math.hypot(x - prop.x, z - prop.z);
+      const closest = prop.r + CAR_RADIUS;
+      if (distance >= closest) continue;
+      const k = closest / (distance || 1);
+      [x, z, bumped] = [prop.x + (x - prop.x) * k, prop.z + (z - prop.z) * k, true];
+    }
+    if (bumped) {
+      if (Math.abs(car.speed) > 60) this.events.push({ type: "bump" });
+      car.speed *= -0.3;
+    }
+    [car.x, car.z] = [x, z];
+    [player.x, player.z, player.facing] = [x, z, car.heading];
+    player.step += Math.abs(car.speed) * DT;
+  }
+
   private moveThirdVirus(): void {
-    const { player: p, virus: v } = this.third!;
+    const { player: p, virus: v, car } = this.third!;
     if (this.powers.freeze > 0) {
       if (Math.hypot(v.x - p.x, v.y - THIRD_CHEST, v.z - p.z) < THIRD_HIT) this.shatter(v.x, v.y, () => this.respawnThirdVirus());
       return;
@@ -629,12 +807,20 @@ export class Game {
       v.x += v.dx * step;
       v.y += v.dy * step;
       v.z += v.dz * step;
+      // Hit and run: the car runs it over.
+      if (car.driving && v.y < 70 && Math.hypot(v.x - car.x, v.z - car.z) < CAR_RADIUS + 12) {
+        this.closeCall = false;
+        this.events.push({ type: "smash" });
+        this.respawnThirdVirus();
+        return;
+      }
       if (this.invincible === 0 && Math.hypot(v.x - p.x, v.y - THIRD_CHEST, v.z - p.z) < THIRD_HIT) {
         this.takeHit();
         this.respawnThirdVirus();
         return;
       }
-      if (v.z < -60 || Math.abs(v.x) > 320 || v.y < -20) {
+      // Flew past the player.
+      if (Math.hypot(v.x - p.x, v.z - p.z) > 650 || v.y < -20) {
         this.respawnThirdVirus();
         return;
       }
@@ -724,6 +910,9 @@ export class Game {
 
   /** Back in the monitor, about to fly out. */
   private respawnVirus(): void {
+    this.caught = null;
+    this.thrown = false;
+    this.ported = false;
     this.virus.setXY(VIRUS_SPAWN.x, VIRUS_SPAWN.y);
     this.warning = this.aimWarning();
     this.target = { x: this.player.x, y: this.player.y };
@@ -744,6 +933,7 @@ export class Game {
       return;
     }
     const virus = this.virus;
+    if (this.updateGravityGun()) return;
     if (this.warning > 0) {
       if (this.warning > AIM_LOCK + 1e-9) this.target = { x: this.player.x, y: this.player.y };
       this.warning -= DT;
@@ -763,12 +953,59 @@ export class Game {
       }
       if (this.invincible === 0 && gap(virus.bounds(), this.player.bounds()) <= NEAR_MISS) this.closeCall = true;
       if (virus.isTouchingEdge()) {
+        // Into a portal on one wall, and out of the other, still going the same way. Once a flight.
+        const portal = this.powers.portal > 0 && !this.ported && Math.abs(virus.x) > PORTAL_X - 30;
+        if (portal && virus.y > PORTAL_BOTTOM - 10 && virus.y < PORTAL_TOP + 10) {
+          this.ported = true;
+          virus.setXY(-Math.sign(virus.x) * (PORTAL_X - 24), virus.y);
+          this.events.push({ type: "portal", x: virus.x, y: virus.y });
+          continue;
+        }
         if (this.closeCall) this.events.push({ type: "nearMiss" });
         this.closeCall = false;
         this.respawnVirus();
         return;
       }
     }
+  }
+
+  /**
+   * The gravity gun: catches the flying virus when it comes close, holds it in
+   * front of the player, then fires it back at the monitor, where it breaks.
+   * Says whether it has the virus, so it doesn't fly as usual.
+   */
+  private updateGravityGun(): boolean {
+    const { virus, player, monitor } = this;
+    if (this.thrown) {
+      const distance = GRAVITY_FIRE_SPEED * DT;
+      const steps = Math.ceil(distance / VIRUS_STEP);
+      for (let i = 0; i < steps; i++) {
+        virus.move(distance / steps);
+        if (virus.isTouching(monitor) || virus.isTouchingEdge()) {
+          this.shatter(virus.x, virus.y, () => this.respawnVirus());
+          return true;
+        }
+      }
+      return true;
+    }
+    if (this.caught !== null) {
+      this.caught += DT;
+      virus.setXY(player.x + player.flipX * 48, player.y + 6);
+      if (this.caught >= GRAVITY_HOLD - 1e-9) {
+        this.caught = null;
+        this.thrown = true;
+        virus.pointTowards(monitor.x, monitor.y);
+        this.events.push({ type: "fire" });
+      }
+      return true;
+    }
+    if (this.powers.gravity > 0 && this.warning === 0 && gap(virus.bounds(), player.bounds()) <= GRAVITY_RANGE) {
+      this.caught = 0;
+      this.closeCall = false;
+      this.events.push({ type: "catch" });
+      return true;
+    }
+    return false;
   }
 
   /** Takes a heart if this touches the player, and says whether it did. */
@@ -801,7 +1038,7 @@ export class Game {
     this.speed = VIRUS_START_SPEED + VIRUS_SPEEDUP * this.time;
   }
 
-  /** Counts down the player's power-ups, and shows a new one now and then. */
+  /** Counts down the player's power-ups, and lets the player grab the one on stage. */
   private updatePowerUps(): void {
     for (const kind of POWER_UPS) {
       const before = this.powers[kind];
@@ -810,26 +1047,44 @@ export class Game {
       const tick = TICKS.find((mark) => before > mark + 1e-9 && left <= mark + 1e-9);
       if (tick !== undefined) this.events.push({ type: "ending", kind, left: tick });
     }
-    if (this.third) return;
+    if (this.third || this.breakout) return;
     const powerUp = this.powerUp;
     if (powerUp.visible) {
       this.powerUpShown += DT;
       if (powerUp.isTouching(this.player)) {
         const kind = this.powerUpKind;
-        this.powers[kind] = POWER_UP_TIME[kind];
-        if (kind === "jetpack") this.canEscape = true;
         this.grabbed.push(kind);
         powerUp.visible = false;
-        this.events.push({ type: "powerUp", kind, x: powerUp.x, y: powerUp.y });
+        this.give(kind, powerUp.x, powerUp.y);
       } else if (this.powerUpShown >= POWER_UP_SHOWN - 1e-9) {
         powerUp.visible = false;
       }
     }
-    this.powerUpTimer -= DT;
-    if (this.powerUpTimer > 1e-9) return;
-    const [low, high] = POWER_UP_EVERY;
-    this.powerUpTimer = low + this.random() * (high - low);
-    powerUp.setCostume(POWER_UPS[Math.floor(this.random() * POWER_UPS.length)]!);
+  }
+
+  /** The penguin and power-ups take turns at random, on one timer. */
+  private updateDrops(): void {
+    this.dropTimer -= DT;
+    if (this.dropTimer > 1e-9) return;
+    const [low, high] = DROP_EVERY;
+    this.dropTimer = low + this.random() * (high - low);
+    const penguin = this.nextDrop ? this.nextDrop === "penguin" : this.health < MAX_HEALTH && this.random() < PENGUIN_CHANCE;
+    this.nextDrop = null;
+    if (penguin) this.showPenguin();
+    else this.showPowerUp();
+  }
+
+  private showPowerUp(): void {
+    const powerUp = this.powerUp;
+    // Every kind once, in a random order, before any comes again.
+    if (this.bag.length === 0) {
+      this.bag = [...POWER_UPS];
+      for (let i = this.bag.length - 1; i > 0; i--) {
+        const j = Math.floor(this.random() * (i + 1));
+        [this.bag[i], this.bag[j]] = [this.bag[j]!, this.bag[i]!];
+      }
+    }
+    powerUp.setCostume(this.bag.pop()!);
     let x = this.randomInt(-200, 200);
     if (Math.abs(x - this.player.x) < POWER_UP_AWAY) x += x < this.player.x ? -2 * POWER_UP_AWAY : 2 * POWER_UP_AWAY;
     if (Math.abs(x) > 200) x -= Math.sign(x) * 4 * POWER_UP_AWAY;
@@ -839,6 +1094,128 @@ export class Game {
     this.events.push({ type: "appear", thing: this.powerUpKind });
   }
 
+  /** Gives the player a power-up, grabbed at `x`, `y`. */
+  private give(kind: PowerUpKind, x: number, y: number): void {
+    this.powers[kind] = POWER_UP_TIME[kind];
+    if (kind === "jetpack") this.canEscape = true;
+    this.events.push({ type: "powerUp", kind, x, y });
+    if (kind === "ball") this.startBreakout();
+  }
+
+  /** The floor's bricks float up, the player turns into the paddle and the virus into the ball. */
+  private startBreakout(): void {
+    const { player, virus } = this;
+    this.breakout = {
+      time: 0,
+      paddle: Math.max(-240 + PADDLE.width / 2, Math.min(240 - PADDLE.width / 2, player.x)),
+      ball: { x: 0, y: 0, vx: 0, vy: 0, stuck: true },
+      bricks: Array<boolean>(BRICKS.columns * BRICKS.rows).fill(true),
+      broken: 0,
+    };
+    this.endEscape();
+    this.flying = false;
+    this.powers.jetpack = 0;
+    this.vx = this.vy = 0;
+    this.onGround = true;
+    this.caught = null;
+    this.thrown = false;
+    player.visible = false;
+    virus.visible = false;
+    this.monitor.visible = false;
+    this.events.push({ type: "breakout" });
+  }
+
+  private updateBreakout(input: Input): void {
+    const round = this.breakout!;
+    round.time += DT;
+    const half = PADDLE.width / 2;
+    const steer = Number(input.right) - Number(input.left);
+    round.paddle = Math.max(-240 + half, Math.min(240 - half, round.paddle + steer * PADDLE_SPEED * DT));
+    const ball = round.ball;
+    if (ball.stuck) {
+      ball.x = round.paddle;
+      ball.y = PADDLE.y + PADDLE.height / 2 + BALL_RADIUS;
+      const ready = round.time >= BRICKS_RISE;
+      if ((ready && input.jumpPressed) || round.time >= BALL_WAIT) {
+        ball.stuck = false;
+        const angle = (steer || (this.random() < 0.5 ? -1 : 1)) * 0.5;
+        [ball.vx, ball.vy] = [Math.sin(angle) * BALL_SPEED, Math.cos(angle) * BALL_SPEED];
+      }
+    } else if (!this.moveBall(round)) {
+      this.endBreakout(false);
+      return;
+    }
+    if (round.broken === round.bricks.length) this.endBreakout(true);
+    else if (this.powers.ball === 0) this.endBreakout(false);
+  }
+
+  /** Moves the ball, bouncing off the walls, the bricks and the paddle. Says whether it's still in play. */
+  private moveBall(round: Breakout): boolean {
+    const ball = round.ball;
+    const speed = BALL_SPEED + BALL_SPEEDUP * round.broken;
+    const scale = speed / Math.hypot(ball.vx, ball.vy);
+    [ball.vx, ball.vy] = [ball.vx * scale, ball.vy * scale];
+    const steps = Math.ceil((speed * DT) / 4);
+    for (let i = 0; i < steps; i++) {
+      const [lastX, lastY] = [ball.x, ball.y];
+      ball.x += (ball.vx * DT) / steps;
+      ball.y += (ball.vy * DT) / steps;
+      if (Math.abs(ball.x) > 240 - BALL_RADIUS) {
+        ball.x = Math.sign(ball.x) * (240 - BALL_RADIUS);
+        ball.vx = -ball.vx;
+      }
+      if (ball.y > 180 - BALL_RADIUS) {
+        ball.y = 180 - BALL_RADIUS;
+        ball.vy = -Math.abs(ball.vy);
+      }
+      const hit = round.bricks.findIndex((there, i) => there && touchesBrick(ball.x, ball.y, i));
+      if (hit >= 0) {
+        round.bricks[hit] = false;
+        round.broken += 1;
+        // From the side if it was beside the brick a moment ago, else from above or below.
+        const [left, right] = brickSides(hit);
+        if (lastX + BALL_RADIUS <= left || lastX - BALL_RADIUS >= right) ball.vx = -ball.vx;
+        else ball.vy = -ball.vy;
+        const heart = round.broken % BRICKS_PER_HEART === 0 && this.health < MAX_HEALTH;
+        if (heart) this.health += 1;
+        this.events.push({ type: "brick", x: ball.x, y: ball.y, heart });
+        break;
+      }
+      const top = PADDLE.y + PADDLE.height / 2;
+      if (ball.vy < 0 && ball.y - BALL_RADIUS <= top && lastY - BALL_RADIUS >= top - 4 && Math.abs(ball.x - round.paddle) <= PADDLE.width / 2 + BALL_RADIUS) {
+        // Off the paddle at an angle from where it hit: the ends send it out wide.
+        const offset = Math.max(-1, Math.min(1, (ball.x - round.paddle) / (PADDLE.width / 2)));
+        const angle = offset * 1.05;
+        [ball.vx, ball.vy] = [Math.sin(angle) * speed, Math.cos(angle) * speed];
+        ball.y = top + BALL_RADIUS;
+        this.events.push({ type: "paddle" });
+      }
+      if (ball.y < PADDLE.y - 30) return false;
+    }
+    return true;
+  }
+
+  /** Back to the room: hearts for clearing every brick, and the virus back in the monitor. */
+  private endBreakout(cleared: boolean): void {
+    const round = this.breakout!;
+    this.breakout = null;
+    this.powers.ball = 0;
+    const { player, virus } = this;
+    player.visible = true;
+    player.setXY(round.paddle, GROUND_Y);
+    player.setCostume("normal");
+    this.monitor.visible = true;
+    virus.visible = true;
+    this.respawnVirus();
+    this.invincible = Math.max(this.invincible, 1);
+    if (cleared) {
+      this.health = MAX_HEALTH;
+      this.powers.shield = Math.max(this.powers.shield, BREAKOUT_SHIELD);
+    }
+    this.events.push({ type: "breakoutEnd", cleared });
+  }
+
+  /** Lets the player grab the penguin while it shows. */
   private updatePickup(): void {
     const pickup = this.pickup;
     if (pickup.visible) {
@@ -854,16 +1231,15 @@ export class Game {
         pickup.visible = false;
       }
     }
-    this.pickupTimer -= DT;
-    if (this.pickupTimer <= 1e-9) {
-      pickup.setXY(this.randomInt(PICKUP_LEFTMOST, PICKUP_RIGHTMOST), pickup.y);
-      pickup.ifOnEdgeBounce();
-      pickup.visible = true;
-      this.pickupShown = 0;
-      const [low, high] = PICKUP_EVERY;
-      this.pickupTimer = low + this.random() * (high - low);
-      this.events.push({ type: "appear", thing: "penguin" });
-    }
+  }
+
+  private showPenguin(): void {
+    const pickup = this.pickup;
+    pickup.setXY(this.randomInt(PICKUP_LEFTMOST, PICKUP_RIGHTMOST), pickup.y);
+    pickup.ifOnEdgeBounce();
+    pickup.visible = true;
+    this.pickupShown = 0;
+    this.events.push({ type: "appear", thing: "penguin" });
   }
 
   /** Does a cheat, while playing. */
@@ -871,8 +1247,8 @@ export class Game {
     if (this.phase !== "playing" || this.dying > 0) return;
     this.cheated = true;
     const { player } = this;
-    // Diving and escaping only start from the room.
-    const inRoom = !this.third && this.escapeTime === Infinity;
+    // Diving, escaping and the bonus round only start from the room.
+    const inRoom = !this.third && !this.breakout && this.escapeTime === Infinity;
     switch (cheat) {
       case "god":
         this.god = !this.god;
@@ -883,22 +1259,25 @@ export class Game {
       case "dive":
         if (inRoom) this.dive();
         break;
+      case "drive":
+        if (inRoom) this.dive();
+        if (this.third && !this.third.car.driving) this.getInCar();
+        break;
       case "escape":
         if (inRoom) this.escape();
         break;
       case "powerUpNow":
-        this.powerUpTimer = 0;
+        [this.dropTimer, this.nextDrop] = [0, "powerUp"];
         break;
       case "penguinNow":
-        this.pickupTimer = 0;
+        [this.dropTimer, this.nextDrop] = [0, "penguin"];
         break;
       case "skip":
         this.time += CHEAT_SKIP;
         break;
       default:
-        this.powers[cheat] = POWER_UP_TIME[cheat];
-        if (cheat === "jetpack") this.canEscape = true;
-        this.events.push({ type: "powerUp", kind: cheat, x: player.x, y: player.y });
+        if (cheat === "ball" && !inRoom) break;
+        this.give(cheat, player.x, player.y);
     }
   }
 
@@ -907,9 +1286,12 @@ export class Game {
     this.health = 0;
     this.dying = 0;
     this.invincible = 0;
-    this.powers = { jetpack: 0, shield: 0, freeze: 0, pill: 0 };
+    this.powers = noPowers();
     this.flying = false;
     this.third = null;
+    this.breakout = null;
+    this.caught = null;
+    this.thrown = false;
     this.timeScale = 1;
     this.endEscape();
     this.phase = "over";
@@ -965,6 +1347,30 @@ export class Game {
   }
 }
 
+function noPowers(): Record<PowerUpKind, number> {
+  return Object.fromEntries(POWER_UPS.map((kind) => [kind, 0])) as Record<PowerUpKind, number>;
+}
+
+/** Brick `i`'s left and right sides. */
+function brickSides(i: number): [number, number] {
+  const left = BRICKS.left + (i % BRICKS.columns) * BRICKS.width;
+  return [left, left + BRICKS.width];
+}
+
+/** Brick `i`'s top, row by row from the top. */
+export function brickTop(i: number): number {
+  return BRICKS.top - Math.floor(i / BRICKS.columns) * BRICKS.height;
+}
+
+/** Whether the ball at `x`, `y` touches brick `i`. */
+function touchesBrick(x: number, y: number, i: number): boolean {
+  const [left, right] = brickSides(i);
+  const top = brickTop(i);
+  const nearX = Math.max(left, Math.min(right, x));
+  const nearY = Math.max(top - BRICKS.height, Math.min(top, y));
+  return Math.hypot(x - nearX, y - nearY) < BALL_RADIUS;
+}
+
 function shot(s: Sprite): SpriteShot {
   return { costume: s.currentCostume, x: s.x, y: s.y, rotation: s.rotation, flipX: s.flipX, size: s.size };
 }
@@ -1004,7 +1410,8 @@ export function replayFrame(replay: ReplayFrame[], seconds: number): ReplayFrame
  * 2 s twice, with 2 s between, then waits 6 s and starts again.
  */
 export function hl3Shown(seconds: number): boolean {
-  const t = seconds - HL3_AFTER;
+  // A hair early, so adding up many small updates still lands on time.
+  const t = seconds - HL3_AFTER + 1e-9;
   if (t < 0) return false;
   const cycle = t % 14;
   return cycle < 2 || (cycle >= 4 && cycle < 6);
