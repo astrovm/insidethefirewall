@@ -59,7 +59,7 @@ export const NEAR_MISS = 8;
  * Hearts and power-ups share one cycle: something shows up after 15 s, then
  * every 15 to 22 s. It's the penguin, an extra life, 60% of the time, and a
  * power-up otherwise, so each comes about as often as when they had their own
- * timers. In 2013 the penguin came every 10 s.
+ * timers. With full hearts it's always a power-up. In 2013 the penguin came every 10 s.
  */
 export const DROP_FIRST = 15;
 const DROP_EVERY = [15, 22] as const;
@@ -1065,7 +1065,7 @@ export class Game {
     if (this.dropTimer > 1e-9) return;
     const [low, high] = DROP_EVERY;
     this.dropTimer = low + this.random() * (high - low);
-    const penguin = this.nextDrop ? this.nextDrop === "penguin" : this.random() < PENGUIN_CHANCE;
+    const penguin = this.nextDrop ? this.nextDrop === "penguin" : this.health < MAX_HEALTH && this.random() < PENGUIN_CHANCE;
     this.nextDrop = null;
     if (penguin) this.showPenguin();
     else this.showPowerUp();

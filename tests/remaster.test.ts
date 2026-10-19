@@ -825,7 +825,7 @@ describe("power-ups", () => {
     for (let i = 0; i < Math.round(3000 / DT); i++) {
       const before = [game.powerUp.visible, game.pickup.visible];
       game.update(noInput);
-      game.health = 9;
+      game.health = 1;
       const powerUp = game.powerUp.visible && !before[0];
       const penguin = game.pickup.visible && !before[1];
       expect(powerUp && penguin).toBe(false);
@@ -889,6 +889,16 @@ describe("power-ups", () => {
       game.update(noInput);
       expect([game.pickup.visible, game.powerUp.visible]).toEqual([penguin, !penguin]);
     }
+  });
+
+  test("with full hearts, it's always a power-up", () => {
+    const game = started();
+    parkVirus(game);
+    game.health = MAX_HEALTH;
+    (game as unknown as { random: () => number }).random = () => 0;
+    (game as unknown as { dropTimer: number }).dropTimer = DT;
+    game.update(noInput);
+    expect([game.pickup.visible, game.powerUp.visible]).toEqual([false, true]);
   });
 
   test("goes away after 5 s if nobody grabs it", () => {
