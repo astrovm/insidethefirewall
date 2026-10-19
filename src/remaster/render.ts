@@ -386,6 +386,16 @@ export class RemasterRenderer {
     ctx.restore();
   }
 
+  /**
+   * How far down the stage, in stage pixels, text must start to clear the
+   * buttons in the window's top right corner, which are 40 CSS pixels, 8 from the top.
+   */
+  private underCornerButtons(): number {
+    const pixelRatio = this.canvas.width / (this.canvas.clientWidth || this.canvas.width);
+    const bottom = (8 + 40 + 4) * pixelRatio;
+    return Math.max(10, (bottom - this.view.y) / this.view.scale + 8);
+  }
+
   /** Shows the song's title for a few seconds. */
   showSong(title: string): void {
     this.song = { title, at: performance.now() };
@@ -724,18 +734,19 @@ export class RemasterRenderer {
       ctx.strokeText(warning, 12, 122);
       ctx.fillText(warning, 12, 122);
     }
-    // The song that just started: small, at the top over the monitor, sliding down, then fading out.
+    // The song that just started: small, at the top right under the corner buttons, sliding in, then fading out.
     const age = (performance.now() - this.song.at) / 1000;
     if (age < SONG_SHOWN) {
       const slide = Math.min(1, age / 0.3);
       ctx.globalAlpha = Math.min(1, (SONG_SHOWN - age) / 0.6);
       ctx.font = "500 8px 'Noto Sans', sans-serif";
-      ctx.textAlign = "center";
+      ctx.textAlign = "right";
       ctx.lineWidth = 2.5;
       ctx.fillStyle = "#ffffff";
-      const y = 8 - (1 - slide * (2 - slide)) * 16;
-      ctx.strokeText(`♪ ${this.song.title}`, STAGE_WIDTH / 2, y);
-      ctx.fillText(`♪ ${this.song.title}`, STAGE_WIDTH / 2, y);
+      const x = STAGE_WIDTH - 8 + (1 - slide * (2 - slide)) * 150;
+      const y = this.underCornerButtons();
+      ctx.strokeText(`♪ ${this.song.title}`, x, y);
+      ctx.fillText(`♪ ${this.song.title}`, x, y);
       ctx.globalAlpha = 1;
     }
     ctx.restore();
