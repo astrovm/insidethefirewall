@@ -10,7 +10,6 @@ const grabEmoji: Record<Grab, string> = {
   freeze: "❄️",
   pill: "💊",
   shoes: "👟",
-  gravity: "🧲",
   portal: "🌀",
   ball: "🧱",
 };

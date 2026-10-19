@@ -254,7 +254,6 @@ export class RemasterRenderer {
         if (playing && sprite === game.player && game.powers.shield > 0) {
           this.drawShield(x, y, 0.7 * (game.powers.shield < 1.5 ? blink(game.powers.shield) : 1), grown);
         }
-        if (player && game.powers.gravity > 0) this.drawGravityGun(game, x, y, grown);
       }
       if (playing && sprite === game.monitor && game.third) this.drawPortal(game.third.time);
       if (playing && sprite === game.monitor && game.inside.length > 0) {
@@ -264,36 +263,6 @@ export class RemasterRenderer {
       }
     }
     if (playing && game.breakout) this.drawBreakout(game);
-  }
-
-  /** The gravity gun in the player's hands, and its beam while it holds the virus. */
-  private drawGravityGun(game: Game, x: number, y: number, grown: number): void {
-    const flip = game.player.flipX;
-    const left = game.powers.gravity;
-    this.ctx.globalAlpha = left < 1 ? blink(left) : 1;
-    // The art points left.
-    this.drawCostume(powerUpCostume("gravity"), x + flip * 24 * grown, y - 6 * grown, 0, -flip * 2 * grown, 2 * grown);
-    this.ctx.globalAlpha = 1;
-    if (game.caught === null) return;
-    const ctx = this.ctx;
-    const [ax, ay] = toCanvas(this.view, x + flip * 38 * grown, y - 4 * grown);
-    const [bx, by] = toCanvas(this.view, game.virus.x, game.virus.y);
-    const s = this.view.scale;
-    ctx.save();
-    ctx.strokeStyle = "#ffb03a";
-    ctx.shadowColor = "#ff9900";
-    ctx.shadowBlur = 10 * s;
-    ctx.lineWidth = 3 * s;
-    ctx.globalAlpha = 0.8;
-    ctx.beginPath();
-    ctx.moveTo(ax, ay);
-    ctx.lineTo(bx, by);
-    ctx.stroke();
-    ctx.lineWidth = 2 * s;
-    ctx.beginPath();
-    ctx.arc(bx, by, (22 + Math.sin(game.time * 40) * 3) * s, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
   }
 
   /** A blue portal on the left wall and an orange one on the right, opening and closing. */
@@ -691,8 +660,10 @@ export class RemasterRenderer {
     ctx.textAlign = "left";
     ctx.strokeText(time, 12, 48);
     ctx.fillText(time, 12, 48);
-    // Coins grabbed in the 3D world, under the time, once there are any.
-    if (game.coins > 0 || game.third) {
+    // Coins, under the time, only in the 3D world, where they're grabbed. The power-ups go under them.
+    const coins = game.third !== null;
+    const below = coins ? 26 : 0;
+    if (coins) {
       ctx.fillStyle = colors.mortar;
       ctx.beginPath();
       ctx.arc(21, 74, 8, 0, Math.PI * 2);
@@ -712,9 +683,9 @@ export class RemasterRenderer {
     active.forEach((kind, i) => {
       const left = 12 + i * 44;
       ctx.fillStyle = colors.mortar;
-      ctx.fillRect(left, 96, 36, 6);
+      ctx.fillRect(left, 96 + below, 36, 6);
       ctx.fillStyle = colors.orange;
-      ctx.fillRect(left + 1, 97, 34 * Math.min(1, game.powers[kind] / POWER_UP_TIME[kind]), 4);
+      ctx.fillRect(left + 1, 97 + below, 34 * Math.min(1, game.powers[kind] / POWER_UP_TIME[kind]), 4);
     });
     // The song that just started: small, at the top right under the corner buttons, sliding in, then fading out.
     const age = (performance.now() - this.song.at) / 1000;
@@ -734,7 +705,7 @@ export class RemasterRenderer {
     ctx.restore();
     active.forEach((kind, i) => {
       const costume = powerUpCostumes[POWER_UPS.indexOf(kind)]!;
-      this.drawCostume(costume, -240 + 12 + i * 44 + 18, 180 - 78, 0, 2.5, 2.5);
+      this.drawCostume(costume, -240 + 12 + i * 44 + 18, 180 - 78 - below, 0, 2.5, 2.5);
     });
   }
 }

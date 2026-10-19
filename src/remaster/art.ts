@@ -96,22 +96,6 @@ export const shoes = [
   "............",
 ];
 
-/** Half-Life 2's gravity gun: orange prongs on a grey body. */
-export const gravity = [
-  "............",
-  "oo....kkkkk.",
-  ".ok..kSSSSSk",
-  "..okkossssSk",
-  "ooookoooooSk",
-  "..okkossssSk",
-  ".ok..kSSSSSk",
-  "oo....kkkkk.",
-  "......kSk...",
-  "......kSk...",
-  "......kkk...",
-  "............",
-];
-
 /** Portal's portal gun: white, with a blue glow at the tip. */
 export const portal = [
   "............",
@@ -180,7 +164,6 @@ export function artFiles(): Map<string, string> {
     ["freeze.svg", toSvg(freeze)],
     ["pill.svg", toSvg(pill)],
     ["shoes.svg", toSvg(shoes)],
-    ["gravity.svg", toSvg(gravity)],
     ["portal.svg", toSvg(portal)],
     ["ball.svg", toSvg(ball)],
     ["flame1.svg", toSvg(flame[0]!)],
