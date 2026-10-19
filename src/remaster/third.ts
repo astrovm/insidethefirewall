@@ -9,18 +9,14 @@
 import { STAGE_HEIGHT, STAGE_WIDTH, type Costume } from "../engine/sprite.ts";
 import type { CostumeImages } from "../render.ts";
 import {
-  DRIVE_FAR,
-  DRIVE_NEAR,
-  DRIVE_SIDE,
-  THIRD_DEPTH,
   THIRD_IN,
   THIRD_OUT,
-  THIRD_SIDE,
   THIRD_TIME,
   type Game,
   type ThirdDimension,
 } from "./game.ts";
 import type { View } from "./render.ts";
+import { SEDAN_COLORS, SEDAN_CORNERS, SEDAN_TRIANGLES } from "./sedan.ts";
 
 /** Diving into the screen: the camera zooms in this long, then the player falls down the grid tunnel. */
 export const DIVE_ZOOM = 0.7;
@@ -113,6 +109,9 @@ class Camera {
 }
 
 const NEAR = 12;
+/** The floor's squares, and how far from the camera they're drawn. */
+const GRID = 50;
+const GRID_REACH = 1500;
 
 export class ThirdRenderer {
   private readonly figures = new Map<Costume, Figure>();
@@ -184,16 +183,15 @@ export class ThirdRenderer {
     const t = third.time - THIRD_IN;
     const p = third.player;
     const car = third.car;
-    // The camera catches up with the player, from behind and above. Walking, it
-    // leans a little to the side the player is on. Driving, it swings round
-    // behind the car and looks ahead of it.
+    // The camera catches up with the player, from behind and above. Driving, it
+    // swings round behind the car and looks ahead of it.
     if (this.follow?.third !== third) this.follow = { third, time: third.time, x: p.x, z: p.z, yaw: 0 };
     const follow = this.follow;
     const elapsed = Math.max(0, third.time - follow.time);
     const catchUp = 1 - Math.exp(-elapsed * (car.driving ? 8 : 5));
     follow.x += (p.x - follow.x) * catchUp;
     follow.z += (p.z - follow.z) * catchUp;
-    const wantedYaw = car.driving ? car.heading : (-follow.x / THIRD_SIDE) * 0.18;
+    const wantedYaw = car.driving ? car.heading : 0;
     const turn = wantedYaw - follow.yaw;
     follow.yaw += Math.atan2(Math.sin(turn), Math.cos(turn)) * (1 - Math.exp(-elapsed * 4));
     follow.time = third.time;
@@ -202,7 +200,7 @@ export class ThirdRenderer {
     const yaw = lerp(1.3, follow.yaw, swoop);
     const target: Vec = car.driving
       ? [follow.x + Math.sin(follow.yaw) * 70, 30, follow.z + Math.cos(follow.yaw) * 70]
-      : [follow.x * 0.85, 38, follow.z + 70];
+      : [follow.x, 38, follow.z + 70];
     const camera = new Camera(view, target, lerp(1300, car.driving ? 320 : 360, swoop), yaw, lerp(1.05, car.driving ? 0.32 : 0.4, swoop), 360);
 
     // The sky: black, a little blue near the horizon, with stars.
@@ -224,7 +222,7 @@ export class ThirdRenderer {
     }
     ctx.globalAlpha = 1;
 
-    this.drawGrid(camera, horizonY, car.driving);
+    this.drawGrid(camera, horizonY);
 
     // Everything standing in the world, far things first.
     const things: Thing[] = [];
@@ -283,7 +281,7 @@ export class ThirdRenderer {
   }
 
   /** The glowing floor grid, fading into the dark, with the edge of where the player can go. */
-  private drawGrid(camera: Camera, horizonY: number, driving: boolean): void {
+  private drawGrid(camera: Camera, horizonY: number): void {
     const ctx = this.ctx;
     const { view } = camera;
     ctx.save();
@@ -302,21 +300,12 @@ export class ThirdRenderer {
       ctx.moveTo(px, py);
       ctx.lineTo(qx, qy);
     };
-    for (let x = -900; x <= 900; x += 50) segment([x, 0, -400], [x, 0, 1800]);
-    for (let z = -400; z <= 1800; z += 50) segment([-900, 0, z], [900, 0, z]);
-    ctx.stroke();
-    // The edge of where the player can walk, brighter.
-    const [x, near, far] = driving ? [DRIVE_SIDE + 34, DRIVE_NEAR - 34, DRIVE_FAR + 34] : [THIRD_SIDE + 20, 0, THIRD_DEPTH - 20];
-    ctx.beginPath();
-    segment([-x, 0, near], [x, 0, near]);
-    segment([x, 0, near], [x, 0, far]);
-    segment([x, 0, far], [-x, 0, far]);
-    segment([-x, 0, far], [-x, 0, near]);
-    ctx.globalAlpha = 1;
-    ctx.strokeStyle = "#b6ffc4";
-    ctx.shadowColor = GREEN;
-    ctx.shadowBlur = 6 * view.scale;
-    ctx.lineWidth = Math.max(1, 2.5 * view.scale);
+    // The floor goes on forever: the lines around the camera, out to the fog.
+    const [cx, cz] = [Math.round(camera.x / GRID) * GRID, Math.round(camera.z / GRID) * GRID];
+    for (let d = -GRID_REACH; d <= GRID_REACH; d += GRID) {
+      segment([cx + d, 0, cz - GRID_REACH], [cx + d, 0, cz + GRID_REACH]);
+      segment([cx - GRID_REACH, 0, cz + d], [cx + GRID_REACH, 0, cz + d]);
+    }
     ctx.stroke();
     ctx.restore();
     // Fog: the grid fades out toward the horizon.
@@ -686,24 +675,19 @@ function placeFaces(faces: Face[], at: Vec, heading: number, scale: number): Fac
   }));
 }
 
-/** Homer's pink sedan, blocky, pointing +z. */
+/** Homer's pink sedan, Hit & Run's own Family Sedan, pointing +z. */
 const CAR: Face[] = (() => {
-  const PINK: Rgb = [255, 140, 190];
-  const GLASS: Rgb = [140, 200, 245];
-  const TIRE: Rgb = [30, 30, 36];
+  const corner = (i: number): Vec => [SEDAN_CORNERS[i * 3]! / 2, SEDAN_CORNERS[i * 3 + 1]! / 2, SEDAN_CORNERS[i * 3 + 2]! / 2];
   const faces: Face[] = [];
-  const part = (center: Vec, size: Vec, color: Rgb) => faces.push(...box(center, size, color, 0));
-  part([0, 15, 0], [46, 18, 92], PINK);
-  part([0, 32, -6], [40, 16, 46], GLASS);
-  part([0, 41, -6], [42, 3, 48], PINK);
-  // Pillars at the corners and between the side windows.
-  for (const side of [-1, 1]) for (const z of [-28, -6, 16]) part([side * 19.5, 32, z], [2, 16, 3], PINK);
-  part([0, 9, 46.5], [48, 6, 3], [200, 200, 205]);
-  part([0, 9, -46.5], [48, 6, 3], [200, 200, 205]);
-  for (const side of [-1, 1]) {
-    part([side * 15, 17, 46.2], [9, 5, 1.5], [255, 230, 90]);
-    part([side * 16, 17, -46.2], [8, 5, 1.5], [230, 30, 30]);
-    for (const z of [-29, 29]) part([side * 22, 8, z], [7, 16, 17], TIRE);
+  for (let i = 0; i < SEDAN_TRIANGLES.length; i += 4) {
+    const [a, b, c] = [corner(SEDAN_TRIANGLES[i]!), corner(SEDAN_TRIANGLES[i + 1]!), corner(SEDAN_TRIANGLES[i + 2]!)];
+    const color = SEDAN_TRIANGLES[i + 3]! * 3;
+    const [ab, ac] = [[b[0] - a[0], b[1] - a[1], b[2] - a[2]], [c[0] - a[0], c[1] - a[1], c[2] - a[2]]] as [Vec, Vec];
+    faces.push({
+      corners: [a, b, c],
+      normal: normalize([ab[1] * ac[2] - ab[2] * ac[1], ab[2] * ac[0] - ab[0] * ac[2], ab[0] * ac[1] - ab[1] * ac[0]]),
+      color: [SEDAN_COLORS[color]!, SEDAN_COLORS[color + 1]!, SEDAN_COLORS[color + 2]!],
+    });
   }
   return faces;
 })();

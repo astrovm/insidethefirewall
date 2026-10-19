@@ -171,10 +171,6 @@ export const ESCAPE_STUCK = 1.5;
 export const THIRD_IN = 1.6;
 export const THIRD_TIME = 15;
 export const THIRD_OUT = 0.6;
-/** The 3D floor: as wide as the stage, and this deep. */
-export const THIRD_DEPTH = 600;
-/** How far the player can go to each side in 3D. */
-export const THIRD_SIDE = 240;
 /** Walking speed in 3D, the same every way, diagonals too. */
 const THIRD_SPEED = 300;
 /** How fast the player turns to face where they walk, in radians a second. */
@@ -201,10 +197,6 @@ const CAR_STEER = 2.6;
 const CAR_STEER_SPEED = 150;
 /** How far the car reaches from its middle, for running into things. */
 const CAR_RADIUS = 34;
-/** The car can drive over the whole floor, out to here. */
-export const DRIVE_SIDE = 520;
-export const DRIVE_NEAR = -200;
-export const DRIVE_FAR = 1100;
 /** The shapes standing on the floor, which the car bumps off: where, and how wide. */
 export const THIRD_PROPS = [
   { x: -340, z: 660, r: 64 },
@@ -697,9 +689,12 @@ export class Game {
   private respawnThirdVirus(): void {
     const third = this.third!;
     const p = third.player;
-    // Ahead of the player, far enough to see it coming.
-    const z = Math.min(DRIVE_FAR + 200, Math.max(THIRD_DEPTH, p.z + 480));
-    Object.assign(third.virus, { x: p.x + this.randomInt(-150, 150), y: 120, z, warning: this.aimWarning() });
+    // Ahead of where the camera looks, far enough to see it coming.
+    const heading = third.car.driving ? third.car.heading : 0;
+    const [ahead, aside] = [480, this.randomInt(-150, 150)];
+    const x = p.x + Math.sin(heading) * ahead + Math.cos(heading) * aside;
+    const z = p.z + Math.cos(heading) * ahead - Math.sin(heading) * aside;
+    Object.assign(third.virus, { x, y: 120, z, warning: this.aimWarning() });
   }
 
   /** The 3D world: diving in, moving around on the floor and dodging the virus, then back to the room. */
@@ -738,8 +733,7 @@ export class Game {
     };
     p.vx = approach(p.vx, (across / length) * THIRD_SPEED);
     p.vz = approach(p.vz, (ahead / length) * THIRD_SPEED);
-    const x = Math.max(-THIRD_SIDE, Math.min(THIRD_SIDE, p.x + p.vx * DT));
-    const z = Math.max(20, Math.min(THIRD_DEPTH - 40, p.z + p.vz * DT));
+    const [x, z] = [p.x + p.vx * DT, p.z + p.vz * DT];
     p.step += Math.hypot(x - p.x, z - p.z);
     [p.x, p.z] = [x, z];
     const moving = across !== 0 || ahead !== 0;
@@ -764,7 +758,7 @@ export class Game {
     this.events.push({ type: "drive" });
   }
 
-  /** Driving Homer's car: speeding up, braking, steering, and bumping off the edge and the shapes. */
+  /** Driving Homer's car: speeding up, braking, steering, and bumping off the shapes. */
   private drive(input: Input): void {
     const { car, player } = this.third!;
     const throttle = Number(input.jump) - Number(input.down);
@@ -778,9 +772,6 @@ export class Game {
     let x = car.x + Math.sin(car.heading) * car.speed * DT;
     let z = car.z + Math.cos(car.heading) * car.speed * DT;
     let bumped = false;
-    const inside = (value: number, low: number, high: number) => Math.max(low, Math.min(high, value));
-    const [keptX, keptZ] = [inside(x, -DRIVE_SIDE, DRIVE_SIDE), inside(z, DRIVE_NEAR, DRIVE_FAR)];
-    if (keptX !== x || keptZ !== z) [x, z, bumped] = [keptX, keptZ, true];
     for (const prop of THIRD_PROPS) {
       const distance = Math.hypot(x - prop.x, z - prop.z);
       const closest = prop.r + CAR_RADIUS;
@@ -834,7 +825,8 @@ export class Game {
         this.respawnThirdVirus();
         return;
       }
-      if (v.z < p.z - 300 || Math.abs(v.x - p.x) > 400 || v.y < -20) {
+      // Flew past the player.
+      if (Math.hypot(v.x - p.x, v.z - p.z) > 650 || v.y < -20) {
         this.respawnThirdVirus();
         return;
       }
