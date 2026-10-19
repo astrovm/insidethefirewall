@@ -533,8 +533,10 @@ async function main(): Promise<void> {
       else if (action === "menu") toTitle();
     });
   }
+  // Inside another site, like xp, the game's window has its own full screen button.
   for (const button of document.querySelectorAll<HTMLButtonElement>("[data-fullscreen]")) {
-    button.addEventListener("click", () => toggleFullscreen());
+    if (embedded) button.remove();
+    else button.addEventListener("click", () => toggleFullscreen());
   }
 
   // Cheats, for trying things out, with ?cheats in the address. The dev server adds it. ` hides them.
@@ -580,7 +582,7 @@ async function main(): Promise<void> {
       doCheat(cheat);
       return;
     }
-    if (key === "f") return toggleFullscreen();
+    if (key === "f" && !embedded) return toggleFullscreen();
     if (game.phase === "title") {
       if ((key === " " || key === "Enter") && !onButton) {
         event.preventDefault();
