@@ -18,7 +18,6 @@ The penguin, an extra heart, and the power-ups take turns: something shows up ev
 Power-ups and surprises pay tribute to other games:
 
 - **Speed shoes**, like Sonic's, make you faster, and the music too.
-- The **gravity gun** from Half-Life 2 catches the virus when it gets close and fires it back at the monitor.
 - The **portal gun** puts a portal on each wall. Walk into one and come out of the other, like in Portal. The virus can go through too.
 - The **bonus round** is Breakout: you're the paddle, the virus is the ball, and the floor's bricks float up. Every 8 bricks give a heart, and breaking them all fills your hearts.
 - The red pill from The Matrix, and a Homer³ 3D world inside the monitor. The floor goes on forever, with new shapes every 1600 units and roads along their edges. You become yourself as a Simpsons character, yellow skin and all, with brown hair, a blue hoodie, a backpack and jeans, moving with Hit & Run's moves: standing, walking, running, jumping, kicking, falling and flailing. The virus turns into a smooth cartoon version of its pixel art. Homer's pink Family Sedan is parked there, the game's own model and textures from Hit & Run. Walk into it to sit at the wheel and run the virus over. It plays like Hit & Run too:

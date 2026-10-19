@@ -44,7 +44,6 @@ const powerUpMessages: Record<PowerUpKind, (seconds: number) => string> = {
   freeze: (seconds) => `Virus frozen for ${seconds} seconds. Touch it to break it.`,
   pill: (seconds) => `Red pill for ${seconds} seconds. The room is code, and time slows down when the virus is close.`,
   shoes: (seconds) => `Speed shoes for ${seconds} seconds`,
-  gravity: (seconds) => `Gravity gun for ${seconds} seconds. It catches the virus when it gets close and fires it back.`,
   portal: (seconds) =>
     `Portal gun for ${seconds} seconds. Walk into a wall to come out of the other one. The virus can go through too.`,
   ball: () => `Bonus round! You're the paddle. Keep the virus bouncing. Every ${BRICKS_PER_HEART} bricks give a heart.`,
@@ -58,7 +57,6 @@ const grabIcons: Record<Grab, { file: string; name: string }> = {
   freeze: { file: "freeze.svg", name: "Freezes" },
   pill: { file: "pill.svg", name: "Red pills" },
   shoes: { file: "shoes.svg", name: "Speed shoes" },
-  gravity: { file: "gravity.svg", name: "Gravity guns" },
   portal: { file: "portal.svg", name: "Portal guns" },
   ball: { file: "ball.svg", name: "Bonus rounds" },
 };
@@ -362,10 +360,6 @@ async function main(): Promise<void> {
         break;
       case "shatter":
         audio.synth("shatter");
-        break;
-      case "catch":
-      case "fire":
-        audio.synth("zap");
         break;
       case "portal":
         audio.synth("portal");

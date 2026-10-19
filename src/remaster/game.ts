@@ -94,10 +94,10 @@ const PICKUP_LEFTMOST = -120;
 const PICKUP_RIGHTMOST = 260;
 /** A penguin grabbed with full hearts gives a short shield instead. */
 export const PENGUIN_SHIELD = 3;
-export type PowerUpKind = "jetpack" | "shield" | "freeze" | "pill" | "shoes" | "gravity" | "portal" | "ball";
+export type PowerUpKind = "jetpack" | "shield" | "freeze" | "pill" | "shoes" | "portal" | "ball";
 /** Things the player can grab. */
 export type Grab = "penguin" | PowerUpKind;
-export const POWER_UPS: PowerUpKind[] = ["jetpack", "shield", "freeze", "pill", "shoes", "gravity", "portal", "ball"];
+export const POWER_UPS: PowerUpKind[] = ["jetpack", "shield", "freeze", "pill", "shoes", "portal", "ball"];
 /**
  * Seconds each power-up lasts. A shield also ends when it blocks a hit, and the bonus round when the ball is lost or every brick is broken.
  */
@@ -107,19 +107,11 @@ export const POWER_UP_TIME: Record<PowerUpKind, number> = {
   freeze: 4,
   pill: 8,
   shoes: 8,
-  gravity: 10,
   portal: 10,
   ball: 20,
 };
 /** Speed shoes, like Sonic's: this much faster. */
 export const SHOES_SPEED = 1.6;
-/**
- * The gravity gun catches the flying virus this close to the player, holds it
- * for a moment, then fires it back at the monitor, where it breaks.
- */
-const GRAVITY_RANGE = 60;
-export const GRAVITY_HOLD = 0.35;
-const GRAVITY_FIRE_SPEED = 900;
 /** The portal gun puts a portal on each wall, this far from the middle, over the floor. */
 export const PORTAL_X = 234;
 export const PORTAL_BOTTOM = GROUND_Y - 45;
@@ -421,8 +413,6 @@ export type GameEvent =
   | { type: "escape"; x: number; y: number }
   | { type: "dive" }
   | { type: "shatter"; x: number; y: number }
-  | { type: "catch" }
-  | { type: "fire" }
   | { type: "portal"; x: number; y: number }
   | { type: "breakout" }
   | { type: "brick"; x: number; y: number; heart: boolean }
@@ -562,10 +552,6 @@ export class Game {
   sinceThird = Infinity;
   /** How fast time goes: slower in bullet time. */
   timeScale = 1;
-  /** Seconds the gravity gun has held the virus, or null when it isn't holding it. */
-  caught: number | null = null;
-  /** The gravity gun fired the virus, and it's flying back at the monitor. */
-  thrown = false;
   /** The virus went through a portal on this flight. */
   private ported = false;
   /** The bonus round, while it's on. */
@@ -652,8 +638,6 @@ export class Game {
     this.flying = false;
     this.third = null;
     this.breakout = null;
-    this.caught = null;
-    this.thrown = false;
     this.ported = false;
     this.sinceThird = Infinity;
     this.timeScale = 1;
@@ -1314,8 +1298,6 @@ export class Game {
 
   /** Back in the monitor, about to fly out. */
   private respawnVirus(): void {
-    this.caught = null;
-    this.thrown = false;
     this.ported = false;
     this.virus.setXY(VIRUS_SPAWN.x, VIRUS_SPAWN.y);
     this.warning = this.aimWarning();
@@ -1337,7 +1319,6 @@ export class Game {
       return;
     }
     const virus = this.virus;
-    if (this.updateGravityGun()) return;
     if (this.warning > 0) {
       if (this.warning > AIM_LOCK + 1e-9) this.target = { x: this.player.x, y: this.player.y };
       this.warning -= DT;
@@ -1371,45 +1352,6 @@ export class Game {
         return;
       }
     }
-  }
-
-  /**
-   * The gravity gun: catches the flying virus when it comes close, holds it in
-   * front of the player, then fires it back at the monitor, where it breaks.
-   * Says whether it has the virus, so it doesn't fly as usual.
-   */
-  private updateGravityGun(): boolean {
-    const { virus, player, monitor } = this;
-    if (this.thrown) {
-      const distance = GRAVITY_FIRE_SPEED * DT;
-      const steps = Math.ceil(distance / VIRUS_STEP);
-      for (let i = 0; i < steps; i++) {
-        virus.move(distance / steps);
-        if (virus.isTouching(monitor) || virus.isTouchingEdge()) {
-          this.shatter(virus.x, virus.y, () => this.respawnVirus());
-          return true;
-        }
-      }
-      return true;
-    }
-    if (this.caught !== null) {
-      this.caught += DT;
-      virus.setXY(player.x + player.flipX * 48, player.y + 6);
-      if (this.caught >= GRAVITY_HOLD - 1e-9) {
-        this.caught = null;
-        this.thrown = true;
-        virus.pointTowards(monitor.x, monitor.y);
-        this.events.push({ type: "fire" });
-      }
-      return true;
-    }
-    if (this.powers.gravity > 0 && this.warning === 0 && gap(virus.bounds(), player.bounds()) <= GRAVITY_RANGE) {
-      this.caught = 0;
-      this.closeCall = false;
-      this.events.push({ type: "catch" });
-      return true;
-    }
-    return false;
   }
 
   /** Takes a heart if this touches the player, and says whether it did. */
@@ -1521,8 +1463,6 @@ export class Game {
     this.powers.jetpack = 0;
     this.vx = this.vy = 0;
     this.onGround = true;
-    this.caught = null;
-    this.thrown = false;
     player.visible = false;
     virus.visible = false;
     this.monitor.visible = false;
@@ -1694,8 +1634,6 @@ export class Game {
     this.flying = false;
     this.third = null;
     this.breakout = null;
-    this.caught = null;
-    this.thrown = false;
     this.timeScale = 1;
     this.endEscape();
     this.phase = "over";
