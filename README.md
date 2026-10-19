@@ -17,9 +17,9 @@ Power-ups and surprises pay tribute to other games:
 
 - **Speed shoes**, like Sonic's, make you faster, and the music too.
 - The **gravity gun** from Half-Life 2 catches the virus when it gets close and fires it back at the monitor. Dropping to your last heart, the HEV suit says "Major fracture detected".
-- The **portal gun** puts a portal on each wall. Walk into one and come out of the other, like in Portal. The virus can go through too. The game over screen may tell you the cake is a lie.
+- The **portal gun** puts a portal on each wall. Walk into one and come out of the other, like in Portal. The virus can go through too.
 - The **bonus round** is Breakout: you're the paddle, the virus is the ball, and the floor's bricks float up. Every 8 bricks give a heart, and breaking them all fills your hearts.
-- The red pill from The Matrix, and a Homer³ 3D world inside the monitor. The floor goes on forever. Homer's pink Family Sedan is parked there, the game's own model from The Simpsons: Hit & Run. Walk into it to drive, and run the virus over.
+- The red pill from The Matrix, and a Homer³ 3D world inside the monitor. The floor goes on forever. Homer's pink Family Sedan is parked there, the game's own model and textures from The Simpsons: Hit & Run. Walk into it to sit at the wheel, drive, and run the virus over.
 
 The music is the 2013 song, "Flight" by Tristam, then "Nightcore - How Do You Do" (Nightcore Lab NCL), "Nightcore - Bad boy" (AliceBloodRabbit) and "Meg & Dia - Monster (Nightcore Dubstep Remix)" (theHimeyukichan), from YouTube. Each game starts with the 2013 song, then plays the rest in a random order, and each song fades into the next. Its title shows at the bottom when it starts.
 

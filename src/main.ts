@@ -423,8 +423,6 @@ async function main(): Promise<void> {
         $("over-best").textContent = best.label;
         $("new-best").hidden = !isBest;
         showGrabs(game.grabbed);
-        // GLaDOS promised cake, sometimes.
-        $("over-cake").hidden = Math.random() >= 0.25;
         $("share").textContent = "Share";
         showBest();
         showMenus();

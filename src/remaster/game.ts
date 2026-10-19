@@ -171,7 +171,7 @@ export const THIRD_CHEST = 40;
  * right steer. It runs the virus over, and bumps off the shapes.
  */
 export const PARKED = { x: 150, z: 280 } as const;
-const GET_IN = 46;
+const GET_IN = 80;
 const CAR_TOP_SPEED = 480;
 const CAR_REVERSE = 180;
 const CAR_ACCELERATION = 420;
@@ -182,7 +182,7 @@ const CAR_COAST = 220;
 const CAR_STEER = 2.6;
 const CAR_STEER_SPEED = 150;
 /** How far the car reaches from its middle, for running into things. */
-const CAR_RADIUS = 34;
+const CAR_RADIUS = 58;
 /** The shapes standing on the floor, which the car bumps off: where, and how wide. */
 export const THIRD_PROPS = [
   { x: -340, z: 660, r: 64 },

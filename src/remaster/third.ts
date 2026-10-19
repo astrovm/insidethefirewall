@@ -16,7 +16,8 @@ import {
   type ThirdDimension,
 } from "./game.ts";
 import type { View } from "./render.ts";
-import { SEDAN_COLORS, SEDAN_CORNERS, SEDAN_TRIANGLES } from "./sedan.ts";
+import { DRIVER_SEAT, SEDAN_SCALE, SedanRenderer } from "./sedan.ts";
+import { SEDAN_MATERIALS, SEDAN_PARTS } from "./sedan-model.ts";
 
 /** Diving into the screen: the camera zooms in this long, then the player falls down the grid tunnel. */
 export const DIVE_ZOOM = 0.7;
@@ -114,6 +115,8 @@ const GRID = 50;
 const GRID_REACH = 1500;
 
 export class ThirdRenderer {
+  /** Draws Homer's car with its textures, where WebGL works. */
+  private readonly sedan = SedanRenderer.create();
   private readonly figures = new Map<Costume, Figure>();
   /** Where the camera looks, catching up with the player. */
   private follow: { third: ThirdDimension; time: number; x: number; z: number; yaw: number } | null = null;
@@ -199,9 +202,9 @@ export class ThirdRenderer {
     const swoop = ease(Math.min(1, t / 1.4));
     const yaw = lerp(1.3, follow.yaw, swoop);
     const target: Vec = car.driving
-      ? [follow.x + Math.sin(follow.yaw) * 70, 30, follow.z + Math.cos(follow.yaw) * 70]
+      ? [follow.x + Math.sin(follow.yaw) * 100, 45, follow.z + Math.cos(follow.yaw) * 100]
       : [follow.x, 38, follow.z + 70];
-    const camera = new Camera(view, target, lerp(1300, car.driving ? 320 : 360, swoop), yaw, lerp(1.05, car.driving ? 0.32 : 0.4, swoop), 360);
+    const camera = new Camera(view, target, lerp(1300, car.driving ? 480 : 360, swoop), yaw, lerp(1.05, car.driving ? 0.32 : 0.4, swoop), 360);
 
     // The sky: black, a little blue near the horizon, with stars.
     ctx.fillStyle = "#000";
@@ -245,15 +248,16 @@ export class ThirdRenderer {
     // Sucked into the black hole at the end: spinning, shrinking and sinking.
     const sucked = Math.max(0, Math.min(1, end / THIRD_OUT));
     const playerAlpha = invincibleBlink(game);
-    // Homer's car, parked or driven, sucked in with the player at the end.
+    // Homer's car, parked or driven, sucked in at the end with the player at the wheel.
     if (sucked < 1) {
       const sink = car.driving ? sucked : 0;
-      this.addShadow(things, camera, [car.x, 0, car.z], 40 * (1 - sink));
-      if (!car.driving || playerAlpha === 1) {
-        this.addMesh(things, camera, placeFaces(CAR, [car.x, -sink * 60, car.z], car.heading + sink * 14, 1 - sink));
-      }
+      const place = { at: [car.x, -sink * 60, car.z] as Vec, heading: car.heading + sink * 14, scale: 1 - sink };
+      this.addShadow(things, camera, [car.x, 0, car.z], 72 * (1 - sink));
+      // The player sits on the driver's seat, and blinks by hiding.
+      const driver = car.driving && playerAlpha === 1 ? this.driverFaces(game, place) : [];
+      this.addCar(things, camera, place, driver);
     }
-    // Blinks by hiding: a see-through body would show its insides. In the car, it's inside.
+    // Blinks by hiding: a see-through body would show its insides.
     if (sucked < 1 && playerAlpha === 1 && !car.driving) {
       this.addShadow(things, camera, [p.x, 0, p.z], 22 * (1 - sucked));
       this.addBody(things, camera, game, [p.x, -sucked * 60, p.z], {
@@ -356,6 +360,34 @@ export class ThirdRenderer {
     });
   }
 
+  /** Homer's car at `place`, with `driver` in it: textured with WebGL, or flat where it doesn't work. */
+  private addCar(things: Thing[], camera: Camera, place: { at: Vec; heading: number; scale: number }, driver: Face[]): void {
+    const sedan = this.sedan;
+    if (!sedan) {
+      this.addMesh(things, camera, [...placeFaces(CAR, place.at, place.heading, place.scale), ...driver]);
+      return;
+    }
+    const middle = camera.toCamera([place.at[0], place.at[1] + 20 * place.scale, place.at[2]]);
+    const ctx = this.ctx;
+    const lit = driver.map((face) => ({ corners: face.corners, color: face.color.map((c) => c * (0.35 + 0.65 * Math.max(0, dot(face.normal, LIGHT)))) as Rgb }));
+    things.push({
+      depth: middle[2],
+      draw: () => ctx.drawImage(sedan.draw(camera, ctx.canvas, place, LIGHT, lit), 0, 0),
+    });
+  }
+
+  /** The player sitting in the driver's seat of the car at `place`, hands on the wheel. */
+  private driverFaces(game: Game, place: { at: Vec; heading: number; scale: number }): Face[] {
+    const [cos, sin] = [Math.cos(place.heading), Math.sin(place.heading)];
+    const k = SEDAN_SCALE * place.scale;
+    const [x, y, z] = DRIVER_SEAT;
+    const shrink = place.scale;
+    // The body's hips are this high above where it stands.
+    const hips = 13 * (game.player.size / 100) * shrink;
+    const at: Vec = [place.at[0] + (x * cos + z * sin) * k, place.at[1] + y * k - hips, place.at[2] + (-x * sin + z * cos) * k];
+    return this.bodyFaces(game, at, { facing: place.heading, roll: 0, shrink, stride: 0, swing: 0, sitting: true });
+  }
+
   /**
    * The player as a blocky 3D body, standing at `at`: legs and arms swing
    * with `stride`, as much as `swing` says, and it turns to `facing`.
@@ -368,6 +400,15 @@ export class ThirdRenderer {
     at: Vec,
     options: { facing: number; roll: number; shrink: number; stride: number; swing: number },
   ): void {
+    this.addMesh(things, camera, this.bodyFaces(game, at, options));
+  }
+
+  /** The faces of the body `addBody` draws. `sitting` puts its legs and arms forward, to drive. */
+  private bodyFaces(
+    game: Game,
+    at: Vec,
+    options: { facing: number; roll: number; shrink: number; stride: number; swing: number; sitting?: boolean },
+  ): Face[] {
     const s = (game.player.size / 100) * options.shrink;
     const swing = Math.sin(options.stride / 11) * 0.75 * options.swing;
     // A little bounce with each step.
@@ -381,13 +422,14 @@ export class ThirdRenderer {
       }
     };
     for (const side of [-1, 1]) {
-      const legSwing = swing * side;
+      const legSwing = options.sitting ? -Math.PI / 2 : swing * side;
+      const armSwing = options.sitting ? -1.1 : -legSwing;
       const hip: Vec = [side * 3.2, 13, 0];
       part([side * 3.2 - 2.8, 3, -3], [side * 3.2 + 2.8, 13, 3], PANTS, hip, legSwing);
       part([side * 3.2 - 3, 0, -3.5], [side * 3.2 + 3, 3, 5], SHOES, hip, legSwing);
       const shoulder: Vec = [side * 9.5, 29, 0];
-      part([side * 9.5 - 2.5, 16, -2.5], [side * 9.5 + 2.5, 30, 2.5], HOODIE, shoulder, -legSwing);
-      part([side * 9.5 - 2, 13, -2], [side * 9.5 + 2, 16, 2], SKIN, shoulder, -legSwing);
+      part([side * 9.5 - 2.5, 16, -2.5], [side * 9.5 + 2.5, 30, 2.5], HOODIE, shoulder, armSwing);
+      part([side * 9.5 - 2, 13, -2], [side * 9.5 + 2, 16, 2], SKIN, shoulder, armSwing);
       // Backpack straps, and the eyes.
       part([side * 4.5 - 1.2, 15, 4], [side * 4.5 + 1.2, 31, 4.6], STRAP);
       part([side * 3 - 1.6, 36, 6.4], [side * 3 + 1.6, 39.5, 7], WHITE);
@@ -411,7 +453,7 @@ export class ThirdRenderer {
       return [tx * rollCos - ty * rollSin, tx * rollSin + ty * rollCos + middle, tz];
     };
     const middle = options.roll === 0 ? 0 : 24;
-    const placed = faces.map((face) => ({
+    return faces.map((face) => ({
       color: face.color,
       normal: orient(face.normal, 0),
       corners: face.corners.map((c) => {
@@ -419,7 +461,6 @@ export class ThirdRenderer {
         return [at[0] + x * s, at[1] + (y + bob) * s, at[2] + z * s] as Vec;
       }),
     }));
-    this.addMesh(things, camera, placed);
   }
 
   /** A costume as a 3D figure, standing at `at`, facing the camera at the start. */
@@ -675,22 +716,20 @@ function placeFaces(faces: Face[], at: Vec, heading: number, scale: number): Fac
   }));
 }
 
-/** Homer's pink sedan, Hit & Run's own Family Sedan, pointing +z. */
-const CAR: Face[] = (() => {
-  const corner = (i: number): Vec => [SEDAN_CORNERS[i * 3]! / 2, SEDAN_CORNERS[i * 3 + 1]! / 2, SEDAN_CORNERS[i * 3 + 2]! / 2];
+/** Homer's car, flat-colored, pointing +z, for where WebGL doesn't work. */
+const CAR: Face[] = SEDAN_PARTS.flatMap(({ material, corners, triangles }) => {
+  const corner = (i: number): Vec => [corners[i * 8]! * SEDAN_SCALE, corners[i * 8 + 1]! * SEDAN_SCALE, corners[i * 8 + 2]! * SEDAN_SCALE];
   const faces: Face[] = [];
-  for (let i = 0; i < SEDAN_TRIANGLES.length; i += 4) {
-    const [a, b, c] = [corner(SEDAN_TRIANGLES[i]!), corner(SEDAN_TRIANGLES[i + 1]!), corner(SEDAN_TRIANGLES[i + 2]!)];
-    const color = SEDAN_TRIANGLES[i + 3]! * 3;
+  for (let i = 0; i < triangles.length; i += 3) {
+    const [a, b, c] = [corner(triangles[i]!), corner(triangles[i + 1]!), corner(triangles[i + 2]!)];
     const [ab, ac] = [[b[0] - a[0], b[1] - a[1], b[2] - a[2]], [c[0] - a[0], c[1] - a[1], c[2] - a[2]]] as [Vec, Vec];
-    faces.push({
-      corners: [a, b, c],
-      normal: normalize([ab[1] * ac[2] - ab[2] * ac[1], ab[2] * ac[0] - ab[0] * ac[2], ab[0] * ac[1] - ab[1] * ac[0]]),
-      color: [SEDAN_COLORS[color]!, SEDAN_COLORS[color + 1]!, SEDAN_COLORS[color + 2]!],
-    });
+    const normal = normalize([ab[1] * ac[2] - ab[2] * ac[1], ab[2] * ac[0] - ab[0] * ac[2], ab[0] * ac[1] - ab[1] * ac[0]]);
+    // Both sides, so it doesn't matter which way the triangle winds.
+    faces.push({ corners: [a, b, c], normal, color: SEDAN_MATERIALS[material]!.color });
+    faces.push({ corners: [a, c, b], normal: [-normal[0], -normal[1], -normal[2]], color: SEDAN_MATERIALS[material]!.color });
   }
   return faces;
-})();
+});
 
 /** The point where a line from behind the camera crosses into view. */
 function cut(behind: Vec, ahead: Vec): Vec {
