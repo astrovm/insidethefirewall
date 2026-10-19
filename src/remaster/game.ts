@@ -190,6 +190,12 @@ const THIRD_TURN = 14;
 const THIRD_HIT = 34;
 /** Where the player's chest is in 3D, for the virus to aim at. */
 export const THIRD_CHEST = 40;
+/** Homer on foot: how far round him things stop, the highest step he walks up, and how fast he falls, in m/s². */
+export const THIRD_RADIUS = 0.4 * METER;
+export const THIRD_STEP = 0.35 * METER;
+const THIRD_GRAVITY = 16 * METER;
+/** How high the cars are, for the virus to fly over. */
+const CAR_HEIGHT = 1.4 * METER;
 /**
  * Homer's pink sedan, from The Simpsons: Hit & Run, is parked in the 3D world.
  * Walking into it gets in. Up speeds up, down brakes and backs up, left and
@@ -284,8 +290,12 @@ export function shapesNear(x: number, z: number): readonly { x: number; z: numbe
 export interface ThirdDimension {
   /** Seconds since diving in. */
   time: number;
-  /** `facing` is the way the player looks: 0 away from the camera, π towards it. `step` is how far they've walked, for the stride. */
-  player: { x: number; z: number; vx: number; vz: number; facing: number; step: number };
+  /**
+   * `facing` is the way the player looks: 0 away from the camera, π towards
+   * it. `step` is how far they've walked, for the stride. `y` is how high
+   * their feet are, up a ramp or falling off it.
+   */
+  player: { x: number; y: number; z: number; vx: number; vy: number; vz: number; facing: number; step: number };
   virus: { x: number; y: number; z: number; dx: number; dy: number; dz: number; warning: number };
   /** `heading` is the way it points, like the player's `facing`. */
   car: Car;
@@ -296,6 +306,8 @@ export interface ThirdDimension {
   /** Sparks where cars crashed, and explosions, with when they happened. */
   sparks: { x: number; y: number; z: number; time: number; power: number }[];
   blasts: { x: number; z: number; time: number }[];
+  /** Where the virus splatted on something. */
+  splats: { x: number; y: number; z: number; time: number }[];
 }
 
 /** The bonus round. */
@@ -366,6 +378,7 @@ export type GameEvent =
   | { type: "breakoutEnd"; cleared: boolean }
   | { type: "drive" }
   | { type: "smash" }
+  | { type: "splat" }
   | { type: "crash"; power: number }
   | { type: "explode" }
   | { type: "coin" }
@@ -770,13 +783,14 @@ export class Game {
     this.closeCall = false;
     this.third = {
       time: 0,
-      player: { x: 0, z: 120, vx: 0, vz: 0, facing: Math.PI, step: 0 },
+      player: { x: 0, y: 0, z: 120, vx: 0, vy: 0, vz: 0, facing: Math.PI, step: 0 },
       virus: { x: 0, y: 0, z: 0, dx: 0, dy: 0, dz: 0, warning: 0 },
       car: parkedCar(PARKED.x, PARKED.z),
       traffic: [],
       coins: new Map(),
       sparks: [],
       blasts: [],
+      splats: [],
     };
     this.respawnThirdVirus();
     this.events.push({ type: "dive" });
@@ -790,7 +804,9 @@ export class Game {
     const [ahead, aside] = [480, this.randomInt(-150, 150)];
     const x = p.x + Math.sin(heading) * ahead + Math.cos(heading) * aside;
     const z = p.z + Math.cos(heading) * ahead - Math.sin(heading) * aside;
-    Object.assign(third.virus, { x, y: 120, z, warning: this.aimWarning() });
+    // Over whatever shape is there.
+    const y = Math.max(120, ...shapesNear(x, z).filter((s) => Math.hypot(x - s.x, z - s.z) < s.r + 20).map((s) => s.r * 2 + 20));
+    Object.assign(third.virus, { x, y, z, warning: this.aimWarning() });
   }
 
   /** The 3D world: diving in, moving around on the floor and dodging the virus, then back to the room. */
@@ -833,9 +849,7 @@ export class Game {
     };
     p.vx = approach(p.vx, (across / length) * THIRD_SPEED);
     p.vz = approach(p.vz, (ahead / length) * THIRD_SPEED);
-    const [x, z] = [p.x + p.vx * DT, p.z + p.vz * DT];
-    p.step += Math.hypot(x - p.x, z - p.z);
-    [p.x, p.z] = [x, z];
+    this.walkTo(p.x + p.vx * DT, p.z + p.vz * DT);
     const moving = across !== 0 || ahead !== 0;
     if (moving) {
       // Turn the short way round.
@@ -850,15 +864,60 @@ export class Game {
     // Cars push the player out of the way.
     for (const other of [third.car, ...third.traffic.map((t) => t.car)]) this.shove(other);
     const car = third.car;
-    if (!car.husk && car.wrecked < 0 && Math.hypot(p.x - car.x, p.z - car.z) < GET_IN) this.getInCar();
+    if (!car.husk && car.wrecked < 0 && Math.abs(p.y - car.y) < THIRD_STEP && Math.hypot(p.x - car.x, p.z - car.z) < GET_IN) this.getInCar();
     this.grabCoins();
     this.moveThirdVirus();
+  }
+
+  /**
+   * Walks the player on foot toward `x`, `z`: round the shapes, up the ramps'
+   * slopes but not into their walls, sliding along what stops them, and
+   * falling off the top.
+   */
+  private walkTo(x: number, z: number): void {
+    const p = this.third!.player;
+    // Round his middle and his edges, so he doesn't stand halfway into a wall.
+    const edge = THIRD_RADIUS * Math.SQRT1_2;
+    const blocked = (x: number, z: number) =>
+      [[0, 0], [edge, edge], [edge, -edge], [-edge, edge], [-edge, -edge]].some(([dx, dz]) => ground(x + dx!, z + dz!) > p.y + THIRD_STEP);
+    if (blocked(x, z)) {
+      if (!blocked(x, p.z)) z = p.z;
+      else if (!blocked(p.x, z)) x = p.x;
+      else [x, z] = [p.x, p.z];
+    }
+    for (const shape of shapesNear(x, z)) {
+      if (p.y >= shape.r * 2) continue;
+      const [dx, dz] = [x - shape.x, z - shape.z];
+      const [distance, reach] = [Math.hypot(dx, dz), shape.r + THIRD_RADIUS];
+      if (distance >= reach) continue;
+      const [ux, uz] = distance > 0 ? [dx / distance, dz / distance] : [0, -1];
+      // Pushed out, but not into a ramp's wall.
+      if (!blocked(shape.x + ux * reach, shape.z + uz * reach)) [x, z] = [shape.x + ux * reach, shape.z + uz * reach];
+      else [x, z] = [p.x, p.z];
+    }
+    p.step += Math.hypot(x - p.x, z - p.z);
+    [p.x, p.z] = [x, z];
+    this.fall();
+  }
+
+  /** Standing on the floor or a ramp, stepping down its slope, or falling. */
+  private fall(): void {
+    const p = this.third!.player;
+    const floor = ground(p.x, p.z);
+    if (p.vy === 0 && p.y - floor <= THIRD_STEP) p.y = floor;
+    if (p.y <= floor) {
+      [p.y, p.vy] = [floor, 0];
+      return;
+    }
+    p.vy -= THIRD_GRAVITY * DT;
+    p.y += p.vy * DT;
+    if (p.y <= floor) [p.y, p.vy] = [floor, 0];
   }
 
   private getInCar(): void {
     const { car, player } = this.third!;
     car.driving = true;
-    [player.x, player.z, player.vx, player.vz] = [car.x, car.z, 0, 0];
+    [player.x, player.z, player.vx, player.vz, player.vy] = [car.x, car.z, 0, 0, 0];
     this.events.push({ type: "drive" });
   }
 
@@ -873,7 +932,7 @@ export class Game {
       this.getOut();
       return;
     }
-    [player.x, player.z, player.facing] = [car.x, car.z, car.heading];
+    [player.x, player.y, player.z, player.facing] = [car.x, car.y, car.z, car.heading];
     player.step += Math.abs(car.speed) * DT;
   }
 
@@ -889,7 +948,7 @@ export class Game {
     const { car, player } = this.third!;
     car.driving = false;
     const [x, z] = [car.x - Math.cos(car.heading) * (HALF_WIDTH + 40), car.z + Math.sin(car.heading) * (HALF_WIDTH + 40)];
-    Object.assign(player, { x, z, vx: 0, vz: 0, facing: car.heading });
+    Object.assign(player, { x, y: Math.max(car.y, ground(x, z)), z, vx: 0, vy: 0, vz: 0, facing: car.heading });
     this.player.setCostume("normal");
   }
 
@@ -970,6 +1029,7 @@ export class Game {
     while (third.traffic.length < TRAFFIC_COUNT) third.traffic.push(spawnTraffic(p.x, p.z, this.random));
     third.sparks = third.sparks.filter((s) => third.time - s.time < SPARKS_LAST);
     third.blasts = third.blasts.filter((b) => third.time - b.time < BLAST_LAST);
+    third.splats = third.splats.filter((s) => third.time - s.time < SPARKS_LAST);
   }
 
   /** A car pushing the player on foot out of its way. */
@@ -995,7 +1055,7 @@ export class Game {
   private grabCoins(): void {
     const third = this.third!;
     const { car, player: p } = third;
-    const [x, y, z] = car.driving ? [car.x, car.y + 0.8 * METER, car.z] : [p.x, THIRD_CHEST, p.z];
+    const [x, y, z] = car.driving ? [car.x, car.y + 0.8 * METER, car.z] : [p.x, p.y + THIRD_CHEST, p.z];
     for (const coin of coinsNear(x, z)) {
       if (third.coins.has(coin.id) || !grabs(coin, x, y, z, car.driving)) continue;
       third.coins.set(coin.id, third.time);
@@ -1007,12 +1067,12 @@ export class Game {
   private moveThirdVirus(): void {
     const { player: p, virus: v, car } = this.third!;
     if (this.powers.freeze > 0) {
-      if (Math.hypot(v.x - p.x, v.y - THIRD_CHEST, v.z - p.z) < THIRD_HIT) this.shatter(v.x, v.y, () => this.respawnThirdVirus());
+      if (Math.hypot(v.x - p.x, v.y - p.y - THIRD_CHEST, v.z - p.z) < THIRD_HIT) this.shatter(v.x, v.y, () => this.respawnThirdVirus());
       return;
     }
     if (v.warning > 0) {
       const aim = () => {
-        const [dx, dy, dz] = [p.x - v.x, THIRD_CHEST - v.y, p.z - v.z];
+        const [dx, dy, dz] = [p.x - v.x, p.y + THIRD_CHEST - v.y, p.z - v.z];
         const length = Math.hypot(dx, dy, dz) || 1;
         Object.assign(v, { dx: dx / length, dy: dy / length, dz: dz / length });
       };
@@ -1036,8 +1096,16 @@ export class Game {
         this.respawnThirdVirus();
         return;
       }
-      if (this.invincible === 0 && Math.hypot(v.x - p.x, v.y - THIRD_CHEST, v.z - p.z) < THIRD_HIT) {
+      if (this.invincible === 0 && Math.hypot(v.x - p.x, v.y - p.y - THIRD_CHEST, v.z - p.z) < THIRD_HIT) {
         this.takeHit();
+        this.respawnThirdVirus();
+        return;
+      }
+      // It splats on the shapes, the ramps and the cars it flies into.
+      if (this.virusHits(v.x, v.y, v.z)) {
+        this.closeCall = false;
+        this.third!.splats.push({ x: v.x, y: v.y, z: v.z, time: this.third!.time });
+        this.events.push({ type: "splat" });
         this.respawnThirdVirus();
         return;
       }
@@ -1047,6 +1115,21 @@ export class Game {
         return;
       }
     }
+  }
+
+  /** Whether the virus at `x`, `y`, `z` is inside a shape, a ramp or a car, other than the one the player drives. */
+  private virusHits(x: number, y: number, z: number): boolean {
+    const third = this.third!;
+    if (y < ground(x, z)) return true;
+    for (const shape of shapesNear(x, z)) if (y < shape.r * 2 && Math.hypot(x - shape.x, z - shape.z) < shape.r) return true;
+    const cars = [...third.traffic.map((t) => t.car), ...(third.car.driving ? [] : [third.car])];
+    for (const car of cars) {
+      if (y < car.y || y > car.y + CAR_HEIGHT) continue;
+      const [sin, cos] = [Math.sin(car.heading), Math.cos(car.heading)];
+      const [dx, dz] = [x - car.x, z - car.z];
+      if (Math.abs(dx * cos - dz * sin) < HALF_WIDTH && Math.abs(dx * sin + dz * cos + CENTER_AHEAD) < HALF_LENGTH) return true;
+    }
+    return false;
   }
 
   /** Breaks the frozen virus into pieces, which ends the freeze, and brings a new one. */

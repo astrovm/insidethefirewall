@@ -1,12 +1,12 @@
 // The 3D world inside the monitor, like Homer³ in The Simpsons: a green neon
 // grid under a starry black sky, solid shapes, floating equations and the
-// X Y Z signpost. The player becomes a blocky 3D body in their pixel art's
-// colors that walks and turns, and the virus a chunky figure built from its
-// pixel art. Homer's pink sedan from The Simpsons: Hit & Run is parked there,
-// to drive, with roads, traffic, ramps and coins around, and the game's own
-// chase camera, skid marks, smoke and explosions. Drawn on the 2D canvas with
-// a small software 3D renderer: shapes are flat-shaded faces, sorted back to
-// front.
+// X Y Z signpost. The player becomes Homer, as he looks and moves in The
+// Simpsons: Hit & Run, and the virus a smooth cartoon version of its pixel
+// art. Homer's pink sedan is parked there, to drive, with roads, traffic,
+// ramps and coins around, a chase camera, skid marks, smoke and explosions.
+// Drawn on the 2D canvas with a small software 3D renderer: shapes are
+// flat-shaded faces, sorted back to front. Homer, his car and the virus are
+// drawn with WebGL and pasted in, where it works.
 
 import { STAGE_HEIGHT, STAGE_WIDTH, type Costume } from "../engine/sprite.ts";
 import type { CostumeImages } from "../render.ts";
@@ -25,8 +25,10 @@ import {
 } from "./game.ts";
 import type { View } from "./render.ts";
 import { carDamage, carPoint, CENTER_AHEAD, METER, WHEELS, type Car } from "./car.ts";
-import { DRIVER_SEAT, SEDAN_SCALE, SedanRenderer, type SedanPlace } from "./sedan.ts";
-import { cellCoins, cellRamp, LANE, ROAD_HALF_WIDTH, roadX, roadZ, TRAFFIC_HIT_POINTS, type Ramp } from "./streets.ts";
+import { Homer, HomerMoves, type HomerData, type Move } from "./homer.ts";
+import { DRIVER_SEAT, SEDAN_SCALE, SedanRenderer, type ColoredFace, type HomerPlace, type SedanPlace, type SedanScene } from "./sedan.ts";
+import { cellCoins, cellRamp, ground, LANE, ROAD_HALF_WIDTH, roadX, roadZ, TRAFFIC_HIT_POINTS, type Ramp } from "./streets.ts";
+import { VIRUS_HEIGHT, virusMesh } from "./virus.ts";
 import { SEDAN_MATERIALS, SEDAN_PARTS } from "./sedan-model.ts";
 
 /** Diving into the screen: the camera zooms in this long, then the player falls down the grid tunnel. */
@@ -47,11 +49,6 @@ interface Face {
 interface Thing {
   depth: number;
   draw: () => void;
-}
-
-/** A pixel art costume as a 3D figure: each pixel a block, `depth` blocks deep. In costume units, standing on y 0. */
-interface Figure {
-  faces: Face[];
 }
 
 const LIGHT = normalize([-0.45, 0.8, -0.4]);
@@ -147,6 +144,12 @@ const MOST_PARTICLES = 450;
 /** A coin's size, and how fast it spins, as in Hit & Run. */
 const COIN_RADIUS = 0.35 * METER;
 const COIN_SPIN = 3;
+/** How fast Homer walks and runs when his moves play at their own speed, and the fastest he walks. */
+const HOMER_WALK = 1.4 * METER;
+const HOMER_RUN = 4.2 * METER;
+const HOMER_WALKS_UP_TO = 2.6 * METER;
+/** The virus's colors when frozen. */
+const ICE: Rgb = [150, 225, 255];
 
 /** One step of the chase camera's cubic easing: eases `value` toward `wanted`, keeping its rate, `part` of the way. */
 function motionCubic(value: number, rate: number, wanted: number, part: number): [number, number] {
@@ -187,9 +190,14 @@ interface Particle {
 }
 
 export class ThirdRenderer {
-  /** Draws Homer's car with its textures, where WebGL works. */
+  /** Draws Homer's car and Homer with their textures, where WebGL works. */
   private readonly sedan = SedanRenderer.create();
-  private readonly figures = new Map<Costume, Figure>();
+  /** Homer, once he's loaded, posed this frame, and the move he's in. */
+  private homer: { model: Homer; positions: Float32Array; normals: Float32Array } | null = null;
+  private readonly homerMoves = new HomerMoves();
+  /** When Homer last landed, for his landing move. */
+  private landed = -Infinity;
+  private wasInAir = false;
   /** Where the camera looks, catching up with the player. */
   private follow: { third: ThirdDimension; time: number; x: number; z: number; yaw: number; focal: number; chase: Chase | null } | null = null;
   /** Skid marks on the floor, where each car's wheels were last frame, and smoke, fire and sparks. */
@@ -203,7 +211,19 @@ export class ThirdRenderer {
     private readonly ctx: CanvasRenderingContext2D,
     private readonly images: CostumeImages,
     private readonly stage: Costume,
-  ) {}
+  ) {
+    // Without WebGL, or until he loads, the player stays a blocky body.
+    const sedan = this.sedan;
+    if (!sedan) return;
+    fetch("assets/homer/homer.json")
+      .then((response) => response.json() as Promise<HomerData>)
+      .then((data) => {
+        const model = new Homer(data);
+        sedan.setHomer(model, "assets/homer");
+        this.homer = { model, positions: new Float32Array(model.corners * 3), normals: new Float32Array(model.corners * 3) };
+      })
+      .catch(() => {});
+  }
 
   draw(game: Game, third: ThirdDimension, view: View): void {
     if (third.time < THIRD_IN) this.drawTunnel(game, third.time - DIVE_ZOOM, view);
@@ -247,13 +267,12 @@ export class ThirdRenderer {
     const camera = new Camera(view, [0, 0, 0], 300, 0, 0, 360);
     const things: Thing[] = [];
     const offset = (1 - fall) * 60;
-    this.addBody(things, camera, game, [-offset + Math.sin(t * 5) * 15, offset * 0.7 - 43, -150 + 450 * fall], {
-      facing: t * 5,
-      roll: t * 7,
-      shrink: 1,
-      stride: 0,
-      swing: 1,
-    });
+    const at: Vec = [-offset + Math.sin(t * 5) * 15, offset * 0.7 - 43, -150 + 450 * fall];
+    if (this.homer) {
+      // Homer flails, falling.
+      this.poseHomer("flail", 1 / 60, 1);
+      this.addHomer(things, camera, { at: [at[0], at[1] - 15, at[2]], heading: t * 5, scale: 1, seated: false, roll: t * 7 });
+    } else this.addBody(things, camera, game, at, { facing: t * 5, roll: t * 7, shrink: 1, stride: 0, swing: 1 });
     for (const thing of things.sort((a, b) => b.depth - a.depth)) thing.draw();
   }
 
@@ -368,8 +387,11 @@ export class ThirdRenderer {
       const place = carPlace(car, sink);
       this.addCarShadow(things, camera, car, place, 1 - sink);
       // The player sits on the driver's seat, and blinks by hiding.
-      const driver = car.driving && playerAlpha === 1 ? this.driverFaces(game, place) : [];
-      this.addCar(things, camera, place, driver);
+      const driving = car.driving && playerAlpha === 1;
+      if (driving && this.homer) {
+        this.poseHomer("in_car_idle", elapsed, 1);
+        this.addCar(things, camera, place, [], true);
+      } else this.addCar(things, camera, place, driving ? this.driverFaces(game, place) : []);
     }
     // The traffic.
     for (const traffic of third.traffic) {
@@ -381,28 +403,27 @@ export class ThirdRenderer {
     this.addParticles(things, camera);
     for (const blast of third.blasts) this.addBlast(things, camera, blast, third.time - blast.time);
     // Blinks by hiding: a see-through body would show its insides.
+    if (!car.driving) this.moveHomer(game, third, elapsed);
     if (sucked < 1 && playerAlpha === 1 && !car.driving) {
-      this.addShadow(things, camera, [p.x, 0, p.z], 22 * (1 - sucked));
-      this.addBody(things, camera, game, [p.x, -sucked * 60, p.z], {
-        facing: p.facing + sucked * 14,
-        roll: 0,
-        shrink: 1 - sucked,
-        stride: p.step,
-        swing: Math.min(1, Math.hypot(p.vx, p.vz) / 150),
-      });
+      this.addShadow(things, camera, [p.x, ground(p.x, p.z), p.z], 22 * (1 - sucked));
+      if (this.homer) this.addHomer(things, camera, { at: [p.x, p.y - sucked * 60, p.z], heading: p.facing + sucked * 14, scale: 1 - sucked, seated: false });
+      else {
+        this.addBody(things, camera, game, [p.x, p.y - sucked * 60, p.z], {
+          facing: p.facing + sucked * 14,
+          roll: 0,
+          shrink: 1 - sucked,
+          stride: p.step,
+          swing: Math.min(1, Math.hypot(p.vx, p.vz) / 150),
+        });
+      }
     }
     if (end < 0) {
-      this.addShadow(things, camera, [v.x, 0, v.z], 18);
+      this.addShadow(things, camera, [v.x, ground(v.x, v.z), v.z], 18);
       const virusSize = game.virus.size / 100;
+      // It blinks while it aims, and looks where it's going.
       const blinking = v.warning > 0 && Math.floor(v.warning / 0.08) % 2 === 1;
-      this.addFigure(things, camera, game.virus.currentCostume, virusSize, [v.x, v.y - (game.virus.currentCostume.height * virusSize) / 2, v.z], {
-        flip: v.dx < 0 ? -1 : 1,
-        spin: t * 2.5,
-        shrink: 1,
-        depth: 12,
-        alpha: blinking ? 0.3 : 1,
-        frozen: game.powers.freeze > 0,
-      });
+      const facing = v.warning > 0 ? Math.atan2(p.x - v.x, p.z - v.z) : Math.atan2(v.dx, v.dz);
+      if (!blinking) this.addVirus(things, camera, [v.x, v.y - (VIRUS_HEIGHT * virusSize) / 2, v.z], facing, virusSize, t, game.powers.freeze > 0);
     }
     for (const thing of things.sort((a, b) => b.depth - a.depth)) thing.draw();
   }
@@ -487,6 +508,17 @@ export class ThirdRenderer {
         const angle = Math.random() * Math.PI * 2;
         this.puff([blast.x, 50, blast.z], [Math.cos(angle) * 80, 80 + Math.random() * 80, Math.sin(angle) * 80], 1.5 + Math.random(), [30, 80], [25, 25, 28], 0.5);
       }
+    }
+    // The virus's goo where it splatted.
+    for (const splat of third.splats) {
+      if (this.seen.has(splat)) continue;
+      this.seen.add(splat);
+      for (let n = 0; n < 24; n++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 60 + Math.random() * 200;
+        this.puff([splat.x, splat.y, splat.z], [Math.cos(angle) * speed, 60 + Math.random() * 220, Math.sin(angle) * speed], 0.5 + Math.random() * 0.3, [5, 2], [200, 194, 28], 1, false, true);
+      }
+      this.puff([splat.x, splat.y, splat.z], [0, 30, 0], 0.5, [10, 40], [150, 150, 20], 0.5);
     }
     for (const particle of this.particles) {
       particle.age += elapsed;
@@ -744,8 +776,8 @@ export class ThirdRenderer {
     });
   }
 
-  /** Homer's car at `place`, with `driver` in it: textured with WebGL, or flat where it doesn't work. */
-  private addCar(things: Thing[], camera: Camera, place: SedanPlace, driver: Face[]): void {
+  /** Homer's car at `place`, with `driver` in it, or Homer if `homer`: textured with WebGL, or flat where it doesn't work. */
+  private addCar(things: Thing[], camera: Camera, place: SedanPlace, driver: Face[], homer = false): void {
     const sedan = this.sedan;
     if (!sedan) {
       this.addMesh(things, camera, [...placeFaces(CAR, place.at, place.heading, place.scale), ...driver]);
@@ -754,13 +786,94 @@ export class ThirdRenderer {
     const middle = camera.toCamera([place.at[0], place.at[1] + 20 * place.scale, place.at[2]]);
     const ctx = this.ctx;
     const lit = driver.map((face) => ({ corners: face.corners, color: face.color.map((c) => c * (0.35 + 0.65 * Math.max(0, dot(face.normal, LIGHT)))) as Rgb }));
+    const seated = homer && this.homer ? { positions: this.homer.positions, normals: this.homer.normals, at: place.at, heading: 0, scale: 1, seated: true } : undefined;
+    this.addScene(things, middle[2], camera, { car: place, homer: seated, faces: lit });
+  }
+
+  /** Things drawn with WebGL, `depth` from the camera, pasted in. */
+  private addScene(things: Thing[], depth: number, camera: Camera, scene: SedanScene): void {
+    const sedan = this.sedan;
+    if (!sedan) return;
+    const ctx = this.ctx;
     things.push({
-      depth: middle[2],
+      depth,
       draw: () => {
-        const drawn = sedan.draw(camera, ctx.canvas, place, LIGHT, lit);
+        const drawn = sedan.draw(camera, ctx.canvas, scene, LIGHT);
         if (drawn.width > 0 && drawn.height > 0) ctx.drawImage(drawn.canvas, drawn.x, drawn.y, drawn.width, drawn.height, drawn.x, drawn.y, drawn.width, drawn.height);
       },
     });
+  }
+
+  /** Homer standing at `place.at`, in the pose `poseHomer` last put him in. */
+  private addHomer(things: Thing[], camera: Camera, place: Omit<HomerPlace, "positions" | "normals">): void {
+    const homer = this.homer;
+    if (!homer) return;
+    const middle = camera.toCamera([place.at[0], place.at[1] + 0.9 * METER * place.scale, place.at[2]]);
+    this.addScene(things, middle[2], camera, { homer: { ...place, positions: homer.positions, normals: homer.normals } });
+  }
+
+  /** Moves Homer's pose on `dt` seconds in `move`, `rate` times as fast. */
+  private poseHomer(move: Move, dt: number, rate: number): void {
+    const homer = this.homer;
+    if (!homer) return;
+    this.homerMoves.update(move, dt, rate);
+    const { now, from, blend } = this.homerMoves;
+    homer.model.pose(now, from, blend, homer.positions, homer.normals);
+  }
+
+  /** Homer on foot: standing, walking or running as fast as he goes, falling, landing, or flailing when hit. */
+  private moveHomer(game: Game, third: ThirdDimension, elapsed: number): void {
+    const homer = this.homer;
+    if (!homer) return;
+    const p = third.player;
+    const speed = Math.hypot(p.vx, p.vz);
+    const inAir = p.y > ground(p.x, p.z) + 1;
+    if (this.wasInAir && !inAir) this.landed = third.time;
+    this.wasInAir = inAir;
+    let [move, rate]: [Move, number] = ["loco_idle_rest", 1];
+    if (game.player.currentCostume.name === "hit") move = "flail";
+    else if (inAir) move = "jump_idle_in_air";
+    else if (speed > 15 && speed <= HOMER_WALKS_UP_TO) [move, rate] = ["loco_walk", speed / HOMER_WALK];
+    else if (speed > HOMER_WALKS_UP_TO) [move, rate] = ["loco_run", Math.min(1.8, speed / HOMER_RUN)];
+    else if (third.time - this.landed < homer.model.duration("jump_idle_land")) move = "jump_idle_land";
+    this.poseHomer(move, elapsed, rate);
+  }
+
+  /** The virus at `at`, its feet's middle, facing `facing`, its legs wiggling, and icy blue if `frozen`. */
+  private addVirus(things: Thing[], camera: Camera, at: Vec, facing: number, size: number, time: number, frozen: boolean): void {
+    const mesh = virusMesh(time);
+    const [cos, sin] = [Math.cos(facing), Math.sin(facing)];
+    const place = ([x, y, z]: Vec): Vec => [at[0] + (x * cos + z * sin) * size, at[1] + y * size, at[2] + (-x * sin + z * cos) * size];
+    const turn = ([x, y, z]: Vec): Vec => [x * cos + z * sin, y, -x * sin + z * cos];
+    const corners = mesh.positions.map(place);
+    const normals = mesh.normals.map(turn);
+    const colors = mesh.colors.map((color, i) => {
+      const base = frozen ? (color.map((c, k) => lerp(c, ICE[k]!, 0.7)) as Rgb) : color;
+      // Lit like Homer and his car, with a shine.
+      const light = dot(normals[i]!, LIGHT);
+      const shine = Math.pow(Math.max(0, light), 12) * 70;
+      return base.map((c) => Math.min(255, c * (0.45 + 0.55 * Math.max(0, light)) + shine)) as Rgb;
+    });
+    const faces: ColoredFace[] = [];
+    for (let i = 0; i < mesh.triangles.length; i += 3) {
+      const ids = [mesh.triangles[i]!, mesh.triangles[i + 1]!, mesh.triangles[i + 2]!];
+      faces.push({ corners: ids.map((id) => corners[id]!), color: colors[ids[0]!]!, colors: ids.map((id) => colors[id]!) });
+    }
+    const middle = camera.toCamera([at[0], at[1] + (VIRUS_HEIGHT / 2) * size, at[2]]);
+    if (this.sedan) {
+      this.addScene(things, middle[2], camera, { faces });
+      return;
+    }
+    // Flat, without WebGL.
+    this.addMesh(
+      things,
+      camera,
+      faces.map((face, i) => {
+        const [a, b, c] = face.corners as [Vec, Vec, Vec];
+        const normal = normalize(cross([b[0] - a[0], b[1] - a[1], b[2] - a[2]], [c[0] - a[0], c[1] - a[1], c[2] - a[2]]));
+        return { corners: face.corners, normal: dot(normal, normals[mesh.triangles[i * 3]!]!) < 0 ? (normal.map((n) => -n) as Vec) : normal, color: frozen ? ICE : mesh.colors[mesh.triangles[i * 3]!]! };
+      }),
+    );
   }
 
   /** The player sitting in the driver's seat of the car at `place`, hands on the wheel. */
@@ -848,87 +961,6 @@ export class ThirdRenderer {
         return [at[0] + x * s, at[1] + (y + bob) * s, at[2] + z * s] as Vec;
       }),
     }));
-  }
-
-  /** A costume as a 3D figure, standing at `at`, facing the camera at the start. */
-  private addFigure(
-    things: Thing[],
-    camera: Camera,
-    costume: Costume,
-    unit: number,
-    at: Vec,
-    options: { flip: number; spin: number; shrink: number; depth: number; alpha: number; frozen?: boolean },
-  ): void {
-    const figure = this.figure(costume, options.depth);
-    if (!figure) return;
-    const s = unit * options.shrink;
-    const [cos, sin] = [Math.cos(options.spin), Math.sin(options.spin)];
-    const place = ([x, y, z]: Vec): Vec => {
-      const fx = x * options.flip * s;
-      const fz = z * s;
-      return [at[0] + fx * cos - fz * sin, at[1] + y * s, at[2] + fx * sin + fz * cos];
-    };
-    const turn = ([x, y, z]: Vec): Vec => {
-      const fx = x * options.flip;
-      return [fx * cos - z * sin, y, fx * sin + z * cos];
-    };
-    const faces = figure.faces.map((face) => ({ corners: face.corners.map(place), normal: turn(face.normal), color: face.color }));
-    this.addMesh(things, camera, faces, options.alpha, options.frozen ? "hue-rotate(160deg) saturate(1.5)" : "none");
-  }
-
-  /** Builds a figure from a costume's pixels once, and keeps it. */
-  private figure(costume: Costume, depth: number): Figure | null {
-    const cached = this.figures.get(costume);
-    if (cached) return cached;
-    const image = this.images.get(costume);
-    if (!image) return null;
-    const width = Math.round(costume.width);
-    const height = Math.round(costume.height);
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    if (!ctx) return null;
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(image, 0, 0, width, height);
-    const data = ctx.getImageData(0, 0, width, height).data;
-    const at = (x: number, y: number): Rgb | null => {
-      if (x < 0 || y < 0 || x >= width || y >= height) return null;
-      const i = (y * width + x) * 4;
-      return data[i + 3]! > 128 ? [data[i]!, data[i + 1]!, data[i + 2]!] : null;
-    };
-    const same = (a: Rgb | null, b: Rgb | null) => !!a && !!b && a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
-    const faces: Face[] = [];
-    const [front, back] = [-depth / 2, depth / 2];
-    const left = -width / 2;
-    for (let y = 0; y < height; y++) {
-      const [top, bottom] = [height - y, height - y - 1];
-      let x = 0;
-      while (x < width) {
-        const color = at(x, y);
-        if (!color) {
-          x++;
-          continue;
-        }
-        let end = x + 1;
-        while (end < width && same(at(end, y), color)) end++;
-        const [x0, x1] = [left + x, left + end];
-        faces.push({ corners: [[x0, top, front], [x1, top, front], [x1, bottom, front], [x0, bottom, front]], normal: [0, 0, -1], color });
-        faces.push({ corners: [[x1, top, back], [x0, top, back], [x0, bottom, back], [x1, bottom, back]], normal: [0, 0, 1], color });
-        if (!at(x - 1, y)) faces.push({ corners: [[x0, top, back], [x0, top, front], [x0, bottom, front], [x0, bottom, back]], normal: [-1, 0, 0], color });
-        if (!at(end, y)) faces.push({ corners: [[x1, top, front], [x1, top, back], [x1, bottom, back], [x1, bottom, front]], normal: [1, 0, 0], color });
-        // Tops and bottoms where nothing is above or below.
-        for (let i = x; i < end; i++) {
-          const [a, b] = [left + i, left + i + 1];
-          if (!at(i, y - 1)) faces.push({ corners: [[a, top, back], [b, top, back], [b, top, front], [a, top, front]], normal: [0, 1, 0], color });
-          if (!at(i, y + 1)) faces.push({ corners: [[a, bottom, front], [b, bottom, front], [b, bottom, back], [a, bottom, back]], normal: [0, -1, 0], color });
-        }
-        x = end;
-      }
-    }
-    const figure = { faces };
-    this.figures.set(costume, figure);
-    return figure;
   }
 
   /** A shiny ball, or the Earth. */
@@ -1243,6 +1275,7 @@ function pitch([x, y, z]: Vec, [, py, pz]: Vec, angle: number): Vec {
 }
 
 const dot = (a: Vec, b: Vec) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const cross = (a: Vec, b: Vec): Vec => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const ease = (t: number) => t * t * (3 - 2 * t);
 

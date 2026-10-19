@@ -50,11 +50,12 @@ import {
   cellShapes,
   THIRD_CELL,
   THIRD_IN,
+  THIRD_RADIUS,
   thirdCell,
   WRECK_BURN,
 } from "../src/remaster/game.ts";
 import { crashIntoRound, driveCar, HALF_WIDTH, HIT_POINTS, METER, parkedCar, type Car, type CarControls } from "../src/remaster/car.ts";
-import { cellCoins, cellRamp, ROAD_HALF_WIDTH, roadX, roadZ, TRAFFIC_COUNT } from "../src/remaster/streets.ts";
+import { cellCoins, cellRamp, rampHeight, ROAD_HALF_WIDTH, roadX, roadZ, TRAFFIC_COUNT } from "../src/remaster/streets.ts";
 import { ESCAPE_ZOOM, escapeZoom, fitStage, formatTime, toCanvas, toStage, zoomView } from "../src/remaster/render.ts";
 import { seeded } from "./support.ts";
 
@@ -1704,6 +1705,78 @@ describe("the 3D world", () => {
     // A new run starts with none.
     game.start();
     expect(game.coins).toBe(0);
+  });
+
+  /** On foot in the 3D world, with the virus held still. */
+  function onFoot(): Game {
+    const game = started();
+    game.god = true;
+    game.cheat("dive");
+    run(game, THIRD_IN + 0.1);
+    game.third!.virus.warning = Infinity;
+    return game;
+  }
+  /** A shape with room all round it. */
+  const lonely = () => {
+    const shapes = [1, 2, 3].flatMap((i) => cellShapes(i, 0));
+    return shapes.find((s) => shapes.every((o) => o === s || Math.hypot(o.x - s.x, o.z - s.z) > s.r + o.r + 150))!;
+  };
+
+  test("the player walks round the shapes, not through them", () => {
+    const game = onFoot();
+    const p = game.third!.player;
+    const shape = lonely();
+    Object.assign(p, { x: shape.x, z: shape.z - shape.r - 60 });
+    run(game, 1, { jump: true });
+    expect(p.x).toBeCloseTo(shape.x, 6);
+    expect(p.z).toBeCloseTo(shape.z - shape.r - THIRD_RADIUS, 6);
+    // Sideways past it, sliding round.
+    Object.assign(p, { x: shape.x - shape.r - 60, z: shape.z + shape.r * 0.6 });
+    run(game, 1, { right: true });
+    expect(p.x).toBeGreaterThan(shape.x + shape.r);
+    expect(Math.hypot(p.x - shape.x, p.z - shape.z)).toBeGreaterThanOrEqual(shape.r + THIRD_RADIUS - 1e-6);
+  });
+
+  test("the player walks up a ramp, not into its walls, and falls off its top", () => {
+    const game = onFoot();
+    const p = game.third!.player;
+    const ramp = cellRamp(0, 0)!;
+    expect(ramp.heading).toBe(0);
+    Object.assign(p, { x: ramp.x, z: ramp.z - 40 });
+    run(game, 0.4, { jump: true });
+    expect(p.z).toBeGreaterThan(ramp.z + 40);
+    expect(p.y).toBeCloseTo(rampHeight(ramp, p.x, p.z), 6);
+    // Off the top end, up in the air, then down.
+    run(game, 0.3, { jump: true });
+    expect(p.z).toBeGreaterThan(ramp.z + ramp.length);
+    expect(p.y).toBeGreaterThan(0);
+    run(game, 1);
+    expect(p.y).toBe(0);
+    // The tall end and the high sides are walls.
+    Object.assign(p, { x: ramp.x, z: ramp.z + ramp.length + 60 });
+    run(game, 0.5, { down: true });
+    expect(p.z).toBeGreaterThan(ramp.z + ramp.length);
+    expect(p.y).toBe(0);
+    Object.assign(p, { x: ramp.x - ramp.width / 2 - 60, z: ramp.z + ramp.length * 0.7 });
+    run(game, 0.5, { right: true });
+    expect(p.x).toBeLessThan(ramp.x - ramp.width / 2);
+    expect(p.y).toBe(0);
+  });
+
+  test("the virus splats on the shapes it flies into", () => {
+    const game = onFoot();
+    const third = game.third!;
+    const shape = lonely();
+    const health = game.health;
+    Object.assign(third.player, { x: shape.x + 150, z: shape.z });
+    Object.assign(third.virus, { x: shape.x, y: shape.r / 2, z: shape.z - shape.r - 30, dx: 0, dy: 0, dz: 1, warning: 0 });
+    game.events.length = 0;
+    run(game, 0.3);
+    expect(types(game.events)).toContain("splat");
+    expect(third.splats).toHaveLength(1);
+    expect(game.health).toBe(health);
+    // A new one, aiming again.
+    expect(third.virus.warning).toBeGreaterThan(0);
   });
 
   test("a car pushes the player on foot out of its way", () => {

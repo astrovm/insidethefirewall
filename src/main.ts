@@ -387,6 +387,7 @@ async function main(): Promise<void> {
         status.textContent = "Homer's car! Steer with left and right, speed up with up, brake with down, Space for the handbrake, H for the horn. Run over the virus.";
         break;
       case "smash":
+      case "splat":
         audio.synth("shatter");
         break;
       case "crash":
