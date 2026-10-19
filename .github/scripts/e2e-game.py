@@ -349,7 +349,7 @@ try:
         }""")
         day.click("#play")
         day.wait_for_function("() => insideTheFirewall.game.phase === 'playing'", timeout=5000)
-        day.evaluate("() => { insideTheFirewall.game.invincible = Infinity; insideTheFirewall.game.pickupTimer = 0.05 }")
+        day.evaluate("() => { insideTheFirewall.game.invincible = Infinity; insideTheFirewall.game.nextDrop = 'penguin'; insideTheFirewall.game.dropTimer = 0.05 }")
         day.wait_for_function("() => synths.includes('appear')", timeout=2000)
         day.evaluate("() => { insideTheFirewall.game.powers.freeze = 1.05 }")
         day.wait_for_function("() => synths.includes('tick')", timeout=2000)

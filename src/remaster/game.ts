@@ -55,9 +55,16 @@ export const WARNING_SHORTEST = 0.3;
 export const AIM_LOCK = 0.15;
 /** A virus that flies by this close, in stage pixels, without a hit is a near miss. */
 export const NEAR_MISS = 8;
-/** The penguin, an extra life, comes after 20 s, then every 20 to 30 s. In 2013 it came every 10 s. */
-export const PICKUP_FIRST = 20;
-const PICKUP_EVERY = [20, 30] as const;
+/**
+ * Hearts and power-ups share one cycle: something shows up after 15 s, then
+ * every 15 to 22 s. It's the penguin, an extra life, 60% of the time, and a
+ * power-up otherwise, so each comes about as often as when they had their own
+ * timers. In 2013 the penguin came every 10 s.
+ */
+export const DROP_FIRST = 15;
+const DROP_EVERY = [15, 22] as const;
+export const PENGUIN_CHANCE = 0.6;
+/** The penguin stays 2 s. */
 export const PICKUP_SHOWN = 2;
 /** The penguin blinks before it goes. */
 export const PICKUP_BLINK = 0.6;
@@ -117,9 +124,7 @@ const BREAKOUT_SHIELD = 3;
 /** With the red pill the room is code, and time slows down this much while the flying virus is this close. */
 export const BULLET_TIME = 0.3;
 const BULLET_TIME_RANGE = 90;
-/** Power-ups are rare: the first comes after 30 s, then one every 30 to 45 s, for 5 s each. */
-export const POWER_UP_FIRST = 30;
-const POWER_UP_EVERY = [30, 45] as const;
+/** Power-ups stay 5 s. */
 export const POWER_UP_SHOWN = 5;
 /** Power-ups float within a jump of the floor, and never right on the player. */
 const POWER_UP_LOWEST = GROUND_Y;
@@ -408,7 +413,9 @@ export class Game {
   cheated = false;
   /** Where the player was across the room, which is where they come out. */
   private escapeX = 0;
-  private powerUpTimer = POWER_UP_FIRST;
+  /** Seconds until the next penguin or power-up, and which one, when a cheat asks for it. */
+  private dropTimer = DROP_FIRST;
+  private nextDrop: "penguin" | "powerUp" | null = null;
   private powerUpShown = 0;
   /** The flying virus came close to the player without a hit. */
   private closeCall = false;
@@ -417,7 +424,6 @@ export class Game {
   private jumpBuffer = 0;
   private walkTime = 0;
   private hitTime = Infinity;
-  private pickupTimer = PICKUP_FIRST;
   private pickupShown = 0;
   private gladosTimer = new Timer(GLADOS_AFTER);
   private hl3Clicked = false;
@@ -464,7 +470,8 @@ export class Game {
     this.time = 0;
     this.health = 1;
     this.speed = VIRUS_START_SPEED;
-    this.pickupTimer = PICKUP_FIRST;
+    this.dropTimer = DROP_FIRST;
+    this.nextDrop = null;
     this.pickupShown = 0;
     this.vx = 0;
     this.vy = 0;
@@ -484,7 +491,6 @@ export class Game {
     this.ported = false;
     this.sinceThird = Infinity;
     this.timeScale = 1;
-    this.powerUpTimer = POWER_UP_FIRST;
     this.powerUpShown = 0;
     this.closeCall = false;
     this.grabbed = [];
@@ -538,6 +544,7 @@ export class Game {
       this.updatePickup();
     }
     this.updatePowerUps();
+    if (!this.third && !this.breakout) this.updateDrops();
     this.updateDifficulty();
     this.updateBulletTime();
     if (!this.third) this.record();
@@ -1031,7 +1038,7 @@ export class Game {
     this.speed = VIRUS_START_SPEED + VIRUS_SPEEDUP * this.time;
   }
 
-  /** Counts down the player's power-ups, and shows a new one now and then. */
+  /** Counts down the player's power-ups, and lets the player grab the one on stage. */
   private updatePowerUps(): void {
     for (const kind of POWER_UPS) {
       const before = this.powers[kind];
@@ -1053,10 +1060,22 @@ export class Game {
         powerUp.visible = false;
       }
     }
-    this.powerUpTimer -= DT;
-    if (this.powerUpTimer > 1e-9) return;
-    const [low, high] = POWER_UP_EVERY;
-    this.powerUpTimer = low + this.random() * (high - low);
+  }
+
+  /** The penguin and power-ups take turns at random, on one timer. */
+  private updateDrops(): void {
+    this.dropTimer -= DT;
+    if (this.dropTimer > 1e-9) return;
+    const [low, high] = DROP_EVERY;
+    this.dropTimer = low + this.random() * (high - low);
+    const penguin = this.nextDrop ? this.nextDrop === "penguin" : this.random() < PENGUIN_CHANCE;
+    this.nextDrop = null;
+    if (penguin) this.showPenguin();
+    else this.showPowerUp();
+  }
+
+  private showPowerUp(): void {
+    const powerUp = this.powerUp;
     powerUp.setCostume(POWER_UPS[Math.floor(this.random() * POWER_UPS.length)]!);
     let x = this.randomInt(-200, 200);
     if (Math.abs(x - this.player.x) < POWER_UP_AWAY) x += x < this.player.x ? -2 * POWER_UP_AWAY : 2 * POWER_UP_AWAY;
@@ -1188,6 +1207,7 @@ export class Game {
     this.events.push({ type: "breakoutEnd", cleared });
   }
 
+  /** Lets the player grab the penguin while it shows. */
   private updatePickup(): void {
     const pickup = this.pickup;
     if (pickup.visible) {
@@ -1203,16 +1223,15 @@ export class Game {
         pickup.visible = false;
       }
     }
-    this.pickupTimer -= DT;
-    if (this.pickupTimer <= 1e-9) {
-      pickup.setXY(this.randomInt(PICKUP_LEFTMOST, PICKUP_RIGHTMOST), pickup.y);
-      pickup.ifOnEdgeBounce();
-      pickup.visible = true;
-      this.pickupShown = 0;
-      const [low, high] = PICKUP_EVERY;
-      this.pickupTimer = low + this.random() * (high - low);
-      this.events.push({ type: "appear", thing: "penguin" });
-    }
+  }
+
+  private showPenguin(): void {
+    const pickup = this.pickup;
+    pickup.setXY(this.randomInt(PICKUP_LEFTMOST, PICKUP_RIGHTMOST), pickup.y);
+    pickup.ifOnEdgeBounce();
+    pickup.visible = true;
+    this.pickupShown = 0;
+    this.events.push({ type: "appear", thing: "penguin" });
   }
 
   /** Does a cheat, while playing. */
@@ -1240,10 +1259,10 @@ export class Game {
         if (inRoom) this.escape();
         break;
       case "powerUpNow":
-        this.powerUpTimer = 0;
+        [this.dropTimer, this.nextDrop] = [0, "powerUp"];
         break;
       case "penguinNow":
-        this.pickupTimer = 0;
+        [this.dropTimer, this.nextDrop] = [0, "penguin"];
         break;
       case "skip":
         this.time += CHEAT_SKIP;

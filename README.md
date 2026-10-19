@@ -13,6 +13,8 @@ The remaster is a normal game loop at 120 updates a second, drawn as big as the 
 
 It also takes ideas from classic games: hearts capped at 5 like Zelda, instant retry like Super Meat Boy, and a replay of the last 2 seconds on the game over screen. For comfort, **Settings** has a game speed slider like Celeste's Assist Mode, from 5% to 500%, and the keys can be changed.
 
+The penguin, an extra heart, and the power-ups take turns: something shows up every 15 to 22 s, the penguin 60% of the time.
+
 Power-ups and surprises pay tribute to other games:
 
 - **Speed shoes**, like Sonic's, make you faster, and the music too.
@@ -42,7 +44,7 @@ bun run test    # typecheck and unit tests
 bun run build   # writes docs/, commit it with your change
 ```
 
-With `?cheats` in the address, which the dev server adds, a **Cheats** panel lets you grab any power-up, add a heart, turn on god mode, jump into the 3D world, straight into the car, or escape, bring the next power-up or penguin right away, and skip 30 s ahead. Press the key shown next to each one, or <kbd>`</kbd> to hide the panel. A run with cheats can't set a best time.
+With `?cheats` in the address, which the dev server adds, a **Cheats** panel lets you grab any power-up, add a heart, turn on god mode, jump into the 3D world, straight into the car, or escape, bring a power-up or the penguin right away, and skip 30 s ahead. Press the key shown next to each one, or <kbd>`</kbd> to hide the panel. A run with cheats can't set a best time.
 
 The browser test plays the game in Chromium:
 
