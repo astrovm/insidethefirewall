@@ -32,6 +32,8 @@ bun run test    # typecheck and unit tests
 bun run build   # writes docs/, commit it with your change
 ```
 
+On the dev server, or with `?cheats` in the address, a **Cheats** panel lets you grab any power-up, add a heart, turn on god mode, jump into the 3D world or escape, bring the next power-up or penguin right away, and skip 30 s ahead. Press each one's number key, or <kbd>`</kbd> to hide the panel. A run with cheats can't set a best time.
+
 The browser test plays the game in Chromium:
 
 ```sh

@@ -158,6 +158,11 @@ export interface Input {
   jumpPressed: boolean;
 }
 
+/** Shortcuts for trying things out while making the game. */
+export type Cheat = PowerUpKind | "heart" | "god" | "dive" | "escape" | "powerUpNow" | "penguinNow" | "skip";
+/** The skip cheat jumps this many seconds ahead, so the virus gets faster. */
+export const CHEAT_SKIP = 30;
+
 export const noInput: Input = { left: false, right: false, down: false, jump: false, jumpPressed: false };
 
 export type GameEvent =
@@ -300,6 +305,10 @@ export class Game {
   sinceThird = Infinity;
   /** How fast time goes: slower in bullet time. */
   timeScale = 1;
+  /** Nothing hurts the player. A cheat. */
+  god = false;
+  /** Cheats were used this run, so its time can't be a best. */
+  cheated = false;
   /** Where the player was across the room, which is where they come out. */
   private escapeX = 0;
   private powerUpTimer = POWER_UP_FIRST;
@@ -354,6 +363,7 @@ export class Game {
 
   start(): void {
     this.phase = "playing";
+    this.cheated = this.god;
     this.time = 0;
     this.health = 1;
     this.speed = VIRUS_START_SPEED;
@@ -770,6 +780,7 @@ export class Game {
 
   /** Takes a heart, or the shield. */
   private takeHit(): void {
+    if (this.god) return;
     if (this.powers.shield > 0) {
       // The shield takes the hit instead of a heart.
       this.powers.shield = 0;
@@ -852,6 +863,42 @@ export class Game {
       const [low, high] = PICKUP_EVERY;
       this.pickupTimer = low + this.random() * (high - low);
       this.events.push({ type: "appear", thing: "penguin" });
+    }
+  }
+
+  /** Does a cheat, while playing. */
+  cheat(cheat: Cheat): void {
+    if (this.phase !== "playing" || this.dying > 0) return;
+    this.cheated = true;
+    const { player } = this;
+    // Diving and escaping only start from the room.
+    const inRoom = !this.third && this.escapeTime === Infinity;
+    switch (cheat) {
+      case "god":
+        this.god = !this.god;
+        break;
+      case "heart":
+        this.health = Math.min(MAX_HEALTH, this.health + 1);
+        break;
+      case "dive":
+        if (inRoom) this.dive();
+        break;
+      case "escape":
+        if (inRoom) this.escape();
+        break;
+      case "powerUpNow":
+        this.powerUpTimer = 0;
+        break;
+      case "penguinNow":
+        this.pickupTimer = 0;
+        break;
+      case "skip":
+        this.time += CHEAT_SKIP;
+        break;
+      default:
+        this.powers[cheat] = POWER_UP_TIME[cheat];
+        if (cheat === "jetpack") this.canEscape = true;
+        this.events.push({ type: "powerUp", kind: cheat, x: player.x, y: player.y });
     }
   }
 
