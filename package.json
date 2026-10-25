@@ -2,7 +2,7 @@
   "name": "insidethefirewall",
   "private": true,
   "type": "module",
-  "packageManager": "bun@1.4.3",
+  "packageManager": "bun@1.4.4",
   "scripts": {
     "build": "bun tools/build.ts",
     "dev": "bun tools/dev.ts",
