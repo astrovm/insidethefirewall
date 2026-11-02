@@ -1,0 +1,14 @@
+{
+  "roots": ["src"],
+  "extensions": [".ts"],
+  "exclude": [
+    "*.d.ts",
+    "src/main.ts",
+    "src/assets.ts",
+    "src/audio.ts",
+    "src/render.ts",
+    "src/remaster/render.ts",
+    "src/remaster/sedan.ts",
+    "src/remaster/third.ts"
+  ]
+}
