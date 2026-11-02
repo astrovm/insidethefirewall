@@ -6,12 +6,19 @@
   "scripts": {
     "build": "bun tools/build.ts",
     "dev": "bun tools/dev.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "bun node_modules/@typescript/native/bin/tsc --noEmit",
     "test": "bun run typecheck && bun test"
   },
   "devDependencies": {
+    "@hughescr/stryker-bun-runner": "1.6.0",
+    "@stryker-mutator/core": "10.1.1",
     "@types/bun": "1.4.4",
+    "@typescript/native": "npm:typescript@7.0.2",
     "fast-check": "4.10.2",
-    "typescript": "7.0.2"
+    "typescript": "npm:@typescript/typescript6@6.0.2"
+  },
+  "overrides": {
+    "minimatch@^10": "11.0.3",
+    "qs": "6.17.1"
   }
 }

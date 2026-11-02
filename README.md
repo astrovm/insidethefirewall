@@ -60,3 +60,12 @@ The browser test plays the game in Chromium:
 ```sh
 uv run --project .github --group ci python .github/scripts/e2e-game.py
 ```
+
+Mutation testing checks that the unit tests notice when the code changes. Stryker changes a line a little, one change at a time, and runs the tests that reach it:
+
+```sh
+bun run scripts/mutants.ts diff origin/master   # the lines this branch changed
+bun run scripts/mutants.ts part 3 64            # the 4th of 64 equal parts of all source lines
+```
+
+It only changes the source listed in `coverage-scope.json`: everything in `src/` except the code only the browser test reaches (drawing, sound, the 3D scene and loading). It never blocks a merge. On a pull request, one comment lists the changes no test noticed. Every Saturday a quarter of the 64 parts runs, and what lived goes in the open "Missed mutants" issue. A real gap gets its own pull request; a change that keeps the same behavior can be ignored.
