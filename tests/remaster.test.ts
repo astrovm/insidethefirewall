@@ -1836,7 +1836,7 @@ describe("the 3D world", () => {
     expect(third.player).toEqual(before);
   });
 
-  for (const scenario of ["hit", "invincible", "kicked", "far x", "far y", "far z"]) {
+  for (const scenario of ["hit", "invincible", "kicked", "far x", "far y", "far z", "just out of reach"]) {
     test(`3D virus damage: ${scenario}`, () => {
       const game = onFoot();
       const third = game.third;
@@ -1846,9 +1846,10 @@ describe("the 3D world", () => {
       third.traffic = [];
       Object.assign(third.player, { x: 600, y: 100, z: 100 });
       const p = third.player, v = third.virus;
-      Object.assign(v, { x: p.x + (scenario === "far x" ? 100 : 5),
-        y: p.y + THIRD_CHEST + (scenario === "far y" ? 100 : -4),
-        z: p.z + (scenario === "far z" ? 100 : 7),
+      const edge = scenario === "just out of reach";
+      Object.assign(v, { x: p.x + (scenario === "far x" ? 100 : edge ? 0 : 5),
+        y: p.y + THIRD_CHEST + (scenario === "far y" ? 100 : edge ? 0 : -4),
+        z: p.z + (scenario === "far z" ? 100 : edge ? 34 : 7),
         warning: 0, dx: 0, dy: 0, dz: 0, kicked: scenario === "kicked" });
       game.events.length = 0;
       run(game, DT);
@@ -1865,8 +1866,8 @@ describe("the 3D world", () => {
     const game = onFoot();
     const third = game.third;
     if (!third) throw new Error("Expected the 3D world");
-    Object.assign(third.player, { x: 600, y: 0, z: 100 });
-    Object.assign(third.virus, { x: 600, y: THIRD_CHEST, z: 100, warning: Infinity });
+    Object.assign(third.player, { x: 600, y: 50, z: 100 });
+    Object.assign(third.virus, { x: 600, y: 50 + THIRD_CHEST, z: 100, warning: Infinity });
     game.powers.freeze = 5;
     game.events.length = 0;
     run(game, DT);
@@ -2002,6 +2003,38 @@ describe("the 3D world", () => {
     run(game, 0.2);
     expect(types(game.events)).toContain("shatter");
     expect(game.powers.freeze).toBe(0);
+  });
+
+  test("a kick reaches a frozen virus only within reach, and a new one replaces it", () => {
+    for (const reach of [0.6 * METER, 1.3 * METER, 1.3 * METER + 1]) {
+      const game = onFoot();
+      const third = game.third!;
+      const { player: p, virus: v } = third;
+      Object.assign(p, { x: 600, y: 0, z: 100, facing: 0 });
+      Object.assign(v, { x: 600, y: 0.8 * METER, z: 100 + 0.6 * METER + reach, warning: Infinity, kicked: false });
+      game.powers.freeze = 5;
+      game.events.length = 0;
+      // Stop on the frame it breaks: a later kick would hide a missing replacement.
+      for (let frame = 0; frame < Math.ceil(KICK_TIME / DT) && !types(game.events).includes("shatter"); frame++) {
+        run(game, DT, { kickPressed: true });
+      }
+      const shattered = reach < 1.3 * METER;
+      expect(types(game.events).includes("shatter")).toBe(shattered);
+      expect(game.powers.freeze === 0).toBe(shattered);
+      expect(Number.isFinite(v.warning)).toBe(shattered);
+    }
+  });
+
+  test("a kick that connects clears the close call", () => {
+    const game = onFoot();
+    const { player: p, virus: v } = game.third!;
+    Object.assign(p, { x: 600, y: 0, z: 100, facing: 0 });
+    Object.assign(v, { x: 600, y: 0.8 * METER, z: 100 + 0.6 * METER, warning: 1, kicked: false });
+    const hidden = game as unknown as { closeCall: boolean };
+    hidden.closeCall = true;
+    run(game, KICK_TIME, { kickPressed: true });
+    expect(v.kicked).toBe(true);
+    expect(hidden.closeCall).toBe(false);
   });
 
   test("only flat tops can be stood on, not cones, posts or balls", () => {
@@ -2162,9 +2195,12 @@ describe("the 3D world", () => {
     const health = game.health;
     Object.assign(third.player, { x: shape.x + 150, z: shape.z });
     Object.assign(third.virus, { x: shape.x, y: shape.r / 2, z: shape.z - shape.r - 30, dx: 0, dy: 0, dz: 1, warning: 0 });
+    const hidden = game as unknown as { closeCall: boolean };
+    hidden.closeCall = true;
     game.events.length = 0;
     run(game, 0.3);
     expect(types(game.events)).toContain("splat");
+    expect(hidden.closeCall).toBe(false);
     expect(third.splats).toHaveLength(1);
     expect(game.health).toBe(health);
     // A new one, aiming again.
