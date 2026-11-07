@@ -51,6 +51,9 @@ import {
   cellShapes,
   THIRD_CELL,
   THIRD_IN,
+  THIRD_TIME,
+  THIRD_OUT,
+  THIRD_CHEST,
   THIRD_JUMP,
   THIRD_RADIUS,
   KICK_TIME,
@@ -1760,6 +1763,120 @@ describe("the 3D world", () => {
     return shapes.find((s) => shapes.every((o) => o === s || Math.hypot(o.x - s.x, o.z - s.z) > s.r + o.r + 150))!;
   };
 
+  test("the 3D world returns to the monitor and releases its transition flash", () => {
+    const game = onFoot();
+    const third = game.third;
+    if (!third) throw new Error("Expected the 3D world");
+    third.time = THIRD_TIME + THIRD_OUT - DT / 2;
+    game.player.setXY(123, 456);
+    game.vx = 12; game.vy = 34;
+    game.onGround = true; game.invincible = 0; game.sinceThird = 123;
+    const hidden = game as unknown as { jumpCut: boolean; ported: boolean };
+    hidden.jumpCut = false; hidden.ported = true;
+    game.virus.setXY(300, 300); game.target = { x: 1, y: 2 };
+    run(game, DT);
+    expect(game.third).toBeNull();
+    expect(hidden.jumpCut).toBe(true);
+    expect(hidden.ported).toBe(false);
+    expect(game.target).toEqual({ x: 0, y: 30 });
+    expect([game.player.x, game.player.y]).toEqual([0, 30]);
+    expect(game.player.currentCostume.name).toBe("jump");
+    expect(game.onGround).toBe(false);
+    expect([game.vx, game.vy]).toEqual([0, 0]);
+    expect(game.invincible).toBeGreaterThanOrEqual(1);
+    expect([game.virus.x, game.virus.y]).toEqual([VIRUS_SPAWN.x, VIRUS_SPAWN.y]);
+    expect(game.warning).toBeGreaterThan(0);
+    expect(game.sinceThird).toBe(0);
+    run(game, DT);
+    expect(game.sinceThird).toBe(DT);
+  });
+
+  test("the 3D world stays until the return animation has played out", () => {
+    const game = onFoot();
+    const third = game.third;
+    if (!third) throw new Error("Expected the 3D world");
+    third.time = THIRD_TIME + THIRD_OUT / 2;
+    run(game, DT);
+    expect(game.third).toBe(third);
+  });
+
+  test("each phase of the 3D world starts on its exact frame", () => {
+    const dive = started();
+    dive.god = true; dive.cheat("dive");
+    const diving = dive.third;
+    if (!diving) throw new Error("Expected the 3D world");
+    const before = { ...diving.player };
+    diving.time = THIRD_IN - DT;
+    run(dive, DT, { forward: true });
+    expect(diving.player).not.toEqual(before);
+
+    const game = onFoot();
+    const third = game.third;
+    if (!third) throw new Error("Expected the 3D world");
+    const standing = { ...third.player };
+    third.time = THIRD_TIME - DT;
+    run(game, DT, { forward: true });
+    expect(third.player).toEqual(standing);
+    expect(game.third).toBe(third);
+    third.time = THIRD_TIME + THIRD_OUT - DT;
+    run(game, DT);
+    expect(game.third).toBeNull();
+  });
+
+  test("movement is frozen during the dive and the return animation", () => {
+    const game = started();
+    game.god = true; game.cheat("dive");
+    const third = game.third;
+    if (!third) throw new Error("Expected the 3D world");
+    const before = { ...third.player };
+    run(game, DT, { right: true, forward: true });
+    expect(third.player).toEqual(before);
+    third.time = THIRD_TIME;
+    run(game, DT, { right: true, forward: true });
+    expect(third.player).toEqual(before);
+  });
+
+  for (const scenario of ["hit", "invincible", "kicked", "far x", "far y", "far z", "just out of reach"]) {
+    test(`3D virus damage: ${scenario}`, () => {
+      const game = onFoot();
+      const third = game.third;
+      if (!third) throw new Error("Expected the 3D world");
+      game.god = false; game.health = 2;
+      game.invincible = scenario === "invincible" ? 1 : 0;
+      third.traffic = [];
+      Object.assign(third.player, { x: 600, y: 100, z: 100 });
+      const p = third.player, v = third.virus;
+      const edge = scenario === "just out of reach";
+      Object.assign(v, { x: p.x + (scenario === "far x" ? 100 : edge ? 0 : 5),
+        y: p.y + THIRD_CHEST + (scenario === "far y" ? 100 : edge ? 0 : -4),
+        z: p.z + (scenario === "far z" ? 100 : edge ? 34 : 7),
+        warning: 0, dx: 0, dy: 0, dz: 0, kicked: scenario === "kicked" });
+      game.events.length = 0;
+      run(game, DT);
+      expect(game.health).toBe(scenario === "hit" ? 1 : 2);
+      expect(game.events.filter((event) => event.type === "hit")).toHaveLength(scenario === "hit" ? 1 : 0);
+      if (scenario === "hit") {
+        expect(v.warning).toBeGreaterThan(0);
+        expect(Math.hypot(v.x - p.x, v.z - p.z)).toBeGreaterThan(400);
+      }
+    });
+  }
+
+  test("touching a frozen virus shatters and respawns it without a kick", () => {
+    const game = onFoot();
+    const third = game.third;
+    if (!third) throw new Error("Expected the 3D world");
+    Object.assign(third.player, { x: 600, y: 50, z: 100 });
+    Object.assign(third.virus, { x: 600, y: 50 + THIRD_CHEST, z: 100, warning: Infinity });
+    game.powers.freeze = 5;
+    game.events.length = 0;
+    run(game, DT);
+    expect(types(game.events)).toContain("shatter");
+    expect(types(game.events)).not.toContain("kick");
+    expect(game.powers.freeze).toBe(0);
+    expect(Number.isFinite(third.virus.warning)).toBe(true);
+  });
+
   test("the player walks round the shapes, not through them", () => {
     const game = onFoot();
     const p = game.third!.player;
@@ -1879,12 +1996,45 @@ describe("the 3D world", () => {
     // Not again until the kick's over.
     run(game, KICK_TIME);
     game.powers.freeze = 5;
-    Object.assign(v, { x: p.x + Math.sin(p.facing) * 0.6 * METER, y: p.y + 0.8 * METER, z: p.z + Math.cos(p.facing) * 0.6 * METER, kicked: false });
+    Object.assign(v, { x: p.x + Math.sin(p.facing) * 1.2 * METER, y: p.y + 0.8 * METER, z: p.z + Math.cos(p.facing) * 1.2 * METER, kicked: false });
     game.events.length = 0;
     run(game, DT, { kickPressed: true });
+    expect(types(game.events)).not.toContain("shatter");
     run(game, 0.2);
     expect(types(game.events)).toContain("shatter");
     expect(game.powers.freeze).toBe(0);
+  });
+
+  test("a kick reaches a frozen virus only within reach, and a new one replaces it", () => {
+    for (const reach of [0.6 * METER, 1.3 * METER, 1.3 * METER + 1]) {
+      const game = onFoot();
+      const third = game.third!;
+      const { player: p, virus: v } = third;
+      Object.assign(p, { x: 600, y: 0, z: 100, facing: 0 });
+      Object.assign(v, { x: 600, y: 0.8 * METER, z: 100 + 0.6 * METER + reach, warning: Infinity, kicked: false });
+      game.powers.freeze = 5;
+      game.events.length = 0;
+      // Stop on the frame it breaks: a later kick would hide a missing replacement.
+      for (let frame = 0; frame < Math.ceil(KICK_TIME / DT) && !types(game.events).includes("shatter"); frame++) {
+        run(game, DT, { kickPressed: true });
+      }
+      const shattered = reach < 1.3 * METER;
+      expect(types(game.events).includes("shatter")).toBe(shattered);
+      expect(game.powers.freeze === 0).toBe(shattered);
+      expect(Number.isFinite(v.warning)).toBe(shattered);
+    }
+  });
+
+  test("a kick that connects clears the close call", () => {
+    const game = onFoot();
+    const { player: p, virus: v } = game.third!;
+    Object.assign(p, { x: 600, y: 0, z: 100, facing: 0 });
+    Object.assign(v, { x: 600, y: 0.8 * METER, z: 100 + 0.6 * METER, warning: 1, kicked: false });
+    const hidden = game as unknown as { closeCall: boolean };
+    hidden.closeCall = true;
+    run(game, KICK_TIME, { kickPressed: true });
+    expect(v.kicked).toBe(true);
+    expect(hidden.closeCall).toBe(false);
   });
 
   test("only flat tops can be stood on, not cones, posts or balls", () => {
@@ -2045,9 +2195,12 @@ describe("the 3D world", () => {
     const health = game.health;
     Object.assign(third.player, { x: shape.x + 150, z: shape.z });
     Object.assign(third.virus, { x: shape.x, y: shape.r / 2, z: shape.z - shape.r - 30, dx: 0, dy: 0, dz: 1, warning: 0 });
+    const hidden = game as unknown as { closeCall: boolean };
+    hidden.closeCall = true;
     game.events.length = 0;
     run(game, 0.3);
     expect(types(game.events)).toContain("splat");
+    expect(hidden.closeCall).toBe(false);
     expect(third.splats).toHaveLength(1);
     expect(game.health).toBe(health);
     // A new one, aiming again.
