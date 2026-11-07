@@ -1708,6 +1708,20 @@ describe("the 3D world", () => {
     expect(car.driving).toBe(false);
   });
 
+  test("a left-behind car keeps rolling when only one velocity part is set, and stays put when still", () => {
+    for (const [vx, vz] of [[300, 0], [0, 300], [0, 0]] as const) {
+      const game = started();
+      game.god = true;
+      game.cheat("drive");
+      run(game, THIRD_IN);
+      const { car } = game.third!;
+      Object.assign(car, { driving: false, husk: true, vx, vz });
+      const [x, z] = [car.x, car.z];
+      run(game, 0.1);
+      expect(car.x !== x || car.z !== z).toBe(vx !== 0 || vz !== 0);
+    }
+  });
+
   test("traffic drives around the player, and coins are grabbed once", () => {
     const game = started();
     game.god = true;
