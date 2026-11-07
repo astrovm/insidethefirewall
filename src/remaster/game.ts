@@ -216,6 +216,7 @@ export const PARKED = { x: 150, z: 280 } as const;
 const GET_IN = 80;
 /** How far the car reaches from its middle, for running into the virus, and how far up and down from its bottom. */
 const CAR_RADIUS = 58;
+const CAR_BOUNDING_RADIUS = Math.hypot(HALF_WIDTH, HALF_LENGTH + CENTER_AHEAD);
 const CAR_REACH_UP = 70;
 const CAR_REACH_DOWN = 20;
 /** A wrecked car burns this long, then blows up, as in Hit & Run. */
@@ -913,8 +914,8 @@ export class Game {
       this.moveThirdVirus();
       return;
     }
-    // A wrecked car left behind still burns, then blows up.
-    if (third.car.wrecked >= 0 || third.car.vx !== 0 || third.car.vz !== 0) this.coast(third.car);
+    // The husk can keep rolling after its driver is thrown out.
+    if (third.car.vx !== 0 || third.car.vz !== 0) this.coast(third.car);
     // Arrows move along the floor as seen from the camera: up goes away, down comes back.
     const across = Number(input.right) - Number(input.left);
     const ahead = Number(input.forward) - Number(input.down);
@@ -1098,7 +1099,6 @@ export class Game {
   private coast(car: Car): void {
     driveCar(car, { gas: false, brake: false, handbrake: false, steer: 0 }, DT, ground);
     this.crashes(car, false);
-    if (car.wrecked >= WRECK_BURN) this.blowUp(car);
   }
 
   /** Thrown out of the car, standing beside it on the driver's side. */
@@ -1207,7 +1207,7 @@ export class Game {
     const balls = [...third.balls.values()];
     let hardest = 0;
     for (const car of [third.car, ...third.traffic.map((t) => t.car)]) {
-      for (const ball of balls) if (Math.hypot(ball.x - car.x, ball.z - car.z) < HALF_LENGTH + CENTER_AHEAD + ball.r) hardest = Math.max(hardest, carHitsBall(car, ball, CAR_HEIGHT));
+      for (const ball of balls) if (Math.hypot(ball.x - car.x, ball.z - car.z) < CAR_BOUNDING_RADIUS + ball.r) hardest = Math.max(hardest, carHitsBall(car, ball, CAR_HEIGHT));
     }
     for (const ball of balls) hardest = Math.max(hardest, moveBall(ball, DT, floorUnder, shapesNear(ball.x, ball.z)));
     for (let a = 0; a < balls.length; a++) {

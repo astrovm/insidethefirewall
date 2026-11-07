@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { restingBall } from "../src/remaster/balls.ts";
 import { Controls, moveForKey } from "../src/input.ts";
 import { Fader } from "../src/remaster/fader.ts";
 import {
@@ -62,7 +63,7 @@ import {
   thirdCell,
   WRECK_BURN,
 } from "../src/remaster/game.ts";
-import { crashIntoRound, driveCar, HALF_WIDTH, HIT_POINTS, METER, parkedCar, type Car, type CarControls } from "../src/remaster/car.ts";
+import { crashIntoRound, driveCar, HALF_WIDTH, HALF_LENGTH, CENTER_AHEAD, HIT_POINTS, METER, parkedCar, type Car, type CarControls } from "../src/remaster/car.ts";
 import { cellCoins, cellRamp, rampHeight, ROAD_HALF_WIDTH, roadX, roadZ, TRAFFIC_COUNT } from "../src/remaster/streets.ts";
 import { ESCAPE_ZOOM, escapeZoom, fitStage, formatTime, toCanvas, toStage, zoomView } from "../src/remaster/render.ts";
 import { seeded } from "./support.ts";
@@ -1707,6 +1708,20 @@ describe("the 3D world", () => {
     expect(car.driving).toBe(false);
   });
 
+  test("a left-behind car keeps rolling when only one velocity part is set, and stays put when still", () => {
+    for (const [vx, vz] of [[300, 0], [0, 300], [0, 0]] as const) {
+      const game = started();
+      game.god = true;
+      game.cheat("drive");
+      run(game, THIRD_IN);
+      const { car } = game.third!;
+      Object.assign(car, { driving: false, husk: true, vx, vz });
+      const [x, z] = [car.x, car.z];
+      run(game, 0.1);
+      expect(car.x !== x || car.z !== z).toBe(vx !== 0 || vz !== 0);
+    }
+  });
+
   test("traffic drives around the player, and coins are grabbed once", () => {
     const game = started();
     game.god = true;
@@ -2151,3 +2166,33 @@ describe("Homer's car", () => {
   });
 
 });
+
+
+for (const heading of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+  for (const side of [-1, 1]) {
+    test(`balls touching the rear corner collide at heading ${heading}, side ${side}`, () => {
+      const game = started();
+      game.god = true;
+      game.cheat("dive");
+      run(game, THIRD_IN + 0.1);
+      const third = game.third;
+      if (!third) throw new Error("Expected the dive to enter the 3D world");
+      third.traffic = [];
+      third.virus.warning = Infinity;
+      Object.assign(third.player, { x: 600, z: 100 });
+      const car = third.car;
+      Object.assign(car, { x: 0, z: 600, heading, vx: 0, vz: 0 });
+      const corner: [number, number] = [side * HALF_WIDTH, -HALF_LENGTH - CENTER_AHEAD];
+      const distance = Math.hypot(...corner);
+      const radius = 3;
+      const scale = (distance + radius - 0.2) / distance;
+      const across = corner[0] * scale, along = corner[1] * scale;
+      const x = car.x + across * Math.cos(heading) + along * Math.sin(heading);
+      const z = car.z - across * Math.sin(heading) + along * Math.cos(heading);
+      const ball = restingBall("test-corner", x, z, radius, [1, 1, 1]);
+      third.balls.set(ball.id, ball);
+      run(game, DT);
+      expect(Math.hypot(ball.x - x, ball.z - z)).toBeGreaterThan(0.1);
+    });
+  }
+}
