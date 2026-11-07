@@ -51,6 +51,9 @@ import {
   cellShapes,
   THIRD_CELL,
   THIRD_IN,
+  THIRD_TIME,
+  THIRD_OUT,
+  THIRD_CHEST,
   THIRD_JUMP,
   THIRD_RADIUS,
   KICK_TIME,
@@ -1760,6 +1763,81 @@ describe("the 3D world", () => {
     return shapes.find((s) => shapes.every((o) => o === s || Math.hypot(o.x - s.x, o.z - s.z) > s.r + o.r + 150))!;
   };
 
+  test("the 3D world returns to the monitor and releases its transition flash", () => {
+    const game = onFoot();
+    const third = game.third;
+    if (!third) throw new Error("Expected the 3D world");
+    third.time = THIRD_TIME + THIRD_OUT - DT / 2;
+    game.player.setXY(123, 456);
+    game.vx = 12; game.vy = 34;
+    game.onGround = true; game.invincible = 0; game.sinceThird = 123;
+    run(game, DT);
+    expect(game.third).toBeNull();
+    expect([game.player.x, game.player.y]).toEqual([0, 30]);
+    expect(game.player.currentCostume.name).toBe("jump");
+    expect(game.onGround).toBe(false);
+    expect([game.vx, game.vy]).toEqual([0, 0]);
+    expect(game.invincible).toBeGreaterThanOrEqual(1);
+    expect([game.virus.x, game.virus.y]).toEqual([VIRUS_SPAWN.x, VIRUS_SPAWN.y]);
+    expect(game.warning).toBeGreaterThan(0);
+    expect(game.sinceThird).toBe(0);
+    run(game, DT);
+    expect(game.sinceThird).toBe(DT);
+  });
+
+  test("movement is frozen during the dive and the return animation", () => {
+    const game = started();
+    game.god = true; game.cheat("dive");
+    const third = game.third;
+    if (!third) throw new Error("Expected the 3D world");
+    const before = { ...third.player };
+    run(game, DT, { right: true, forward: true });
+    expect(third.player).toEqual(before);
+    third.time = THIRD_TIME;
+    run(game, DT, { right: true, forward: true });
+    expect(third.player).toEqual(before);
+  });
+
+  for (const scenario of ["hit", "invincible", "kicked", "far x", "far y", "far z"]) {
+    test(`3D virus damage: ${scenario}`, () => {
+      const game = onFoot();
+      const third = game.third;
+      if (!third) throw new Error("Expected the 3D world");
+      game.god = false; game.health = 2;
+      game.invincible = scenario === "invincible" ? 1 : 0;
+      third.traffic = [];
+      Object.assign(third.player, { x: 600, y: 100, z: 100 });
+      const p = third.player, v = third.virus;
+      Object.assign(v, { x: p.x + (scenario === "far x" ? 100 : 5),
+        y: p.y + THIRD_CHEST + (scenario === "far y" ? 100 : -4),
+        z: p.z + (scenario === "far z" ? 100 : 7),
+        warning: 0, dx: 0, dy: 0, dz: 0, kicked: scenario === "kicked" });
+      game.events.length = 0;
+      run(game, DT);
+      expect(game.health).toBe(scenario === "hit" ? 1 : 2);
+      expect(game.events.filter((event) => event.type === "hit")).toHaveLength(scenario === "hit" ? 1 : 0);
+      if (scenario === "hit") {
+        expect(v.warning).toBeGreaterThan(0);
+        expect(Math.hypot(v.x - p.x, v.z - p.z)).toBeGreaterThan(400);
+      }
+    });
+  }
+
+  test("touching a frozen virus shatters and respawns it without a kick", () => {
+    const game = onFoot();
+    const third = game.third;
+    if (!third) throw new Error("Expected the 3D world");
+    Object.assign(third.player, { x: 600, y: 0, z: 100 });
+    Object.assign(third.virus, { x: 600, y: THIRD_CHEST, z: 100, warning: Infinity });
+    game.powers.freeze = 5;
+    game.events.length = 0;
+    run(game, DT);
+    expect(types(game.events)).toContain("shatter");
+    expect(types(game.events)).not.toContain("kick");
+    expect(game.powers.freeze).toBe(0);
+    expect(Number.isFinite(third.virus.warning)).toBe(true);
+  });
+
   test("the player walks round the shapes, not through them", () => {
     const game = onFoot();
     const p = game.third!.player;
@@ -1879,9 +1957,10 @@ describe("the 3D world", () => {
     // Not again until the kick's over.
     run(game, KICK_TIME);
     game.powers.freeze = 5;
-    Object.assign(v, { x: p.x + Math.sin(p.facing) * 0.6 * METER, y: p.y + 0.8 * METER, z: p.z + Math.cos(p.facing) * 0.6 * METER, kicked: false });
+    Object.assign(v, { x: p.x + Math.sin(p.facing) * 1.2 * METER, y: p.y + 0.8 * METER, z: p.z + Math.cos(p.facing) * 1.2 * METER, kicked: false });
     game.events.length = 0;
     run(game, DT, { kickPressed: true });
+    expect(types(game.events)).not.toContain("shatter");
     run(game, 0.2);
     expect(types(game.events)).toContain("shatter");
     expect(game.powers.freeze).toBe(0);
