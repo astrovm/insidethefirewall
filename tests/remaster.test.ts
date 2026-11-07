@@ -1771,8 +1771,14 @@ describe("the 3D world", () => {
     game.player.setXY(123, 456);
     game.vx = 12; game.vy = 34;
     game.onGround = true; game.invincible = 0; game.sinceThird = 123;
+    const hidden = game as unknown as { jumpCut: boolean; ported: boolean };
+    hidden.jumpCut = false; hidden.ported = true;
+    game.virus.setXY(300, 300); game.target = { x: 1, y: 2 };
     run(game, DT);
     expect(game.third).toBeNull();
+    expect(hidden.jumpCut).toBe(true);
+    expect(hidden.ported).toBe(false);
+    expect(game.target).toEqual({ x: 0, y: 30 });
     expect([game.player.x, game.player.y]).toEqual([0, 30]);
     expect(game.player.currentCostume.name).toBe("jump");
     expect(game.onGround).toBe(false);
@@ -1783,6 +1789,38 @@ describe("the 3D world", () => {
     expect(game.sinceThird).toBe(0);
     run(game, DT);
     expect(game.sinceThird).toBe(DT);
+  });
+
+  test("the 3D world stays until the return animation has played out", () => {
+    const game = onFoot();
+    const third = game.third;
+    if (!third) throw new Error("Expected the 3D world");
+    third.time = THIRD_TIME + THIRD_OUT / 2;
+    run(game, DT);
+    expect(game.third).toBe(third);
+  });
+
+  test("each phase of the 3D world starts on its exact frame", () => {
+    const dive = started();
+    dive.god = true; dive.cheat("dive");
+    const diving = dive.third;
+    if (!diving) throw new Error("Expected the 3D world");
+    const before = { ...diving.player };
+    diving.time = THIRD_IN - DT;
+    run(dive, DT, { forward: true });
+    expect(diving.player).not.toEqual(before);
+
+    const game = onFoot();
+    const third = game.third;
+    if (!third) throw new Error("Expected the 3D world");
+    const standing = { ...third.player };
+    third.time = THIRD_TIME - DT;
+    run(game, DT, { forward: true });
+    expect(third.player).toEqual(standing);
+    expect(game.third).toBe(third);
+    third.time = THIRD_TIME + THIRD_OUT - DT;
+    run(game, DT);
+    expect(game.third).toBeNull();
   });
 
   test("movement is frozen during the dive and the return animation", () => {
